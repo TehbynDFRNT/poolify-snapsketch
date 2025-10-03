@@ -35,10 +35,7 @@ interface ToolbarProps {
 }
 
 export const Toolbar = ({ activeTool = 'select', onToolChange }: ToolbarProps) => {
-  const [currentTool, setCurrentTool] = useState<ToolType>(activeTool);
-
   const handleToolClick = (tool: ToolType) => {
-    setCurrentTool(tool);
     onToolChange?.(tool);
   };
 
@@ -60,12 +57,12 @@ export const Toolbar = ({ activeTool = 'select', onToolChange }: ToolbarProps) =
           <Tooltip key={tool.id}>
             <TooltipTrigger asChild>
               <Button
-                variant={currentTool === tool.id ? 'default' : 'ghost'}
+                variant={activeTool === tool.id ? 'default' : 'ghost'}
                 size="icon"
                 onClick={() => handleToolClick(tool.id)}
                 className={cn(
                   'w-16 h-16',
-                  currentTool === tool.id && 'bg-primary text-primary-foreground'
+                  activeTool === tool.id && 'bg-primary text-primary-foreground'
                 )}
               >
                 <tool.icon className="h-6 w-6" />

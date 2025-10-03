@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useDesignStore } from '@/store/designStore';
 import { loadProject } from '@/utils/storage';
 import { toast } from 'sonner';
-import { Toolbar } from './Toolbar';
+import { Toolbar, ToolType } from './Toolbar';
 import { Canvas } from './Canvas';
 import { PropertiesPanel } from './PropertiesPanel';
 import { format } from 'date-fns';
@@ -15,6 +15,7 @@ export const DesignCanvas = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [activeTool, setActiveTool] = useState<ToolType>('select');
   
   useKeyboardShortcuts(); // Enable keyboard shortcuts
   
@@ -139,7 +140,7 @@ export const DesignCanvas = () => {
       <div className="flex flex-1 overflow-hidden">
         {/* Toolbar - Left sidebar */}
         <div className="w-20 border-r border-border bg-card overflow-y-auto">
-          <Toolbar />
+          <Toolbar activeTool={activeTool} onToolChange={setActiveTool} />
         </div>
 
         {/* Canvas - Center */}

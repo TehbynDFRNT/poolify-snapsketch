@@ -4,13 +4,31 @@ import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
 import { Button } from '@/components/ui/button';
 import { ZoomIn, ZoomOut, Maximize } from 'lucide-react';
+import { PoolComponent } from './canvas/PoolComponent';
+import { PaverComponent } from './canvas/PaverComponent';
+import { DrainageComponent } from './canvas/DrainageComponent';
+import { FenceComponent } from './canvas/FenceComponent';
+import { snapToGrid } from '@/utils/snap';
+import { EMPIRE_POOL } from '@/constants/components';
 
 export const Canvas = () => {
   const stageRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [activeTool, setActiveTool] = useState<string>('select');
   
-  const { zoom, setZoom, pan, setPan, gridVisible } = useDesignStore();
+  const {
+    zoom,
+    setZoom,
+    pan,
+    setPan,
+    gridVisible,
+    components,
+    selectedComponentId,
+    selectComponent,
+    addComponent,
+    updateComponent,
+  } = useDesignStore();
 
   useEffect(() => {
     const updateDimensions = () => {
@@ -26,6 +44,81 @@ export const Canvas = () => {
     window.addEventListener('resize', updateDimensions);
     return () => window.removeEventListener('resize', updateDimensions);
   }, []);
+
+  const handleStageClick = (e: any) => {
+    // If clicked on empty canvas, deselect
+    if (e.target === e.target.getStage()) {
+      selectComponent(null);
+      
+      // If a tool is active, place component
+      if (activeTool !== 'select') {
+        const pos = e.target.getStage().getPointerPosition();
+        const snapped = {
+          x: snapToGrid(pos.x / zoom - pan.x / zoom),
+          y: snapToGrid(pos.y / zoom - pan.y / zoom),
+        };
+        
+        handleToolPlace(snapped);
+      }
+    }
+  };
+
+  const handleToolPlace = (pos: { x: number; y: number }) => {
+    switch (activeTool) {
+      case 'pool':
+        addComponent({
+          type: 'pool',
+          position: pos,
+          rotation: 0,
+          dimensions: { width: EMPIRE_POOL.length, height: EMPIRE_POOL.width },
+          properties: {
+            poolType: 'empire-6x3',
+            showCoping: true,
+            copingWidth: 400,
+          },
+        });
+        break;
+        
+      case 'paver':
+        addComponent({
+          type: 'paver',
+          position: pos,
+          rotation: 0,
+          dimensions: { width: 400, height: 400 },
+          properties: {
+            paverSize: '400x400',
+            paverCount: { rows: 1, cols: 1 },
+          },
+        });
+        break;
+        
+      case 'drainage':
+        addComponent({
+          type: 'drainage',
+          position: pos,
+          rotation: 0,
+          dimensions: { width: 1000, height: 100 },
+          properties: {
+            drainageType: 'rock',
+            length: 1000,
+          },
+        });
+        break;
+        
+      case 'fence':
+        addComponent({
+          type: 'fence',
+          position: pos,
+          rotation: 0,
+          dimensions: { width: 2400, height: 12 },
+          properties: {
+            fenceType: 'glass',
+            gates: [],
+          },
+        });
+        break;
+    }
+  };
 
   const handleWheel = (e: any) => {
     e.evt.preventDefault();
@@ -116,6 +209,7 @@ export const Canvas = () => {
         x={pan.x}
         y={pan.y}
         onWheel={handleWheel}
+        onClick={handleStageClick}
         draggable
         onDragEnd={(e) => {
           setPan({ x: e.target.x(), y: e.target.y() });
@@ -123,7 +217,87 @@ export const Canvas = () => {
       >
         <Layer>
           {renderGrid()}
-          {/* Components will be rendered here */}
+          
+          {/* Render all components */}
+          {components.map((component) => {
+            const isSelected = component.id === selectedComponentId;
+            
+            switch (component.type) {
+              case 'pool':
+                return (
+                  <PoolComponent
+                    key={component.id}
+                    component={component}
+                    isSelected={isSelected}
+                    onSelect={() => selectComponent(component.id)}
+                    onDragEnd={(pos) => updateComponent(component.id, { position: pos })}
+                  />
+                );
+                
+              case 'paver':
+                return (
+                  <PaverComponent
+                    key={component.id}
+                    component={component}
+                    isSelected={isSelected}
+                    onSelect={() => selectComponent(component.id)}
+                    onDragEnd={(pos) => updateComponent(component.id, { position: pos })}
+                    onReplicateRight={(cols) =>
+                      updateComponent(component.id, {
+                        properties: {
+                          ...component.properties,
+                          paverCount: { ...component.properties.paverCount, cols },
+                        },
+                      })
+                    }
+                    onReplicateBottom={(rows) =>
+                      updateComponent(component.id, {
+                        properties: {
+                          ...component.properties,
+                          paverCount: { ...component.properties.paverCount, rows },
+                        },
+                      })
+                    }
+                  />
+                );
+                
+              case 'drainage':
+                return (
+                  <DrainageComponent
+                    key={component.id}
+                    component={component}
+                    isSelected={isSelected}
+                    onSelect={() => selectComponent(component.id)}
+                    onDragEnd={(pos) => updateComponent(component.id, { position: pos })}
+                    onExtend={(length) =>
+                      updateComponent(component.id, {
+                        properties: { ...component.properties, length },
+                        dimensions: { ...component.dimensions, width: length },
+                      })
+                    }
+                  />
+                );
+                
+              case 'fence':
+                return (
+                  <FenceComponent
+                    key={component.id}
+                    component={component}
+                    isSelected={isSelected}
+                    onSelect={() => selectComponent(component.id)}
+                    onDragEnd={(pos) => updateComponent(component.id, { position: pos })}
+                    onExtend={(length) =>
+                      updateComponent(component.id, {
+                        dimensions: { ...component.dimensions, width: length },
+                      })
+                    }
+                  />
+                );
+                
+              default:
+                return null;
+            }
+          })}
         </Layer>
       </Stage>
 
