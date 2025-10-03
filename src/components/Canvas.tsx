@@ -8,6 +8,7 @@ import { PoolComponent } from './canvas/PoolComponent';
 import { PaverComponent } from './canvas/PaverComponent';
 import { DrainageComponent } from './canvas/DrainageComponent';
 import { FenceComponent } from './canvas/FenceComponent';
+import { WallComponent } from './canvas/WallComponent';
 import { snapToGrid } from '@/utils/snap';
 import { EMPIRE_POOL, PAVER_SIZES } from '@/constants/components';
 
@@ -118,6 +119,18 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
           properties: {
             fenceType: 'glass',
             gates: [],
+          },
+        });
+        break;
+        
+      case 'wall':
+        addComponent({
+          type: 'wall',
+          position: pos,
+          rotation: 0,
+          dimensions: { width: 100, height: 15 },
+          properties: {
+            wallMaterial: 'timber',
           },
         });
         break;
@@ -327,6 +340,28 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
               case 'fence':
                 return (
                   <FenceComponent
+                    key={component.id}
+                    component={component}
+                    isSelected={isSelected}
+                    onSelect={() => selectComponent(component.id)}
+                    onDragEnd={(pos) => {
+                      const snapped = {
+                        x: snapToGrid(pos.x),
+                        y: snapToGrid(pos.y),
+                      };
+                      updateComponent(component.id, { position: snapped });
+                    }}
+                    onExtend={(length) =>
+                      updateComponent(component.id, {
+                        dimensions: { ...component.dimensions, width: length },
+                      })
+                    }
+                  />
+                );
+                
+              case 'wall':
+                return (
+                  <WallComponent
                     key={component.id}
                     component={component}
                     isSelected={isSelected}
