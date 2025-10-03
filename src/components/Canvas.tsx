@@ -260,22 +260,32 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
                       };
                       updateComponent(component.id, { position: snapped });
                     }}
-                    onReplicateRight={(cols) =>
+                    onReplicateRight={(cols) => {
+                      const base = component.properties.paverCount || { rows: 1, cols: 1 };
+                      const safe = {
+                        rows: Math.max(1, Number(base.rows) || 1),
+                        cols: Math.max(1, Number(cols) || 1),
+                      };
                       updateComponent(component.id, {
                         properties: {
                           ...component.properties,
-                          paverCount: { ...component.properties.paverCount, cols },
+                          paverCount: safe,
                         },
-                      })
-                    }
-                    onReplicateBottom={(rows) =>
+                      });
+                    }}
+                    onReplicateBottom={(rows) => {
+                      const base = component.properties.paverCount || { rows: 1, cols: 1 };
+                      const safe = {
+                        rows: Math.max(1, Number(rows) || 1),
+                        cols: Math.max(1, Number(base.cols) || 1),
+                      };
                       updateComponent(component.id, {
                         properties: {
                           ...component.properties,
-                          paverCount: { ...component.properties.paverCount, rows },
+                          paverCount: safe,
                         },
-                      })
-                    }
+                      });
+                    }}
                   />
                 );
                 
