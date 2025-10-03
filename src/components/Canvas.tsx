@@ -94,8 +94,6 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
         dimensions: { width: pool.length, height: pool.width },
         properties: {
           poolId: pool.id,
-          showCoping: true,
-          copingWidth: 400,
         },
       });
       setPendingPoolPosition(null);

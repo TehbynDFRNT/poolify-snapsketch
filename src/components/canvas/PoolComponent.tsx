@@ -21,9 +21,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   const scaledOutline = poolData.outline.map(p => ({ x: p.x * scale, y: p.y * scale }));
   const points = scaledOutline.flatMap(p => [p.x, p.y]);
 
-  const showCoping = component.properties.showCoping;
-  const copingWidth = (component.properties.copingWidth || 400) * scale;
-
   return (
     <Group
       ref={groupRef}
@@ -45,21 +42,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
         strokeWidth={2}
         closed
       />
-
-      {/* Coping outline (dashed) */}
-      {showCoping && (
-        <Line
-          points={points.map((p, i) => {
-            // Offset outward by copingWidth
-            const isX = i % 2 === 0;
-            return isX ? p - copingWidth : p - copingWidth;
-          })}
-          stroke="#3B82F6"
-          strokeWidth={1}
-          dash={[5, 5]}
-          closed
-        />
-      )}
 
       {/* Deep End label (150mm inset) */}
       <Text

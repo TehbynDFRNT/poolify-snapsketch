@@ -30,8 +30,6 @@ export interface Component {
 export interface ComponentProperties {
   // Pool
   poolId?: string;
-  showCoping?: boolean;
-  copingWidth?: number;
   
   // Paver
   paverSize?: '400x400' | '400x600';
@@ -64,7 +62,6 @@ export interface Summary {
   pools: Array<{
     type: string;
     dimensions: string;
-    coping?: string;
   }>;
   paving: Array<{
     size: string;

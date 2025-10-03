@@ -155,9 +155,6 @@ export const PropertiesPanel = () => {
                 {measurements.pools.map((pool, i) => (
                   <div key={i} className="text-sm text-muted-foreground mb-1">
                     • {pool.type}
-                    {pool.coping && (
-                      <div className="ml-4">Coping: {pool.coping}</div>
-                    )}
                   </div>
                 ))}
               </div>

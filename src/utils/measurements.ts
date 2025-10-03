@@ -21,7 +21,6 @@ export const calculateMeasurements = (components: Component[]): Summary => {
           summary.pools.push({
             type: pool.name,
             dimensions: `${pool.length}×${pool.width}mm`,
-            coping: component.properties.showCoping ? `${(pool.length * 2 + pool.width * 2)}mm @ ${component.properties.copingWidth || 400}mm wide` : undefined,
           });
         }
         break;
