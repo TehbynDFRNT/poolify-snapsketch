@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { 
   Square, 
   Grid3x3, 
