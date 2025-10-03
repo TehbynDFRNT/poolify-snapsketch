@@ -20,7 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { getAllProjects, deleteProject } from '@/utils/storage';
+import { getAllProjects, deleteProject, saveProject } from '@/utils/storage';
 import { Project } from '@/types';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -55,8 +55,6 @@ export const HomePage = () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    
-    const { saveProject } = require('@/utils/storage');
     saveProject(newProject);
     setProjects(getAllProjects());
     toast.success('Project duplicated');
@@ -70,8 +68,6 @@ export const HomePage = () => {
       updatedAt: new Date(),
       components: [],
     };
-    
-    const { saveProject } = require('@/utils/storage');
     saveProject(newProject);
     setShowNewProject(false);
     navigate(`/project/${newProject.id}`);
