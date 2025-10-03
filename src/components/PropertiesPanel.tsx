@@ -2,10 +2,13 @@ import { useDesignStore } from '@/store/designStore';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { formatLength, formatArea } from '@/utils/measurements';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { POOL_LIBRARY } from '@/constants/pools';
 import { RotateCw, Copy, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 
 export const PropertiesPanel = () => {
   const { selectedComponentId, components, getMeasurements, updateComponent, deleteComponent, duplicateComponent } = useDesignStore();
@@ -28,6 +31,96 @@ export const PropertiesPanel = () => {
     if (selectedComponent) {
       deleteComponent(selectedComponent.id);
     }
+  };
+
+  // Handle segment length updates for boundary/house
+  const handleSegmentLengthUpdate = (segmentIndex: number, newLengthMeters: number) => {
+    if (!selectedComponent || (!selectedComponent.type.includes('boundary') && !selectedComponent.type.includes('house'))) return;
+    
+    const points = selectedComponent.properties.points || [];
+    if (points.length < 2 || segmentIndex >= points.length) return;
+
+    const newPoints = [...points];
+    const startPoint = newPoints[segmentIndex];
+    const endIndex = (segmentIndex + 1) % points.length;
+    const endPoint = newPoints[endIndex];
+
+    // Calculate current angle
+    const dx = endPoint.x - startPoint.x;
+    const dy = endPoint.y - startPoint.y;
+    const angle = Math.atan2(dy, dx);
+
+    // Calculate new end point based on desired length (convert meters to pixels: 1m = 100 pixels at 1:100 scale)
+    const newLengthPixels = newLengthMeters * 100;
+    const newEndPoint = {
+      x: startPoint.x + Math.cos(angle) * newLengthPixels,
+      y: startPoint.y + Math.sin(angle) * newLengthPixels,
+    };
+
+    newPoints[endIndex] = newEndPoint;
+
+    // Recalculate area for house
+    let area = undefined;
+    if (selectedComponent.type === 'house' && selectedComponent.properties.closed && newPoints.length >= 3) {
+      area = 0;
+      for (let i = 0; i < newPoints.length; i++) {
+        const j = (i + 1) % newPoints.length;
+        area += newPoints[i].x * newPoints[j].y;
+        area -= newPoints[j].x * newPoints[i].y;
+      }
+      area = Math.abs(area) / 2;
+      area = area * 0.01; // Convert to m²
+    }
+
+    updateComponent(selectedComponent.id, {
+      properties: {
+        ...selectedComponent.properties,
+        points: newPoints,
+        ...(area !== undefined && { area }),
+      },
+    });
+  };
+
+  // Calculate segment data for boundary/house
+  const getSegmentData = () => {
+    if (!selectedComponent || (selectedComponent.type !== 'boundary' && selectedComponent.type !== 'house')) return [];
+    
+    const points = selectedComponent.properties.points || [];
+    const closed = selectedComponent.properties.closed || false;
+    const segments = [];
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const lengthInPixels = Math.sqrt(dx * dx + dy * dy);
+      const lengthInMeters = (lengthInPixels * 10) / 1000; // 10 pixels = 1000mm = 1m at 1:100 scale
+
+      segments.push({
+        index: i,
+        label: `Segment ${i + 1}`,
+        length: lengthInMeters,
+      });
+    }
+
+    // Add closing segment if closed
+    if (closed && points.length > 2) {
+      const p1 = points[points.length - 1];
+      const p2 = points[0];
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const lengthInPixels = Math.sqrt(dx * dx + dy * dy);
+      const lengthInMeters = (lengthInPixels * 10) / 1000;
+
+      segments.push({
+        index: points.length - 1,
+        label: `Segment ${points.length}`,
+        length: lengthInMeters,
+      });
+    }
+
+    return segments;
   };
 
   // Get pool data if selected component is a pool
@@ -75,6 +168,46 @@ export const PropertiesPanel = () => {
                     <p className="text-sm text-muted-foreground">
                       {selectedComponent.dimensions.width}mm × {selectedComponent.dimensions.height}mm
                     </p>
+                  </div>
+                )}
+
+                {/* Boundary/House Segment Lengths */}
+                {(selectedComponent.type === 'boundary' || selectedComponent.type === 'house') && (
+                  <div>
+                    <p className="text-sm font-medium mb-2">
+                      {selectedComponent.type === 'boundary' ? 'Segments' : 'Walls'}
+                    </p>
+                    <div className="space-y-2">
+                      {getSegmentData().map((segment) => (
+                        <div key={segment.index} className="flex items-center gap-2">
+                          <Label className="text-xs w-20">{segment.label}</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            min="0.1"
+                            value={segment.length.toFixed(1)}
+                            onChange={(e) => {
+                              const value = parseFloat(e.target.value);
+                              if (!isNaN(value) && value > 0) {
+                                handleSegmentLengthUpdate(segment.index, value);
+                              }
+                            }}
+                            className="h-8 text-sm"
+                          />
+                          <span className="text-xs text-muted-foreground">m</span>
+                        </div>
+                      ))}
+                    </div>
+                    {selectedComponent.type === 'house' && selectedComponent.properties.area && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Total area: {selectedComponent.properties.area.toFixed(1)} m²
+                      </p>
+                    )}
+                    {selectedComponent.properties.closed === false && (
+                      <p className="text-xs text-amber-600 mt-2">
+                        ⚠️ Shape is not closed
+                      </p>
+                    )}
                   </div>
                 )}
 
