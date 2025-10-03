@@ -1,4 +1,6 @@
 import { 
+  MousePointer2,
+  Hand,
   Square, 
   Grid3x3, 
   Droplet, 
@@ -19,6 +21,7 @@ import {
 
 export type ToolType = 
   | 'select' 
+  | 'hand'
   | 'pool' 
   | 'paver' 
   | 'drainage' 
@@ -39,6 +42,8 @@ export const Toolbar = ({ activeTool = 'select', onToolChange }: ToolbarProps) =
   };
 
   const tools = [
+    { id: 'select' as ToolType, icon: MousePointer2, label: 'Select/Move', shortcut: 'V' },
+    { id: 'hand' as ToolType, icon: Hand, label: 'Pan Canvas', shortcut: 'H' },
     { id: 'pool' as ToolType, icon: Square, label: 'Pool', shortcut: '1' },
     { id: 'paver' as ToolType, icon: Grid3x3, label: 'Paving', shortcut: '2' },
     { id: 'drainage' as ToolType, icon: Droplet, label: 'Drainage', shortcut: '3' },

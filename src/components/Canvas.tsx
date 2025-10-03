@@ -45,14 +45,16 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
   }, []);
 
   const handleStageClick = (e: any) => {
-    // If clicked on empty canvas, deselect
+    // If clicked on empty canvas
     if (e.target === e.target.getStage()) {
-      selectComponent(null);
-      
-      // If a tool is active, place component
-      if (activeTool !== 'select') {
+      // Deselect in select mode
+      if (activeTool === 'select') {
+        selectComponent(null);
+      }
+      // Place component if tool is active (not select or hand)
+      else if (activeTool !== 'hand') {
+        selectComponent(null);
         const pos = e.target.getStage().getPointerPosition();
-        // Convert from screen coordinates to canvas coordinates
         const canvasX = (pos.x - pan.x) / zoom;
         const canvasY = (pos.y - pan.y) / zoom;
         const snapped = {
@@ -212,9 +214,11 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
         y={pan.y}
         onWheel={handleWheel}
         onClick={handleStageClick}
-        draggable
+        draggable={activeTool === 'hand'}
         onDragEnd={(e) => {
-          setPan({ x: e.target.x(), y: e.target.y() });
+          if (activeTool === 'hand') {
+            setPan({ x: e.target.x(), y: e.target.y() });
+          }
         }}
       >
         <Layer>
@@ -232,7 +236,13 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
                     component={component}
                     isSelected={isSelected}
                     onSelect={() => selectComponent(component.id)}
-                    onDragEnd={(pos) => updateComponent(component.id, { position: pos })}
+                    onDragEnd={(pos) => {
+                      const snapped = {
+                        x: snapToGrid(pos.x),
+                        y: snapToGrid(pos.y),
+                      };
+                      updateComponent(component.id, { position: snapped });
+                    }}
                   />
                 );
                 
@@ -243,7 +253,13 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
                     component={component}
                     isSelected={isSelected}
                     onSelect={() => selectComponent(component.id)}
-                    onDragEnd={(pos) => updateComponent(component.id, { position: pos })}
+                    onDragEnd={(pos) => {
+                      const snapped = {
+                        x: snapToGrid(pos.x),
+                        y: snapToGrid(pos.y),
+                      };
+                      updateComponent(component.id, { position: snapped });
+                    }}
                     onReplicateRight={(cols) =>
                       updateComponent(component.id, {
                         properties: {
@@ -270,7 +286,13 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
                     component={component}
                     isSelected={isSelected}
                     onSelect={() => selectComponent(component.id)}
-                    onDragEnd={(pos) => updateComponent(component.id, { position: pos })}
+                    onDragEnd={(pos) => {
+                      const snapped = {
+                        x: snapToGrid(pos.x),
+                        y: snapToGrid(pos.y),
+                      };
+                      updateComponent(component.id, { position: snapped });
+                    }}
                     onExtend={(length) =>
                       updateComponent(component.id, {
                         properties: { ...component.properties, length },
@@ -287,7 +309,13 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
                     component={component}
                     isSelected={isSelected}
                     onSelect={() => selectComponent(component.id)}
-                    onDragEnd={(pos) => updateComponent(component.id, { position: pos })}
+                    onDragEnd={(pos) => {
+                      const snapped = {
+                        x: snapToGrid(pos.x),
+                        y: snapToGrid(pos.y),
+                      };
+                      updateComponent(component.id, { position: snapped });
+                    }}
                     onExtend={(length) =>
                       updateComponent(component.id, {
                         dimensions: { ...component.dimensions, width: length },
