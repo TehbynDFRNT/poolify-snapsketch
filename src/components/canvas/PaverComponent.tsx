@@ -86,13 +86,19 @@ export const PaverComponent = ({
             stroke="white"
             strokeWidth={2}
             draggable
-            onDragStart={() => setIsDraggingHandle(true)}
+            dragBoundFunc={(pos) => ({ x: pos.x, y: (count.rows * scaledHeight) / 2 })}
+            onDragStart={(e) => {
+              e.cancelBubble = true;
+              setIsDraggingHandle(true);
+            }}
             onDragMove={(e) => {
+              e.cancelBubble = true;
               const dx = e.target.x() - count.cols * scaledWidth;
               const newCols = Math.max(1, Math.round(dx / scaledWidth) + count.cols);
               setDragCount({ ...dragCount, cols: newCols });
             }}
             onDragEnd={(e) => {
+              e.cancelBubble = true;
               const dx = e.target.x() - count.cols * scaledWidth;
               const newCols = Math.max(1, Math.round(dx / scaledWidth) + count.cols);
               onReplicateRight?.(newCols);
@@ -111,13 +117,19 @@ export const PaverComponent = ({
             stroke="white"
             strokeWidth={2}
             draggable
-            onDragStart={() => setIsDraggingHandle(true)}
+            dragBoundFunc={(pos) => ({ x: (count.cols * scaledWidth) / 2, y: pos.y })}
+            onDragStart={(e) => {
+              e.cancelBubble = true;
+              setIsDraggingHandle(true);
+            }}
             onDragMove={(e) => {
+              e.cancelBubble = true;
               const dy = e.target.y() - count.rows * scaledHeight;
               const newRows = Math.max(1, Math.round(dy / scaledHeight) + count.rows);
               setDragCount({ ...dragCount, rows: newRows });
             }}
             onDragEnd={(e) => {
+              e.cancelBubble = true;
               const dy = e.target.y() - count.rows * scaledHeight;
               const newRows = Math.max(1, Math.round(dy / scaledHeight) + count.rows);
               onReplicateBottom?.(newRows);

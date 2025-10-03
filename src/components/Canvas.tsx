@@ -9,7 +9,7 @@ import { PaverComponent } from './canvas/PaverComponent';
 import { DrainageComponent } from './canvas/DrainageComponent';
 import { FenceComponent } from './canvas/FenceComponent';
 import { snapToGrid } from '@/utils/snap';
-import { EMPIRE_POOL } from '@/constants/components';
+import { EMPIRE_POOL, PAVER_SIZES } from '@/constants/components';
 
 export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
   const stageRef = useRef<any>(null);
@@ -266,10 +266,16 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
                         rows: Math.max(1, Number(base.rows) || 1),
                         cols: Math.max(1, Number(cols) || 1),
                       };
+                      const sizeKey = (component.properties.paverSize || '400x400') as keyof typeof PAVER_SIZES;
+                      const size = PAVER_SIZES[sizeKey];
                       updateComponent(component.id, {
                         properties: {
                           ...component.properties,
                           paverCount: safe,
+                        },
+                        dimensions: {
+                          width: safe.cols * size.width,
+                          height: safe.rows * size.height,
                         },
                       });
                     }}
@@ -279,10 +285,16 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
                         rows: Math.max(1, Number(rows) || 1),
                         cols: Math.max(1, Number(base.cols) || 1),
                       };
+                      const sizeKey = (component.properties.paverSize || '400x400') as keyof typeof PAVER_SIZES;
+                      const size = PAVER_SIZES[sizeKey];
                       updateComponent(component.id, {
                         properties: {
                           ...component.properties,
                           paverCount: safe,
+                        },
+                        dimensions: {
+                          width: safe.cols * size.width,
+                          height: safe.rows * size.height,
                         },
                       });
                     }}
