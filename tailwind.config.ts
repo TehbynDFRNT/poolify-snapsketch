@@ -22,6 +22,7 @@ export default {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          hover: "hsl(var(--primary-hover))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -30,6 +31,14 @@ export default {
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
         },
         muted: {
           DEFAULT: "hsl(var(--muted))",
@@ -57,6 +66,30 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        canvas: {
+          bg: "hsl(var(--canvas-bg))",
+          grid: {
+            light: "hsl(var(--grid-light))",
+            major: "hsl(var(--grid-major))",
+          },
+          snap: "hsl(var(--snap-indicator))",
+        },
+        pool: "hsl(var(--pool-fill))",
+        paver: "hsl(var(--paver-fill))",
+        drainage: {
+          rock: "hsl(var(--drainage-rock))",
+          ultra: "hsl(var(--drainage-ultra))",
+        },
+        fence: {
+          glass: "hsl(var(--fence-glass))",
+          metal: "hsl(var(--fence-metal))",
+          boundary: "hsl(var(--fence-boundary))",
+        },
+        wall: {
+          timber: "hsl(var(--wall-timber))",
+          concrete: "hsl(var(--wall-concrete))",
+        },
+        garden: "hsl(var(--garden-fill))",
       },
       borderRadius: {
         lg: "var(--radius)",

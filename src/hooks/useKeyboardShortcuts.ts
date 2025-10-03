@@ -1,0 +1,48 @@
+import { useEffect } from 'react';
+import { useDesignStore } from '@/store/designStore';
+
+export const useKeyboardShortcuts = () => {
+  const { undo, redo, deleteComponent, selectedComponentId, toggleGrid, saveCurrentProject } = useDesignStore();
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + Z: Undo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      }
+
+      // Ctrl/Cmd + Y or Ctrl/Cmd + Shift + Z: Redo
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        redo();
+      }
+
+      // Ctrl/Cmd + S: Save
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveCurrentProject();
+      }
+
+      // Delete or Backspace: Delete selected component
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedComponentId) {
+        e.preventDefault();
+        deleteComponent(selectedComponentId);
+      }
+
+      // G: Toggle grid
+      if (e.key === 'g' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        toggleGrid();
+      }
+
+      // Escape: Deselect
+      if (e.key === 'Escape') {
+        useDesignStore.getState().selectComponent(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo, deleteComponent, selectedComponentId, toggleGrid, saveCurrentProject]);
+};
