@@ -114,7 +114,7 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
           type: 'fence',
           position: pos,
           rotation: 0,
-          dimensions: { width: 2400, height: 12 },
+          dimensions: { width: 100, height: 12 },
           properties: {
             fenceType: 'glass',
             gates: [],
