@@ -1,5 +1,6 @@
 import { Component, Summary } from '@/types';
-import { EMPIRE_POOL, PAVER_SIZES, DRAINAGE_TYPES, FENCE_TYPES, WALL_MATERIALS } from '@/constants/components';
+import { PAVER_SIZES, DRAINAGE_TYPES, FENCE_TYPES, WALL_MATERIALS } from '@/constants/components';
+import { POOL_LIBRARY } from '@/constants/pools';
 
 export const calculateMeasurements = (components: Component[]): Summary => {
   const summary: Summary = {
@@ -14,11 +15,13 @@ export const calculateMeasurements = (components: Component[]): Summary => {
   components.forEach(component => {
     switch (component.type) {
       case 'pool':
-        if (component.properties.poolType === 'empire-6x3') {
+        const poolId = component.properties.poolId;
+        const pool = POOL_LIBRARY.find(p => p.id === poolId);
+        if (pool) {
           summary.pools.push({
-            type: 'Empire 6.0×3.0m',
-            dimensions: '6000×3000mm',
-            coping: component.properties.showCoping ? '18m @ 400mm wide' : undefined,
+            type: pool.name,
+            dimensions: `${pool.length}×${pool.width}mm`,
+            coping: component.properties.showCoping ? `${(pool.length * 2 + pool.width * 2)}mm @ ${component.properties.copingWidth || 400}mm wide` : undefined,
           });
         }
         break;

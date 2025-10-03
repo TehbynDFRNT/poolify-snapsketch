@@ -10,12 +10,17 @@ import { DrainageComponent } from './canvas/DrainageComponent';
 import { FenceComponent } from './canvas/FenceComponent';
 import { WallComponent } from './canvas/WallComponent';
 import { snapToGrid } from '@/utils/snap';
-import { EMPIRE_POOL, PAVER_SIZES } from '@/constants/components';
+import { PAVER_SIZES } from '@/constants/components';
+import { PoolSelector } from './PoolSelector';
+import { Pool } from '@/constants/pools';
 
 export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
   const stageRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [showPoolSelector, setShowPoolSelector] = useState(false);
+  const [selectedPool, setSelectedPool] = useState<Pool | null>(null);
+  const [pendingPoolPosition, setPendingPoolPosition] = useState<{ x: number; y: number } | null>(null);
   
   const {
     zoom,
@@ -52,7 +57,19 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
       if (activeTool === 'select') {
         selectComponent(null);
       }
-      // Place component if tool is active (not select or hand)
+      // Show pool selector for pool tool
+      else if (activeTool === 'pool') {
+        const pos = e.target.getStage().getPointerPosition();
+        const canvasX = (pos.x - pan.x) / zoom;
+        const canvasY = (pos.y - pan.y) / zoom;
+        const snapped = {
+          x: snapToGrid(canvasX),
+          y: snapToGrid(canvasY),
+        };
+        setPendingPoolPosition(snapped);
+        setShowPoolSelector(true);
+      }
+      // Place component if tool is active (not select, hand, or pool)
       else if (activeTool !== 'hand') {
         selectComponent(null);
         const pos = e.target.getStage().getPointerPosition();
@@ -68,20 +85,27 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
     }
   };
 
+  const handlePoolSelected = (pool: Pool) => {
+    if (pendingPoolPosition) {
+      addComponent({
+        type: 'pool',
+        position: pendingPoolPosition,
+        rotation: 0,
+        dimensions: { width: pool.length, height: pool.width },
+        properties: {
+          poolId: pool.id,
+          showCoping: true,
+          copingWidth: 400,
+        },
+      });
+      setPendingPoolPosition(null);
+    }
+  };
+
   const handleToolPlace = (pos: { x: number; y: number }) => {
     switch (activeTool) {
+      // Pool is handled by selector, so skip here
       case 'pool':
-        addComponent({
-          type: 'pool',
-          position: pos,
-          rotation: 0,
-          dimensions: { width: EMPIRE_POOL.length, height: EMPIRE_POOL.width },
-          properties: {
-            poolType: 'empire-6x3',
-            showCoping: true,
-            copingWidth: 400,
-          },
-        });
         break;
         
       case 'paver':
@@ -401,6 +425,17 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
           <ZoomIn className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* Pool Selector Modal */}
+      {showPoolSelector && (
+        <PoolSelector
+          onSelect={handlePoolSelected}
+          onClose={() => {
+            setShowPoolSelector(false);
+            setPendingPoolPosition(null);
+          }}
+        />
+      )}
     </div>
   );
 };

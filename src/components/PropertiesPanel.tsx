@@ -1,13 +1,39 @@
 import { useDesignStore } from '@/store/designStore';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
 import { formatLength, formatArea } from '@/utils/measurements';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { POOL_LIBRARY } from '@/constants/pools';
+import { RotateCw, Copy, Trash2 } from 'lucide-react';
 
 export const PropertiesPanel = () => {
-  const { selectedComponentId, components, getMeasurements } = useDesignStore();
+  const { selectedComponentId, components, getMeasurements, updateComponent, deleteComponent, duplicateComponent } = useDesignStore();
   const selectedComponent = components.find(c => c.id === selectedComponentId);
   const measurements = getMeasurements();
+
+  const handleRotate = (angle: number) => {
+    if (selectedComponent) {
+      updateComponent(selectedComponent.id, { rotation: angle });
+    }
+  };
+
+  const handleDuplicate = () => {
+    if (selectedComponent) {
+      duplicateComponent(selectedComponent.id);
+    }
+  };
+
+  const handleDelete = () => {
+    if (selectedComponent) {
+      deleteComponent(selectedComponent.id);
+    }
+  };
+
+  // Get pool data if selected component is a pool
+  const poolData = selectedComponent?.type === 'pool' 
+    ? POOL_LIBRARY.find(p => p.id === selectedComponent.properties.poolId)
+    : null;
 
   return (
     <ScrollArea className="h-full">
@@ -15,13 +41,27 @@ export const PropertiesPanel = () => {
         {selectedComponent ? (
           <Card>
             <CardHeader>
-              <CardTitle>Selected Component</CardTitle>
+              <CardTitle>
+                {poolData ? poolData.name : selectedComponent.type.charAt(0).toUpperCase() + selectedComponent.type.slice(1)}
+              </CardTitle>
               <CardDescription>
                 {selectedComponent.type.charAt(0).toUpperCase() + selectedComponent.type.slice(1)}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                {poolData && (
+                  <div>
+                    <p className="text-sm font-medium mb-1">Waterline Dimensions</p>
+                    <p className="text-sm text-muted-foreground">
+                      {poolData.length}mm × {poolData.width}mm
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      ({poolData.length / 1000}m × {poolData.width / 1000}m)
+                    </p>
+                  </div>
+                )}
+                
                 <div>
                   <p className="text-sm font-medium mb-1">Position</p>
                   <p className="text-sm text-muted-foreground">
@@ -29,18 +69,66 @@ export const PropertiesPanel = () => {
                   </p>
                 </div>
                 
-                <div>
-                  <p className="text-sm font-medium mb-1">Dimensions</p>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedComponent.dimensions.width}mm × {selectedComponent.dimensions.height}mm
-                  </p>
-                </div>
+                {!poolData && (
+                  <div>
+                    <p className="text-sm font-medium mb-1">Dimensions</p>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedComponent.dimensions.width}mm × {selectedComponent.dimensions.height}mm
+                    </p>
+                  </div>
+                )}
 
                 <div>
-                  <p className="text-sm font-medium mb-1">Rotation</p>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedComponent.rotation}°
-                  </p>
+                  <p className="text-sm font-medium mb-2">Rotation</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[0, 90, 180, 270].map(angle => (
+                      <Button
+                        key={angle}
+                        variant={selectedComponent.rotation === angle ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => handleRotate(angle)}
+                        className="text-xs"
+                      >
+                        {angle}°
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {poolData && (
+                  <div>
+                    <p className="text-sm font-medium mb-1">Pool Ends</p>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      <li>• Shallow End (SE): Bottom-left</li>
+                      <li>• Deep End (DE): Top-right</li>
+                    </ul>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      (Updates when rotated)
+                    </p>
+                  </div>
+                )}
+
+                <Separator />
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDuplicate}
+                    className="flex-1"
+                  >
+                    <Copy className="h-4 w-4 mr-2" />
+                    Duplicate
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleDelete}
+                    className="flex-1"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </Button>
                 </div>
               </div>
             </CardContent>

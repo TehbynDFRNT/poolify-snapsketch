@@ -29,7 +29,7 @@ export interface Component {
 
 export interface ComponentProperties {
   // Pool
-  poolType?: 'empire-6x3';
+  poolId?: string;
   showCoping?: boolean;
   copingWidth?: number;
   
