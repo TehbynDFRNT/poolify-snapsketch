@@ -23,22 +23,51 @@ export const NewProjectModal = ({ open, onOpenChange, onSubmit }: NewProjectModa
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<{ customerName?: string; address?: string }>({});
+  const [touched, setTouched] = useState<{ customerName?: boolean; address?: boolean }>({});
+
+  const validateField = (field: 'customerName' | 'address', value: string) => {
+    if (field === 'customerName') {
+      if (value.trim().length < 2) {
+        return 'Customer name must be at least 2 characters';
+      }
+    }
+    if (field === 'address') {
+      if (value.trim().length < 5) {
+        return 'Address must be at least 5 characters';
+      }
+    }
+    return undefined;
+  };
+
+  const handleBlur = (field: 'customerName' | 'address') => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+    const value = field === 'customerName' ? customerName : address;
+    const error = validateField(field, value);
+    if (error) {
+      setErrors(prev => ({ ...prev, [field]: error }));
+    } else {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     const newErrors: { customerName?: string; address?: string } = {};
     
-    if (customerName.trim().length < 2) {
-      newErrors.customerName = 'Customer name must be at least 2 characters';
-    }
+    const customerNameError = validateField('customerName', customerName);
+    const addressError = validateField('address', address);
     
-    if (address.trim().length < 5) {
-      newErrors.address = 'Address must be at least 5 characters';
-    }
+    if (customerNameError) newErrors.customerName = customerNameError;
+    if (addressError) newErrors.address = addressError;
     
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
+      setTouched({ customerName: true, address: true });
       return;
     }
     
@@ -53,6 +82,7 @@ export const NewProjectModal = ({ open, onOpenChange, onSubmit }: NewProjectModa
     setAddress('');
     setNotes('');
     setErrors({});
+    setTouched({});
   };
 
   const handleCancel = () => {
@@ -60,6 +90,7 @@ export const NewProjectModal = ({ open, onOpenChange, onSubmit }: NewProjectModa
     setAddress('');
     setNotes('');
     setErrors({});
+    setTouched({});
     onOpenChange(false);
   };
 
@@ -83,10 +114,11 @@ export const NewProjectModal = ({ open, onOpenChange, onSubmit }: NewProjectModa
                 id="customerName"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
+                onBlur={() => handleBlur('customerName')}
                 placeholder="John Smith"
-                className={errors.customerName ? 'border-destructive' : ''}
+                className={touched.customerName && errors.customerName ? 'border-destructive' : ''}
               />
-              {errors.customerName && (
+              {touched.customerName && errors.customerName && (
                 <p className="text-sm text-destructive">{errors.customerName}</p>
               )}
             </div>
@@ -99,10 +131,11 @@ export const NewProjectModal = ({ open, onOpenChange, onSubmit }: NewProjectModa
                 id="address"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
+                onBlur={() => handleBlur('address')}
                 placeholder="123 Main St, Brisbane QLD 4000"
-                className={errors.address ? 'border-destructive' : ''}
+                className={touched.address && errors.address ? 'border-destructive' : ''}
               />
-              {errors.address && (
+              {touched.address && errors.address && (
                 <p className="text-sm text-destructive">{errors.address}</p>
               )}
             </div>
