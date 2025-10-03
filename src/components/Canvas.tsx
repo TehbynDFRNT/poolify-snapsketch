@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { Stage, Layer, Line } from 'react-konva';
+import { Stage, Layer, Line, Circle, Text } from 'react-konva';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,8 @@ import { PaverComponent } from './canvas/PaverComponent';
 import { DrainageComponent } from './canvas/DrainageComponent';
 import { FenceComponent } from './canvas/FenceComponent';
 import { WallComponent } from './canvas/WallComponent';
+import { BoundaryComponent } from './canvas/BoundaryComponent';
+import { HouseComponent } from './canvas/HouseComponent';
 import { snapToGrid } from '@/utils/snap';
 import { PAVER_SIZES } from '@/constants/components';
 import { PoolSelector } from './PoolSelector';
@@ -21,6 +23,11 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
   const [showPoolSelector, setShowPoolSelector] = useState(false);
   const [selectedPool, setSelectedPool] = useState<Pool | null>(null);
   const [pendingPoolPosition, setPendingPoolPosition] = useState<{ x: number; y: number } | null>(null);
+  
+  // Drawing state for boundary and house tools
+  const [drawingPoints, setDrawingPoints] = useState<Array<{ x: number; y: number }>>([]);
+  const [ghostPoint, setGhostPoint] = useState<{ x: number; y: number } | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
   
   const {
     zoom,
@@ -50,40 +57,138 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
     return () => window.removeEventListener('resize', updateDimensions);
   }, []);
 
+  // Handle mouse move for drawing tools
+  const handleMouseMove = (e: any) => {
+    if (activeTool === 'boundary' || activeTool === 'house') {
+      const pos = e.target.getStage().getPointerPosition();
+      const canvasX = (pos.x - pan.x) / zoom;
+      const canvasY = (pos.y - pan.y) / zoom;
+      const snapped = {
+        x: snapToGrid(canvasX),
+        y: snapToGrid(canvasY),
+      };
+      setGhostPoint(snapped);
+    }
+  };
+
+  // Check if point is near first point for auto-close
+  const isNearFirstPoint = (point: { x: number; y: number }) => {
+    if (drawingPoints.length === 0) return false;
+    const first = drawingPoints[0];
+    const distance = Math.sqrt(
+      Math.pow(point.x - first.x, 2) + Math.pow(point.y - first.y, 2)
+    );
+    return distance < 15;
+  };
+
   const handleStageClick = (e: any) => {
     // If clicked on empty canvas
     if (e.target === e.target.getStage()) {
+      const pos = e.target.getStage().getPointerPosition();
+      const canvasX = (pos.x - pan.x) / zoom;
+      const canvasY = (pos.y - pan.y) / zoom;
+      const snapped = {
+        x: snapToGrid(canvasX),
+        y: snapToGrid(canvasY),
+      };
+
+      // Handle drawing tools
+      if (activeTool === 'boundary' || activeTool === 'house') {
+        // Check if clicking near first point to close
+        if (drawingPoints.length >= 3 && isNearFirstPoint(snapped)) {
+          // Close the shape
+          finishDrawing(true);
+          return;
+        }
+        
+        // Add point to drawing
+        setDrawingPoints([...drawingPoints, snapped]);
+        setIsDrawing(true);
+      }
       // Deselect in select mode
-      if (activeTool === 'select') {
+      else if (activeTool === 'select') {
         selectComponent(null);
       }
       // Show pool selector for pool tool
       else if (activeTool === 'pool') {
-        const pos = e.target.getStage().getPointerPosition();
-        const canvasX = (pos.x - pan.x) / zoom;
-        const canvasY = (pos.y - pan.y) / zoom;
-        const snapped = {
-          x: snapToGrid(canvasX),
-          y: snapToGrid(canvasY),
-        };
         setPendingPoolPosition(snapped);
         setShowPoolSelector(true);
       }
       // Place component if tool is active (not select, hand, or pool)
       else if (activeTool !== 'hand') {
         selectComponent(null);
-        const pos = e.target.getStage().getPointerPosition();
-        const canvasX = (pos.x - pan.x) / zoom;
-        const canvasY = (pos.y - pan.y) / zoom;
-        const snapped = {
-          x: snapToGrid(canvasX),
-          y: snapToGrid(canvasY),
-        };
-        
         handleToolPlace(snapped);
       }
     }
   };
+
+  // Finish drawing and create component
+  const finishDrawing = (closed: boolean) => {
+    if (drawingPoints.length < 2) {
+      setDrawingPoints([]);
+      setIsDrawing(false);
+      return;
+    }
+
+    // Calculate area for house
+    let area = 0;
+    if (closed && activeTool === 'house' && drawingPoints.length >= 3) {
+      // Shoelace formula
+      for (let i = 0; i < drawingPoints.length; i++) {
+        const j = (i + 1) % drawingPoints.length;
+        area += drawingPoints[i].x * drawingPoints[j].y;
+        area -= drawingPoints[j].x * drawingPoints[i].y;
+      }
+      area = Math.abs(area) / 2;
+      // Convert to m² (10 pixels = 100mm = 0.1m, so 1 pixel² = 0.01m²)
+      area = area * 0.01;
+    }
+
+    addComponent({
+      type: activeTool as 'boundary' | 'house',
+      position: { x: 0, y: 0 },
+      rotation: 0,
+      dimensions: { width: 0, height: 0 },
+      properties: {
+        points: drawingPoints,
+        closed,
+        ...(activeTool === 'house' && { area }),
+      },
+    });
+
+    setDrawingPoints([]);
+    setIsDrawing(false);
+    setGhostPoint(null);
+  };
+
+  // Keyboard shortcuts for drawing
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isDrawing) return;
+
+      if (e.key === 'Enter') {
+        finishDrawing(false);
+      } else if (e.key === 'Escape') {
+        setDrawingPoints([]);
+        setIsDrawing(false);
+        setGhostPoint(null);
+      } else if (e.key === 'z' && drawingPoints.length > 0) {
+        setDrawingPoints(drawingPoints.slice(0, -1));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isDrawing, drawingPoints]);
+
+  // Reset drawing when tool changes
+  useEffect(() => {
+    if (activeTool !== 'boundary' && activeTool !== 'house') {
+      setDrawingPoints([]);
+      setIsDrawing(false);
+      setGhostPoint(null);
+    }
+  }, [activeTool]);
 
   const handlePoolSelected = (pool: Pool) => {
     if (pendingPoolPosition) {
@@ -237,6 +342,106 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
     return lines;
   };
 
+  // Render ghost preview line for drawing
+  const renderDrawingPreview = () => {
+    if (!isDrawing || !ghostPoint || drawingPoints.length === 0) return null;
+
+    const lastPoint = drawingPoints[drawingPoints.length - 1];
+    const color = activeTool === 'boundary' ? '#EAB308' : '#92400E';
+
+    return (
+      <>
+        {/* Ghost line */}
+        <Line
+          points={[lastPoint.x, lastPoint.y, ghostPoint.x, ghostPoint.y]}
+          stroke={color}
+          strokeWidth={2}
+          opacity={0.5}
+          dash={[5, 5]}
+          listening={false}
+        />
+        
+        {/* Snap indicator */}
+        <Circle
+          x={ghostPoint.x}
+          y={ghostPoint.y}
+          radius={5}
+          fill="#3B82F6"
+          opacity={0.6}
+          listening={false}
+        />
+
+        {/* Close indicator if near first point */}
+        {drawingPoints.length >= 3 && isNearFirstPoint(ghostPoint) && (
+          <Circle
+            x={drawingPoints[0].x}
+            y={drawingPoints[0].y}
+            radius={20}
+            stroke="#10B981"
+            strokeWidth={2}
+            opacity={0.5}
+            listening={false}
+          />
+        )}
+      </>
+    );
+  };
+
+  // Render points being drawn
+  const renderDrawingPoints = () => {
+    if (!isDrawing || drawingPoints.length === 0) return null;
+
+    const color = activeTool === 'boundary' ? '#EAB308' : '#92400E';
+    const flatPoints: number[] = [];
+    drawingPoints.forEach(p => {
+      flatPoints.push(p.x, p.y);
+    });
+
+    return (
+      <>
+        {/* Lines connecting points */}
+        <Line
+          points={flatPoints}
+          stroke={color}
+          strokeWidth={activeTool === 'boundary' ? 3 : 2}
+          dash={activeTool === 'boundary' ? [10, 5] : undefined}
+          listening={false}
+        />
+        
+        {/* Points */}
+        {drawingPoints.map((point, index) => (
+          <Circle
+            key={`drawing-point-${index}`}
+            x={point.x}
+            y={point.y}
+            radius={5}
+            fill={color}
+            stroke="#fff"
+            strokeWidth={2}
+            listening={false}
+          />
+        ))}
+      </>
+    );
+  };
+
+  // Render status message
+  const renderStatusMessage = () => {
+    if (!isDrawing) return null;
+
+    let message = 'Click points to draw';
+    if (drawingPoints.length >= 3) {
+      message = 'Click first point to close or press Enter to finish';
+    }
+
+    return (
+      <div className="absolute top-4 left-4 bg-card border border-border rounded-lg p-3 shadow-lg">
+        <p className="text-sm text-foreground">ℹ️ {message}</p>
+        <p className="text-xs text-muted-foreground mt-1">Press Escape to cancel • Z to undo last point</p>
+      </div>
+    );
+  };
+
   return (
     <div ref={containerRef} className="relative w-full h-full bg-canvas-bg">
       <Stage
@@ -249,6 +454,7 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
         y={pan.y}
         onWheel={handleWheel}
         onClick={handleStageClick}
+        onMouseMove={handleMouseMove}
         draggable={activeTool === 'hand'}
         onDragEnd={(e) => {
           if (activeTool === 'hand') {
@@ -258,6 +464,10 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
       >
         <Layer>
           {renderGrid()}
+          
+          {/* Drawing preview */}
+          {renderDrawingPoints()}
+          {renderDrawingPreview()}
           
           {/* Render all components */}
           {components.map((component) => {
@@ -403,12 +613,49 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
                   />
                 );
                 
+              case 'boundary':
+                return (
+                  <BoundaryComponent
+                    key={component.id}
+                    component={component}
+                    isSelected={isSelected}
+                    onSelect={() => selectComponent(component.id)}
+                    onDragEnd={(pos) => {
+                      const snapped = {
+                        x: snapToGrid(pos.x),
+                        y: snapToGrid(pos.y),
+                      };
+                      updateComponent(component.id, { position: snapped });
+                    }}
+                  />
+                );
+                
+              case 'house':
+                return (
+                  <HouseComponent
+                    key={component.id}
+                    component={component}
+                    isSelected={isSelected}
+                    onSelect={() => selectComponent(component.id)}
+                    onDragEnd={(pos) => {
+                      const snapped = {
+                        x: snapToGrid(pos.x),
+                        y: snapToGrid(pos.y),
+                      };
+                      updateComponent(component.id, { position: snapped });
+                    }}
+                  />
+                );
+                
               default:
                 return null;
             }
           })}
         </Layer>
       </Stage>
+
+      {/* Status message for drawing */}
+      {renderStatusMessage()}
 
       {/* Zoom Controls */}
       <div className="absolute bottom-4 right-4 flex gap-2 bg-card border border-border rounded-lg p-2 shadow-lg">

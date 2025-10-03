@@ -5,10 +5,11 @@ import {
   Grid3x3, 
   Droplet, 
   Fence as FenceIcon, 
-  Box, 
+  Box,
+  Hexagon,
+  Home,
   Flower2, 
-  Type,
-  Home
+  Type
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -26,7 +27,9 @@ export type ToolType =
   | 'paver' 
   | 'drainage' 
   | 'fence' 
-  | 'wall' 
+  | 'wall'
+  | 'boundary'
+  | 'house'
   | 'garden' 
   | 'text' 
   | 'area';
@@ -49,9 +52,11 @@ export const Toolbar = ({ activeTool = 'select', onToolChange }: ToolbarProps) =
     { id: 'drainage' as ToolType, icon: Droplet, label: 'Drainage', shortcut: '3' },
     { id: 'fence' as ToolType, icon: FenceIcon, label: 'Fence', shortcut: '4' },
     { id: 'wall' as ToolType, icon: Box, label: 'Wall', shortcut: '5' },
-    { id: 'garden' as ToolType, icon: Flower2, label: 'Garden', shortcut: '6' },
-    { id: 'text' as ToolType, icon: Type, label: 'Text', shortcut: '7' },
-    { id: 'area' as ToolType, icon: Home, label: 'Area', shortcut: '8' },
+    { id: 'boundary' as ToolType, icon: Hexagon, label: 'Boundary', shortcut: '6' },
+    { id: 'house' as ToolType, icon: Home, label: 'House Outline', shortcut: '7' },
+    { id: 'garden' as ToolType, icon: Flower2, label: 'Garden', shortcut: '8' },
+    { id: 'text' as ToolType, icon: Type, label: 'Text', shortcut: '9' },
+    { id: 'area' as ToolType, icon: Home, label: 'Area', shortcut: '0' },
   ];
 
   return (

@@ -14,6 +14,8 @@ export type ComponentType =
   | 'drainage' 
   | 'fence' 
   | 'wall' 
+  | 'boundary'
+  | 'house'
   | 'garden' 
   | 'text' 
   | 'area';
@@ -47,8 +49,22 @@ export interface ComponentProperties {
   wallMaterial?: 'timber' | 'concrete';
   wallHeight?: number;
   
-  // Garden
+  // Boundary
   points?: Array<{ x: number; y: number }>;
+  closed?: boolean;
+  segments?: Array<{
+    id: string;
+    label: string;
+    length: number;
+    angle: number;
+  }>;
+  
+  // House
+  area?: number;
+  notes?: string;
+  
+  // Garden
+  // Uses points, closed, segments
   
   // Text
   text?: string;
