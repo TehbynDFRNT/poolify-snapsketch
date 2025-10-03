@@ -11,11 +11,10 @@ import { FenceComponent } from './canvas/FenceComponent';
 import { snapToGrid } from '@/utils/snap';
 import { EMPIRE_POOL } from '@/constants/components';
 
-export const Canvas = () => {
+export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
   const stageRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
-  const [activeTool, setActiveTool] = useState<string>('select');
   
   const {
     zoom,

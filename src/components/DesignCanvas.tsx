@@ -145,7 +145,7 @@ export const DesignCanvas = () => {
 
         {/* Canvas - Center */}
         <div className="flex-1 overflow-hidden">
-          <Canvas />
+          <Canvas activeTool={activeTool} />
         </div>
 
         {/* Properties - Right sidebar */}
