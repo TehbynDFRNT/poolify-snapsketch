@@ -9,7 +9,6 @@ export const calculateMeasurements = (components: Component[]): Summary => {
     drainage: [],
     fencing: [],
     walls: [],
-    garden: { area: 0 },
   };
 
   components.forEach(component => {
@@ -87,14 +86,6 @@ export const calculateMeasurements = (components: Component[]): Summary => {
           length,
           height,
         });
-        break;
-      }
-
-      case 'garden': {
-        if (component.properties.points && component.properties.points.length > 2) {
-          const area = calculatePolygonArea(component.properties.points);
-          summary.garden.area += area;
-        }
         break;
       }
     }

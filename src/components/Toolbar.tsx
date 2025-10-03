@@ -7,9 +7,7 @@ import {
   Fence as FenceIcon, 
   Box,
   Hexagon,
-  Home,
-  Flower2, 
-  Type
+  Home
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -29,10 +27,7 @@ export type ToolType =
   | 'fence' 
   | 'wall'
   | 'boundary'
-  | 'house'
-  | 'garden' 
-  | 'text' 
-  | 'area';
+  | 'house';
 
 interface ToolbarProps {
   activeTool?: ToolType;
@@ -54,9 +49,6 @@ export const Toolbar = ({ activeTool = 'select', onToolChange }: ToolbarProps) =
     { id: 'wall' as ToolType, icon: Box, label: 'Wall', shortcut: '5' },
     { id: 'boundary' as ToolType, icon: Hexagon, label: 'Boundary', shortcut: '6' },
     { id: 'house' as ToolType, icon: Home, label: 'House Outline', shortcut: '7' },
-    { id: 'garden' as ToolType, icon: Flower2, label: 'Garden', shortcut: '8' },
-    { id: 'text' as ToolType, icon: Type, label: 'Text', shortcut: '9' },
-    { id: 'area' as ToolType, icon: Home, label: 'Area', shortcut: '0' },
   ];
 
   return (

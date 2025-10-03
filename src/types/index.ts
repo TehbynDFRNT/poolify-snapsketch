@@ -15,10 +15,7 @@ export type ComponentType =
   | 'fence' 
   | 'wall' 
   | 'boundary'
-  | 'house'
-  | 'garden' 
-  | 'text' 
-  | 'area';
+  | 'house';
 
 export interface Component {
   id: string;
@@ -62,16 +59,6 @@ export interface ComponentProperties {
   // House
   area?: number;
   notes?: string;
-  
-  // Garden
-  // Uses points, closed, segments
-  
-  // Text
-  text?: string;
-  fontSize?: 'small' | 'medium' | 'large';
-  
-  // Area
-  areaType?: 'house' | 'structure' | 'general';
 }
 
 export interface Summary {
@@ -98,9 +85,6 @@ export interface Summary {
     length: number;
     height: number;
   }>;
-  garden: {
-    area: number;
-  };
 }
 
 export interface ExportOptions {

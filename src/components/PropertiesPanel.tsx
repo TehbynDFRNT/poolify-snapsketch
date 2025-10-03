@@ -221,18 +221,6 @@ export const PropertiesPanel = () => {
               </>
             )}
 
-            {measurements.garden.area > 0 && (
-              <>
-                <Separator />
-                <div>
-                  <p className="text-sm font-semibold mb-2">Garden</p>
-                  <p className="text-sm text-muted-foreground">
-                    • Total area: {formatArea(measurements.garden.area)}
-                  </p>
-                </div>
-              </>
-            )}
-
             {components.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-4">
                 No components added yet
