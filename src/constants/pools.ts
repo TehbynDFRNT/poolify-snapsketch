@@ -23,8 +23,8 @@ export const POOL_LIBRARY: Pool[] = [
       {x: 0, y: 3000},
       {x: 0, y: 0}
     ],
-    shallowEnd: {x: 150, y: 2850, label: "SE"},
-    deepEnd: {x: 6850, y: 150, label: "DE"},
+    shallowEnd: {x: 150, y: 1500, label: "SE"},
+    deepEnd: {x: 6850, y: 1500, label: "DE"},
     color: '#3B82F6'
   },
 
@@ -41,8 +41,8 @@ export const POOL_LIBRARY: Pool[] = [
       {x: 0, y: 3500},
       {x: 0, y: 0}
     ],
-    shallowEnd: {x: 150, y: 3350, label: "SE"},
-    deepEnd: {x: 4350, y: 150, label: "DE"},
+    shallowEnd: {x: 150, y: 1750, label: "SE"},
+    deepEnd: {x: 4350, y: 1750, label: "DE"},
     color: '#3B82F6'
   },
 
@@ -59,8 +59,8 @@ export const POOL_LIBRARY: Pool[] = [
       {x: 0, y: 4000},
       {x: 0, y: 0}
     ],
-    shallowEnd: {x: 150, y: 3850, label: "SE"},
-    deepEnd: {x: 10850, y: 150, label: "DE"},
+    shallowEnd: {x: 150, y: 2000, label: "SE"},
+    deepEnd: {x: 10850, y: 2000, label: "DE"},
     color: '#3B82F6'
   },
 
@@ -77,8 +77,8 @@ export const POOL_LIBRARY: Pool[] = [
       {x: 0, y: 3300},
       {x: 0, y: 0}
     ],
-    shallowEnd: {x: 150, y: 3150, label: "SE"},
-    deepEnd: {x: 6050, y: 150, label: "DE"},
+    shallowEnd: {x: 150, y: 1650, label: "SE"},
+    deepEnd: {x: 6050, y: 1650, label: "DE"},
     color: '#3B82F6'
   },
 
@@ -95,8 +95,8 @@ export const POOL_LIBRARY: Pool[] = [
       {x: 0, y: 3800},
       {x: 0, y: 0}
     ],
-    shallowEnd: {x: 150, y: 3650, label: "SE"},
-    deepEnd: {x: 8350, y: 150, label: "DE"},
+    shallowEnd: {x: 150, y: 1900, label: "SE"},
+    deepEnd: {x: 8350, y: 1900, label: "DE"},
     color: '#3B82F6'
   },
 
@@ -113,8 +113,8 @@ export const POOL_LIBRARY: Pool[] = [
       {x: 0, y: 2500},
       {x: 0, y: 0}
     ],
-    shallowEnd: {x: 150, y: 2350, label: "SE"},
-    deepEnd: {x: 6850, y: 150, label: "DE"},
+    shallowEnd: {x: 150, y: 1250, label: "SE"},
+    deepEnd: {x: 6850, y: 1250, label: "DE"},
     color: '#3B82F6'
   }
 ];
