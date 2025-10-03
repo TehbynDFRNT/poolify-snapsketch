@@ -52,9 +52,12 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
       // If a tool is active, place component
       if (activeTool !== 'select') {
         const pos = e.target.getStage().getPointerPosition();
+        // Convert from screen coordinates to canvas coordinates
+        const canvasX = (pos.x - pan.x) / zoom;
+        const canvasY = (pos.y - pan.y) / zoom;
         const snapped = {
-          x: snapToGrid(pos.x / zoom - pan.x / zoom),
-          y: snapToGrid(pos.y / zoom - pan.y / zoom),
+          x: snapToGrid(canvasX),
+          y: snapToGrid(canvasY),
         };
         
         handleToolPlace(snapped);

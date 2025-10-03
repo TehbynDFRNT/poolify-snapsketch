@@ -25,7 +25,7 @@ export const PropertiesPanel = () => {
                 <div>
                   <p className="text-sm font-medium mb-1">Position</p>
                   <p className="text-sm text-muted-foreground">
-                    X: {selectedComponent.position.x}mm, Y: {selectedComponent.position.y}mm
+                    X: {Math.round(selectedComponent.position.x * 100)}mm, Y: {Math.round(selectedComponent.position.y * 100)}mm
                   </p>
                 </div>
                 
