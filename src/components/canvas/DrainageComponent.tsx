@@ -75,12 +75,18 @@ export const DrainageComponent = ({
             stroke="white"
             strokeWidth={2}
             draggable
-            onDragStart={() => setIsDraggingHandle(true)}
+            dragBoundFunc={(pos) => ({ x: pos.x, y: width / 2 })}
+            onDragStart={(e) => {
+              e.cancelBubble = true;
+              setIsDraggingHandle(true);
+            }}
             onDragMove={(e) => {
+              e.cancelBubble = true;
               const newLength = Math.max(width, e.target.x());
               e.target.x(newLength);
             }}
             onDragEnd={(e) => {
+              e.cancelBubble = true;
               const newLength = Math.max(width, e.target.x());
               onExtend?.(newLength / scale);
               setIsDraggingHandle(false);

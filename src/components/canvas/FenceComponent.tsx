@@ -92,12 +92,18 @@ export const FenceComponent = ({
             stroke="white"
             strokeWidth={2}
             draggable
-            onDragStart={() => setIsDraggingHandle(true)}
+            dragBoundFunc={(pos) => ({ x: pos.x, y: 6 })}
+            onDragStart={(e) => {
+              e.cancelBubble = true;
+              setIsDraggingHandle(true);
+            }}
             onDragMove={(e) => {
+              e.cancelBubble = true;
               const newLength = Math.max(20, e.target.x());
               e.target.x(newLength);
             }}
             onDragEnd={(e) => {
+              e.cancelBubble = true;
               const newLength = Math.max(20, e.target.x());
               onExtend?.(newLength);
               setIsDraggingHandle(false);
