@@ -162,7 +162,7 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
   const handleWheel = (e: any) => {
     e.evt.preventDefault();
     
-    const scaleBy = 1.1;
+    const scaleBy = 1.05;
     const stage = e.target.getStage();
     const oldScale = stage.scaleX();
     const pointer = stage.getPointerPosition();
