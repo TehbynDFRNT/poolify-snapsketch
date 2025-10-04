@@ -38,6 +38,7 @@ export const PropertiesPanel = () => {
     if (!selectedComponent || (!selectedComponent.type.includes('boundary') && !selectedComponent.type.includes('house'))) return;
     
     const points = selectedComponent.properties.points || [];
+    const closed = selectedComponent.properties.closed || false;
     if (points.length < 2 || segmentIndex >= points.length) return;
 
     const newPoints = [...points];
@@ -45,19 +46,40 @@ export const PropertiesPanel = () => {
     const endIndex = (segmentIndex + 1) % points.length;
     const endPoint = newPoints[endIndex];
 
-    // Calculate current angle
+    // Calculate current segment
     const dx = endPoint.x - startPoint.x;
     const dy = endPoint.y - startPoint.y;
+    const currentLength = Math.sqrt(dx * dx + dy * dy);
     const angle = Math.atan2(dy, dx);
 
     // Calculate new end point based on desired length (convert meters to pixels: 1m = 100 pixels at 1:100 scale)
     const newLengthPixels = newLengthMeters * 100;
+    const deltaLength = newLengthPixels - currentLength;
+    
     const newEndPoint = {
       x: startPoint.x + Math.cos(angle) * newLengthPixels,
       y: startPoint.y + Math.sin(angle) * newLengthPixels,
     };
 
+    // Calculate the displacement
+    const displacement = {
+      x: newEndPoint.x - endPoint.x,
+      y: newEndPoint.y - endPoint.y,
+    };
+
+    // Update the end point
     newPoints[endIndex] = newEndPoint;
+
+    // For non-closed shapes or when editing the last segment of a closed shape,
+    // move all subsequent points by the same displacement to maintain the shape
+    if (!closed || segmentIndex < points.length - 1) {
+      for (let i = endIndex + 1; i < newPoints.length; i++) {
+        newPoints[i] = {
+          x: newPoints[i].x + displacement.x,
+          y: newPoints[i].y + displacement.y,
+        };
+      }
+    }
 
     // Recalculate area for house
     let area = undefined;
@@ -186,6 +208,7 @@ export const PropertiesPanel = () => {
                             step="0.1"
                             min="0.1"
                             value={segment.length.toFixed(1)}
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) => {
                               const value = parseFloat(e.target.value);
                               if (!isNaN(value) && value > 0) {
