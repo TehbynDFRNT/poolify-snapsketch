@@ -57,12 +57,12 @@ All colors MUST be HSL.
     /* Component colors */
     --pool-fill: 210 100% 50%;
     --paver-fill: 220 10% 75%;
-    --drainage-rock: 40 50% 68%;
+    --drainage-rock: 30 10% 55%;
     --drainage-ultra: 200 15% 35%;
     --fence-glass: 210 80% 60%;
     --fence-metal: 220 10% 35%;
     --fence-boundary: 30 40% 45%;
-    --wall-timber: 20 45% 28%;
+    --wall-timber: 25 45% 35%;
     --wall-concrete: 220 8% 65%;
     --garden-fill: 120 40% 80%;
 
