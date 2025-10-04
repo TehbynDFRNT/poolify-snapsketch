@@ -113,7 +113,7 @@ export const BoundaryComponent = ({
       {/* Main boundary line */}
       <Line
         points={flatPoints}
-        stroke="#EAB308"
+        stroke="#1e3a8a"
         strokeWidth={3}
         dash={[10, 5]}
         lineCap="round"
@@ -127,8 +127,8 @@ export const BoundaryComponent = ({
           x={point.x}
           y={point.y}
           radius={5}
-          fill="#EAB308"
-          stroke="#92400E"
+          fill="#1e3a8a"
+          stroke="#3b82f6"
           strokeWidth={2}
         />
       ))}
