@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Menu as MenuIcon, Undo2, Redo2, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -8,14 +8,19 @@ import { toast } from 'sonner';
 import { Toolbar, ToolType } from './Toolbar';
 import { Canvas } from './Canvas';
 import { PropertiesPanel } from './PropertiesPanel';
+import { ExportDialog } from './ExportDialog';
 import { format } from 'date-fns';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { exportToPDF } from '@/utils/pdfExport';
+import { ExportOptions } from '@/types';
 
 export const DesignCanvas = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [activeTool, setActiveTool] = useState<ToolType>('select');
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   
   useKeyboardShortcuts(); // Enable keyboard shortcuts
   
@@ -91,6 +96,25 @@ export const DesignCanvas = () => {
     navigate('/');
   };
 
+  const handleExport = async (options: ExportOptions) => {
+    if (!currentProject) return;
+    
+    // Get the canvas element from the Konva stage
+    const stage = document.querySelector('.konvajs-content canvas') as HTMLCanvasElement;
+    if (!stage) {
+      toast.error('Canvas not found');
+      return;
+    }
+
+    try {
+      await exportToPDF(currentProject, stage, options);
+      toast.success('PDF exported successfully');
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast.error('Failed to export PDF');
+    }
+  };
+
   if (!currentProject) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -154,13 +178,24 @@ export const DesignCanvas = () => {
               <span className="hidden md:inline">Save</span>
             </Button>
 
-            <Button variant="outline" size="sm" className="gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-2"
+              onClick={() => setExportDialogOpen(true)}
+            >
               <Download className="h-4 w-4" />
               <span className="hidden md:inline">Export PDF</span>
             </Button>
           </div>
         </div>
       </header>
+
+      <ExportDialog 
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        onExport={handleExport}
+      />
 
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
