@@ -12,7 +12,11 @@ import { WallComponent } from './canvas/WallComponent';
 import { BoundaryComponent } from './canvas/BoundaryComponent';
 import { HouseComponent } from './canvas/HouseComponent';
 import { ReferenceLineComponent } from './canvas/ReferenceLineComponent';
+import { PavingAreaComponent } from './canvas/PavingAreaComponent';
+import { PavingAreaDialog, PavingConfig } from './PavingAreaDialog';
+import { fillAreaWithPavers, calculateStatistics, validateBoundary } from '@/utils/pavingFill';
 import { snapToGrid } from '@/utils/snap';
+import { toast } from 'sonner';
 import { PAVER_SIZES } from '@/constants/components';
 import { PoolSelector } from './PoolSelector';
 import { Pool } from '@/constants/pools';
@@ -26,10 +30,14 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
   const [selectedPool, setSelectedPool] = useState<Pool | null>(null);
   const [pendingPoolPosition, setPendingPoolPosition] = useState<{ x: number; y: number } | null>(null);
   
-  // Drawing state for boundary and house tools
+  // Drawing state for boundary, house, and paving area tools
   const [drawingPoints, setDrawingPoints] = useState<Array<{ x: number; y: number }>>([]);
   const [ghostPoint, setGhostPoint] = useState<{ x: number; y: number } | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  
+  // Paving area dialog state
+  const [showPavingDialog, setShowPavingDialog] = useState(false);
+  const [pavingBoundary, setPavingBoundary] = useState<Array<{ x: number; y: number }>>([]);
   
   // Measurement tool states
   const [measureStart, setMeasureStart] = useState<{ x: number; y: number } | null>(null);
@@ -70,7 +78,7 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
 
   // Handle mouse move for drawing tools
   const handleMouseMove = (e: any) => {
-    if (activeTool === 'boundary' || activeTool === 'house') {
+    if (activeTool === 'boundary' || activeTool === 'house' || activeTool === 'paving_area') {
       const pos = e.target.getStage().getPointerPosition();
       const canvasX = (pos.x - pan.x) / zoom;
       const canvasY = (pos.y - pan.y) / zoom;
@@ -188,12 +196,28 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
       }
 
       // Handle drawing tools
-      if (activeTool === 'boundary' || activeTool === 'house') {
+      if (activeTool === 'boundary' || activeTool === 'house' || activeTool === 'paving_area') {
         // Check if clicking near first point to close
         if (drawingPoints.length >= 3 && isNearFirstPoint(snapped)) {
           // Close the shape
-          finishDrawing(true);
-          finishDrawing(true);
+          if (activeTool === 'paving_area') {
+            // Show paving dialog instead of creating component directly
+            const validation = validateBoundary(drawingPoints);
+            if (!validation.valid) {
+              toast.error(validation.error || 'Invalid boundary');
+              setDrawingPoints([]);
+              setIsDrawing(false);
+              setGhostPoint(null);
+              return;
+            }
+            setPavingBoundary(drawingPoints);
+            setShowPavingDialog(true);
+            setDrawingPoints([]);
+            setIsDrawing(false);
+            setGhostPoint(null);
+          } else {
+            finishDrawing(true);
+          }
           return;
         }
         
@@ -216,6 +240,42 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
         handleToolPlace(snapped);
       }
     }
+  };
+
+  // Handle paving area configuration
+  const handlePavingConfig = (config: PavingConfig) => {
+    if (pavingBoundary.length < 3) return;
+    
+    // Fill the area with pavers
+    const pavers = fillAreaWithPavers(
+      pavingBoundary,
+      config.paverSize,
+      config.paverOrientation,
+      config.showEdgePavers
+    );
+    
+    // Calculate statistics
+    const statistics = calculateStatistics(pavers, config.wastagePercentage);
+    
+    // Create the paving area component
+    addComponent({
+      type: 'paving_area',
+      position: { x: 0, y: 0 },
+      rotation: 0,
+      dimensions: { width: 0, height: 0 },
+      properties: {
+        boundary: pavingBoundary,
+        paverSize: config.paverSize,
+        paverOrientation: config.paverOrientation,
+        pavers,
+        showEdgePavers: config.showEdgePavers,
+        wastagePercentage: config.wastagePercentage,
+        statistics,
+      },
+    });
+    
+    setPavingBoundary([]);
+    toast.success('Paving area created');
   };
 
   // Finish drawing and create component
@@ -274,7 +334,24 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
       // Drawing shortcuts
       if (isDrawing) {
         if (e.key === 'Enter') {
-          finishDrawing(false);
+          if (activeTool === 'paving_area' && drawingPoints.length >= 3) {
+            // Show paving dialog
+            const validation = validateBoundary(drawingPoints);
+            if (!validation.valid) {
+              toast.error(validation.error || 'Invalid boundary');
+              setDrawingPoints([]);
+              setIsDrawing(false);
+              setGhostPoint(null);
+              return;
+            }
+            setPavingBoundary(drawingPoints);
+            setShowPavingDialog(true);
+            setDrawingPoints([]);
+            setIsDrawing(false);
+            setGhostPoint(null);
+          } else {
+            finishDrawing(false);
+          }
         } else if (e.key === 'Escape') {
           setDrawingPoints([]);
           setIsDrawing(false);
@@ -850,6 +927,16 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
                     onDelete={() => deleteComponent(component.id)}
                   />
                 );
+              
+              case 'paving_area':
+                return (
+                  <PavingAreaComponent
+                    key={component.id}
+                    component={component}
+                    isSelected={isSelected}
+                    onSelect={() => selectComponent(component.id)}
+                  />
+                );
                 
               default:
                 return null;
@@ -892,6 +979,16 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
             setShowPoolSelector(false);
             setPendingPoolPosition(null);
           }}
+        />
+      )}
+      
+      {/* Paving Area Dialog */}
+      {showPavingDialog && (
+        <PavingAreaDialog
+          open={showPavingDialog}
+          onOpenChange={setShowPavingDialog}
+          boundary={pavingBoundary}
+          onConfirm={handlePavingConfig}
         />
       )}
     </div>

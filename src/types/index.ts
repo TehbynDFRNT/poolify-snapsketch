@@ -13,6 +13,7 @@ export type ToolType =
   | 'hand'
   | 'pool' 
   | 'paver' 
+  | 'paving_area'
   | 'drainage' 
   | 'fence' 
   | 'wall' 
@@ -24,6 +25,7 @@ export type ToolType =
 export type ComponentType = 
   | 'pool' 
   | 'paver' 
+  | 'paving_area'
   | 'drainage' 
   | 'fence' 
   | 'wall' 
@@ -48,6 +50,26 @@ export interface ComponentProperties {
   // Paver
   paverSize?: '400x400' | '400x600';
   paverCount?: { rows: number; cols: number };
+  
+  // Paving Area
+  boundary?: Array<{ x: number; y: number }>;
+  paverOrientation?: 'vertical' | 'horizontal';
+  pavers?: Array<{
+    id: string;
+    position: { x: number; y: number };
+    width: number;
+    height: number;
+    isEdgePaver: boolean;
+    cutPercentage?: number;
+  }>;
+  showEdgePavers?: boolean;
+  wastagePercentage?: number;
+  statistics?: {
+    fullPavers: number;
+    edgePavers: number;
+    totalArea: number;
+    orderQuantity: number;
+  };
   
   // Drainage
   drainageType?: 'rock' | 'ultradrain';

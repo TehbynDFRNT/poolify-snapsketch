@@ -8,6 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Component, Project } from '@/types';
 import { useDesignStore } from '@/store/designStore';
+import { fillAreaWithPavers, calculateStatistics } from '@/utils/pavingFill';
+import { calculateMeasurements } from '@/utils/measurements';
 import { toast } from 'sonner';
 
 interface BottomPanelProps {
@@ -282,6 +284,177 @@ const PropertiesContent = ({
                 </Button>
               </div>
             </div>
+          )}
+
+          {component.type === 'paving_area' && (
+            <>
+              <div>
+                <Label className="text-xs">Paver Size</Label>
+                <div className="flex gap-2 mt-1">
+                  <Button
+                    variant={component.properties.paverSize === '400x400' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => {
+                      const pavers = fillAreaWithPavers(
+                        component.properties.boundary || [],
+                        '400x400',
+                        'vertical',
+                        component.properties.showEdgePavers || true
+                      );
+                      const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
+                      onUpdate(component.id, {
+                        properties: {
+                          ...component.properties,
+                          paverSize: '400x400',
+                          pavers,
+                          statistics,
+                        }
+                      });
+                    }}
+                    className="flex-1"
+                  >
+                    400 × 400
+                  </Button>
+                  <Button
+                    variant={component.properties.paverSize === '400x600' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => {
+                      const pavers = fillAreaWithPavers(
+                        component.properties.boundary || [],
+                        '400x600',
+                        component.properties.paverOrientation || 'vertical',
+                        component.properties.showEdgePavers || true
+                      );
+                      const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
+                      onUpdate(component.id, {
+                        properties: {
+                          ...component.properties,
+                          paverSize: '400x600',
+                          pavers,
+                          statistics,
+                        }
+                      });
+                    }}
+                    className="flex-1"
+                  >
+                    400 × 600
+                  </Button>
+                </div>
+              </div>
+
+              {component.properties.paverSize === '400x600' && (
+                <div>
+                  <Label className="text-xs">Orientation</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Button
+                      variant={component.properties.paverOrientation === 'vertical' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => {
+                        const pavers = fillAreaWithPavers(
+                          component.properties.boundary || [],
+                          '400x600',
+                          'vertical',
+                          component.properties.showEdgePavers || true
+                        );
+                        const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
+                        onUpdate(component.id, {
+                          properties: {
+                            ...component.properties,
+                            paverOrientation: 'vertical',
+                            pavers,
+                            statistics,
+                          }
+                        });
+                      }}
+                      className="flex-1"
+                    >
+                      Vertical
+                    </Button>
+                    <Button
+                      variant={component.properties.paverOrientation === 'horizontal' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => {
+                        const pavers = fillAreaWithPavers(
+                          component.properties.boundary || [],
+                          '400x600',
+                          'horizontal',
+                          component.properties.showEdgePavers || true
+                        );
+                        const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
+                        onUpdate(component.id, {
+                          properties: {
+                            ...component.properties,
+                            paverOrientation: 'horizontal',
+                            pavers,
+                            statistics,
+                          }
+                        });
+                      }}
+                      className="flex-1"
+                    >
+                      Horizontal
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="show-edge-pavers"
+                    checked={component.properties.showEdgePavers ?? true}
+                    onChange={(e) => {
+                      const pavers = fillAreaWithPavers(
+                        component.properties.boundary || [],
+                        component.properties.paverSize || '400x400',
+                        component.properties.paverOrientation || 'vertical',
+                        e.target.checked
+                      );
+                      const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
+                      onUpdate(component.id, {
+                        properties: {
+                          ...component.properties,
+                          showEdgePavers: e.target.checked,
+                          pavers,
+                          statistics,
+                        }
+                      });
+                    }}
+                    className="w-4 h-4"
+                  />
+                  <Label htmlFor="show-edge-pavers" className="text-xs cursor-pointer">
+                    Show edge pavers
+                  </Label>
+                </div>
+              </div>
+
+              <div className="bg-muted rounded-lg p-3 space-y-2">
+                <h4 className="font-semibold text-sm">Material Count</h4>
+                <div className="text-sm space-y-1">
+                  <div className="flex justify-between">
+                    <span>Full pavers:</span>
+                    <span className="font-medium">{component.properties.statistics?.fullPavers || 0}</span>
+                  </div>
+                  {component.properties.showEdgePavers && (
+                    <div className="flex justify-between text-orange-600">
+                      <span>Edge pavers:</span>
+                      <span className="font-medium">{component.properties.statistics?.edgePavers || 0}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between pt-1 border-t">
+                    <span>Total area:</span>
+                    <span className="font-medium">{component.properties.statistics?.totalArea.toFixed(2) || 0} m²</span>
+                  </div>
+                  {(component.properties.wastagePercentage || 0) > 0 && (
+                    <div className="flex justify-between text-primary pt-1 border-t font-semibold">
+                      <span>Order Quantity:</span>
+                      <span>{component.properties.statistics?.orderQuantity || 0} pavers</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
           )}
 
           <div className="grid grid-cols-2 gap-3">

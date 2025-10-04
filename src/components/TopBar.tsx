@@ -15,7 +15,8 @@ import {
   Ruler,
   ScanLine,
   Move,
-  Maximize2
+  Maximize2,
+  Grid3x3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ToolType } from '@/types';
@@ -40,8 +41,9 @@ const tools: Array<{ id: ToolType; icon: React.ReactNode; name: string; shortcut
   { id: 'select', icon: <MousePointer2 className="w-5 h-5" />, name: 'Select', shortcut: 'V' },
   { id: 'boundary', icon: <Square className="w-5 h-5" />, name: 'Boundary', shortcut: 'B' },
   { id: 'house', icon: <Home className="w-5 h-5" />, name: 'House', shortcut: 'H' },
-  { id: 'pool', icon: <Box className="w-5 h-5" />, name: 'Pool', shortcut: 'P' },
+  { id: 'pool', icon: <Box className="w-5 h-5" />, name: 'Pool', shortcut: 'O' },
   { id: 'paver', icon: <Blocks className="w-5 h-5" />, name: 'Paver', shortcut: 'A' },
+  { id: 'paving_area', icon: <Grid3x3 className="w-5 h-5" />, name: 'Paving Area', shortcut: 'P' },
   { id: 'drainage', icon: <Droplets className="w-5 h-5" />, name: 'Drainage', shortcut: 'D' },
   { id: 'fence', icon: <Fence className="w-5 h-5" />, name: 'Fence', shortcut: 'F' },
   { id: 'wall', icon: <Blocks className="w-5 h-5" />, name: 'Wall', shortcut: 'W' },
