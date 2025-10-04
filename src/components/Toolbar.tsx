@@ -7,7 +7,9 @@ import {
   Fence as FenceIcon, 
   Box,
   Hexagon,
-  Home
+  Home,
+  Ruler,
+  Move
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -27,7 +29,9 @@ export type ToolType =
   | 'fence' 
   | 'wall'
   | 'boundary'
-  | 'house';
+  | 'house'
+  | 'quick_measure'
+  | 'reference_line';
 
 interface ToolbarProps {
   activeTool?: ToolType;
@@ -51,6 +55,11 @@ export const Toolbar = ({ activeTool = 'select', onToolChange }: ToolbarProps) =
     { id: 'house' as ToolType, icon: Home, label: 'House Outline', shortcut: '7' },
   ];
 
+  const measureTools = [
+    { id: 'quick_measure' as ToolType, icon: Move, label: 'Quick Measure', shortcut: 'M' },
+    { id: 'reference_line' as ToolType, icon: Ruler, label: 'Reference Line', shortcut: 'L' },
+  ];
+
   return (
     <TooltipProvider>
       <div className="flex flex-col gap-2 p-2">
@@ -72,6 +81,40 @@ export const Toolbar = ({ activeTool = 'select', onToolChange }: ToolbarProps) =
             <TooltipContent side="right">
               <p>{tool.label}</p>
               <p className="text-xs text-muted-foreground">Press {tool.shortcut}</p>
+            </TooltipContent>
+          </Tooltip>
+        ))}
+        
+        {/* Separator */}
+        <div className="border-t border-border my-2" />
+        
+        {/* Measurement Tools Section */}
+        <div className="text-xs text-muted-foreground px-2 py-1">Guides</div>
+        
+        {measureTools.map((tool) => (
+          <Tooltip key={tool.id}>
+            <TooltipTrigger asChild>
+              <Button
+                variant={activeTool === tool.id ? 'default' : 'ghost'}
+                size="icon"
+                onClick={() => handleToolClick(tool.id)}
+                className={cn(
+                  'w-16 h-16',
+                  activeTool === tool.id && 'bg-primary text-primary-foreground'
+                )}
+              >
+                <tool.icon className="h-6 w-6" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>{tool.label}</p>
+              <p className="text-xs text-muted-foreground">Press {tool.shortcut}</p>
+              {tool.id === 'quick_measure' && (
+                <p className="text-xs text-muted-foreground mt-1">Temporary (3s)</p>
+              )}
+              {tool.id === 'reference_line' && (
+                <p className="text-xs text-muted-foreground mt-1">Hold Shift to lock axis</p>
+              )}
             </TooltipContent>
           </Tooltip>
         ))}

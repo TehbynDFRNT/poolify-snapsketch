@@ -29,6 +29,32 @@ export const DesignCanvas = () => {
     history,
   } = useDesignStore();
 
+  // Tool keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if typing in an input
+      if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') {
+        return;
+      }
+
+      // Tool shortcuts
+      if (e.key === 'v' || e.key === 'V') setActiveTool('select');
+      if (e.key === 'h' || e.key === 'H') setActiveTool('hand');
+      if (e.key === '1') setActiveTool('pool');
+      if (e.key === '2') setActiveTool('paver');
+      if (e.key === '3') setActiveTool('drainage');
+      if (e.key === '4') setActiveTool('fence');
+      if (e.key === '5') setActiveTool('wall');
+      if (e.key === '6') setActiveTool('boundary');
+      if (e.key === '7') setActiveTool('house');
+      if (e.key === 'm' || e.key === 'M') setActiveTool('quick_measure');
+      if (e.key === 'l' || e.key === 'L') setActiveTool('reference_line');
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   useEffect(() => {
     if (id) {
       const project = loadProject(id);

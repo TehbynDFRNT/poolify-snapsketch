@@ -11,10 +11,12 @@ import { FenceComponent } from './canvas/FenceComponent';
 import { WallComponent } from './canvas/WallComponent';
 import { BoundaryComponent } from './canvas/BoundaryComponent';
 import { HouseComponent } from './canvas/HouseComponent';
+import { ReferenceLineComponent } from './canvas/ReferenceLineComponent';
 import { snapToGrid } from '@/utils/snap';
 import { PAVER_SIZES } from '@/constants/components';
 import { PoolSelector } from './PoolSelector';
 import { Pool } from '@/constants/pools';
+import { lockToAxis, detectAxisLock, calculateDistance } from '@/utils/canvas';
 
 export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
   const stageRef = useRef<any>(null);
@@ -29,6 +31,12 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
   const [ghostPoint, setGhostPoint] = useState<{ x: number; y: number } | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   
+  // Measurement tool states
+  const [measureStart, setMeasureStart] = useState<{ x: number; y: number } | null>(null);
+  const [measureEnd, setMeasureEnd] = useState<{ x: number; y: number } | null>(null);
+  const [isMeasuring, setIsMeasuring] = useState(false);
+  const [shiftPressed, setShiftPressed] = useState(false);
+  
   const {
     zoom,
     setZoom,
@@ -40,6 +48,7 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
     selectComponent,
     addComponent,
     updateComponent,
+    deleteComponent,
   } = useDesignStore();
 
   useEffect(() => {
@@ -69,6 +78,23 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
       };
       setGhostPoint(snapped);
     }
+    // Handle measurement tools
+    else if ((activeTool === 'quick_measure' || activeTool === 'reference_line') && isMeasuring && measureStart) {
+      const pos = e.target.getStage().getPointerPosition();
+      const canvasX = (pos.x - pan.x) / zoom;
+      const canvasY = (pos.y - pan.y) / zoom;
+      let snapped = {
+        x: snapToGrid(canvasX),
+        y: snapToGrid(canvasY),
+      };
+      
+      // Apply axis lock if Shift is pressed
+      if (shiftPressed) {
+        snapped = lockToAxis(measureStart, snapped);
+      }
+      
+      setMeasureEnd(snapped);
+    }
   };
 
   // Check if point is near first point for auto-close
@@ -92,11 +118,79 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
         y: snapToGrid(canvasY),
       };
 
+      // Handle measurement tools
+      if (activeTool === 'quick_measure' || activeTool === 'reference_line') {
+        if (!isMeasuring) {
+          // Start measuring
+          setMeasureStart(snapped);
+          setMeasureEnd(snapped);
+          setIsMeasuring(true);
+        } else {
+          // Finish measuring
+          if (measureStart && measureEnd) {
+            let finalEnd = measureEnd;
+            
+            // Apply axis lock if Shift is pressed
+            if (shiftPressed) {
+              finalEnd = lockToAxis(measureStart, measureEnd);
+            }
+            
+            const distance = calculateDistance(measureStart, finalEnd);
+            const locked = shiftPressed ? detectAxisLock(measureStart, finalEnd) : null;
+            
+            // Create the component
+            const component = {
+              type: activeTool as 'quick_measure' | 'reference_line',
+              position: { x: 0, y: 0 },
+              rotation: 0,
+              dimensions: { width: 0, height: 0 },
+              properties: {
+                points: [measureStart, finalEnd],
+                measurement: distance,
+                style: {
+                  color: activeTool === 'quick_measure' ? '#eab308' : '#dc2626',
+                  dashed: activeTool === 'reference_line',
+                  lineWidth: 2,
+                  arrowEnds: true,
+                },
+                locked,
+                showMeasurement: true,
+                exportToPDF: activeTool === 'reference_line',
+                temporary: activeTool === 'quick_measure',
+                createdAt: Date.now(),
+              },
+            };
+            
+            addComponent(component);
+            
+            // Auto-delete quick measurements after 3 seconds
+            if (activeTool === 'quick_measure') {
+              const componentId = components.length > 0 ? components[components.length - 1].id : null;
+              setTimeout(() => {
+                if (componentId) {
+                  const currentComponents = useDesignStore.getState().components;
+                  const componentStillExists = currentComponents.find(c => c.id === componentId);
+                  if (componentStillExists) {
+                    useDesignStore.getState().deleteComponent(componentId);
+                  }
+                }
+              }, 3000);
+            }
+          }
+          
+          setMeasureStart(null);
+          setMeasureEnd(null);
+          setIsMeasuring(false);
+        }
+        return;
+      }
+
       // Handle drawing tools
       if (activeTool === 'boundary' || activeTool === 'house') {
         // Check if clicking near first point to close
         if (drawingPoints.length >= 3 && isNearFirstPoint(snapped)) {
           // Close the shape
+          finishDrawing(true);
           finishDrawing(true);
           return;
         }
@@ -164,22 +258,45 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
   // Keyboard shortcuts for drawing
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isDrawing) return;
-
-      if (e.key === 'Enter') {
-        finishDrawing(false);
-      } else if (e.key === 'Escape') {
-        setDrawingPoints([]);
-        setIsDrawing(false);
-        setGhostPoint(null);
-      } else if (e.key === 'z' && drawingPoints.length > 0) {
-        setDrawingPoints(drawingPoints.slice(0, -1));
+      // Track Shift key
+      if (e.key === 'Shift') {
+        setShiftPressed(true);
+      }
+      
+      // Drawing shortcuts
+      if (isDrawing) {
+        if (e.key === 'Enter') {
+          finishDrawing(false);
+        } else if (e.key === 'Escape') {
+          setDrawingPoints([]);
+          setIsDrawing(false);
+          setGhostPoint(null);
+        } else if (e.key === 'z' && drawingPoints.length > 0) {
+          setDrawingPoints(drawingPoints.slice(0, -1));
+        }
+      }
+      
+      // Measurement shortcuts
+      if (isMeasuring && e.key === 'Escape') {
+        setMeasureStart(null);
+        setMeasureEnd(null);
+        setIsMeasuring(false);
+      }
+    };
+    
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') {
+        setShiftPressed(false);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDrawing, drawingPoints]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isDrawing, drawingPoints, isMeasuring]);
 
   // Reset drawing when tool changes
   useEffect(() => {
@@ -187,6 +304,11 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
       setDrawingPoints([]);
       setIsDrawing(false);
       setGhostPoint(null);
+    }
+    if (activeTool !== 'quick_measure' && activeTool !== 'reference_line') {
+      setMeasureStart(null);
+      setMeasureEnd(null);
+      setIsMeasuring(false);
     }
   }, [activeTool]);
 
@@ -427,18 +549,74 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
 
   // Render status message
   const renderStatusMessage = () => {
-    if (!isDrawing) return null;
+    if (isDrawing) {
+      let message = 'Click points to draw';
+      if (drawingPoints.length >= 3) {
+        message = 'Click first point to close or press Enter to finish';
+      }
 
-    let message = 'Click points to draw';
-    if (drawingPoints.length >= 3) {
-      message = 'Click first point to close or press Enter to finish';
+      return (
+        <div className="absolute top-4 left-4 bg-card border border-border rounded-lg p-3 shadow-lg">
+          <p className="text-sm text-foreground">ℹ️ {message}</p>
+          <p className="text-xs text-muted-foreground mt-1">Press Escape to cancel • Z to undo last point</p>
+        </div>
+      );
     }
-
+    
+    if (isMeasuring && measureStart && measureEnd) {
+      const distance = calculateDistance(measureStart, measureEnd);
+      const measurementMeters = (distance / 100).toFixed(1);
+      
+      return (
+        <div className="absolute top-4 left-4 bg-card border border-border rounded-lg p-3 shadow-lg">
+          <p className="text-sm text-foreground">📏 {measurementMeters}m</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {shiftPressed ? '🔒 Axis locked • ' : 'Hold Shift to lock axis • '}
+            Click to finish • Escape to cancel
+          </p>
+        </div>
+      );
+    }
+    
+    return null;
+  };
+  
+  // Render measurement preview line
+  const renderMeasurementPreview = () => {
+    if (!isMeasuring || !measureStart || !measureEnd) return null;
+    
+    const color = activeTool === 'quick_measure' ? '#eab308' : '#dc2626';
+    
     return (
-      <div className="absolute top-4 left-4 bg-card border border-border rounded-lg p-3 shadow-lg">
-        <p className="text-sm text-foreground">ℹ️ {message}</p>
-        <p className="text-xs text-muted-foreground mt-1">Press Escape to cancel • Z to undo last point</p>
-      </div>
+      <>
+        {/* Measurement line */}
+        <Line
+          points={[measureStart.x, measureStart.y, measureEnd.x, measureEnd.y]}
+          stroke={color}
+          strokeWidth={2}
+          dash={activeTool === 'reference_line' ? [10, 5] : []}
+          opacity={0.7}
+          listening={false}
+        />
+        
+        {/* Start point */}
+        <Circle
+          x={measureStart.x}
+          y={measureStart.y}
+          radius={4}
+          fill={color}
+          listening={false}
+        />
+        
+        {/* End point */}
+        <Circle
+          x={measureEnd.x}
+          y={measureEnd.y}
+          radius={4}
+          fill={color}
+          listening={false}
+        />
+      </>
     );
   };
 
@@ -468,6 +646,9 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
           {/* Drawing preview */}
           {renderDrawingPoints()}
           {renderDrawingPreview()}
+          
+          {/* Measurement preview */}
+          {renderMeasurementPreview()}
           
           {/* Render all components */}
           {components.map((component) => {
@@ -644,6 +825,18 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
                       };
                       updateComponent(component.id, { position: snapped });
                     }}
+                  />
+                );
+              
+              case 'reference_line':
+              case 'quick_measure':
+                return (
+                  <ReferenceLineComponent
+                    key={component.id}
+                    component={component}
+                    selected={isSelected}
+                    onSelect={() => selectComponent(component.id)}
+                    onDelete={() => deleteComponent(component.id)}
                   />
                 );
                 

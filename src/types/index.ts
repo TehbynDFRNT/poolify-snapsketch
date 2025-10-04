@@ -15,7 +15,9 @@ export type ComponentType =
   | 'fence' 
   | 'wall' 
   | 'boundary'
-  | 'house';
+  | 'house'
+  | 'reference_line'
+  | 'quick_measure';
 
 export interface Component {
   id: string;
@@ -59,6 +61,21 @@ export interface ComponentProperties {
   // House
   area?: number;
   notes?: string;
+  
+  // Reference Line / Quick Measure
+  label?: string;
+  style?: {
+    color: string;
+    dashed: boolean;
+    lineWidth: number;
+    arrowEnds: boolean;
+  };
+  locked?: 'horizontal' | 'vertical' | null;
+  showMeasurement?: boolean;
+  exportToPDF?: boolean;
+  temporary?: boolean;
+  createdAt?: number;
+  measurement?: number;
 }
 
 export interface Summary {

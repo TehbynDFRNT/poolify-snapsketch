@@ -165,17 +165,202 @@ export const PropertiesPanel = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {poolData && (
-                  <div>
-                    <p className="text-sm font-medium mb-1">Waterline Dimensions</p>
-                    <p className="text-sm text-muted-foreground">
-                      {poolData.length}mm × {poolData.width}mm
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      ({poolData.length / 1000}m × {poolData.width / 1000}m)
-                    </p>
-                  </div>
+                {/* Reference Line / Quick Measure Properties */}
+                {(selectedComponent.type === 'reference_line' || selectedComponent.type === 'quick_measure') && (
+                  <>
+                    <div>
+                      <Label className="text-sm font-medium">Length</Label>
+                      <div className="font-mono text-lg">
+                        {((selectedComponent.properties.measurement || 0) / 100).toFixed(1)}m
+                        <span className="text-muted-foreground text-sm ml-2">
+                          ({selectedComponent.properties.measurement || 0}mm)
+                        </span>
+                      </div>
+                    </div>
+
+                    {selectedComponent.type === 'reference_line' && (
+                      <>
+                        <div>
+                          <Label className="text-sm font-medium mb-2">Label (optional)</Label>
+                          <Input
+                            type="text"
+                            value={selectedComponent.properties.label || ''}
+                            onChange={(e) => updateComponent(selectedComponent.id, {
+                              properties: {
+                                ...selectedComponent.properties,
+                                label: e.target.value
+                              }
+                            })}
+                            placeholder="e.g., 3m clearance"
+                            className="mt-1"
+                          />
+                        </div>
+
+                        <div>
+                          <Label className="text-sm font-medium mb-2">Line Style</Label>
+                          <div className="flex gap-2">
+                            <Button
+                              variant={selectedComponent.properties.style?.dashed ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => updateComponent(selectedComponent.id, {
+                                properties: {
+                                  ...selectedComponent.properties,
+                                  style: {
+                                    ...selectedComponent.properties.style!,
+                                    dashed: true
+                                  }
+                                }
+                              })}
+                            >
+                              Dashed
+                            </Button>
+                            <Button
+                              variant={!selectedComponent.properties.style?.dashed ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => updateComponent(selectedComponent.id, {
+                                properties: {
+                                  ...selectedComponent.properties,
+                                  style: {
+                                    ...selectedComponent.properties.style!,
+                                    dashed: false
+                                  }
+                                }
+                              })}
+                            >
+                              Solid
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label className="text-sm font-medium mb-2">Color</Label>
+                          <div className="flex gap-2 flex-wrap">
+                            {['#dc2626', '#ea580c', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6'].map(color => (
+                              <button
+                                key={color}
+                                className="w-8 h-8 rounded border-2 hover:scale-110 transition-transform"
+                                style={{ 
+                                  backgroundColor: color,
+                                  borderColor: selectedComponent.properties.style?.color === color ? '#000' : '#ccc'
+                                }}
+                                onClick={() => updateComponent(selectedComponent.id, {
+                                  properties: {
+                                    ...selectedComponent.properties,
+                                    style: {
+                                      ...selectedComponent.properties.style!,
+                                      color
+                                    }
+                                  }
+                                })}
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label className="text-sm font-medium mb-2">Axis Lock</Label>
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-2 text-sm">
+                              <input
+                                type="radio"
+                                checked={!selectedComponent.properties.locked}
+                                onChange={() => updateComponent(selectedComponent.id, {
+                                  properties: {
+                                    ...selectedComponent.properties,
+                                    locked: null
+                                  }
+                                })}
+                              />
+                              <span>Free</span>
+                            </label>
+                            <label className="flex items-center gap-2 text-sm">
+                              <input
+                                type="radio"
+                                checked={selectedComponent.properties.locked === 'horizontal'}
+                                onChange={() => updateComponent(selectedComponent.id, {
+                                  properties: {
+                                    ...selectedComponent.properties,
+                                    locked: 'horizontal'
+                                  }
+                                })}
+                              />
+                              <span>Horizontal</span>
+                            </label>
+                            <label className="flex items-center gap-2 text-sm">
+                              <input
+                                type="radio"
+                                checked={selectedComponent.properties.locked === 'vertical'}
+                                onChange={() => updateComponent(selectedComponent.id, {
+                                  properties: {
+                                    ...selectedComponent.properties,
+                                    locked: 'vertical'
+                                  }
+                                })}
+                              />
+                              <span>Vertical</span>
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={selectedComponent.properties.showMeasurement !== false}
+                              onChange={(e) => updateComponent(selectedComponent.id, {
+                                properties: {
+                                  ...selectedComponent.properties,
+                                  showMeasurement: e.target.checked
+                                }
+                              })}
+                            />
+                            <span>Show measurement</span>
+                          </label>
+                          
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={selectedComponent.properties.exportToPDF !== false}
+                              onChange={(e) => updateComponent(selectedComponent.id, {
+                                properties: {
+                                  ...selectedComponent.properties,
+                                  exportToPDF: e.target.checked
+                                }
+                              })}
+                            />
+                            <span>Include in PDF export</span>
+                          </label>
+                        </div>
+
+                        <Separator />
+                      </>
+                    )}
+
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleDelete}
+                      className="w-full"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete {selectedComponent.type === 'quick_measure' ? 'Quick Measure' : 'Reference Line'}
+                    </Button>
+                  </>
                 )}
+                
+                {selectedComponent.type !== 'reference_line' && selectedComponent.type !== 'quick_measure' && (
+                  <>
+                    {poolData && (
+                      <div>
+                        <p className="text-sm font-medium mb-1">Waterline Dimensions</p>
+                        <p className="text-sm text-muted-foreground">
+                          {poolData.length}mm × {poolData.width}mm
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          ({poolData.length / 1000}m × {poolData.width / 1000}m)
+                        </p>
+                      </div>
+                    )}
                 
                 <div>
                   <p className="text-sm font-medium mb-1">Position</p>
@@ -286,6 +471,8 @@ export const PropertiesPanel = () => {
                     Delete
                   </Button>
                 </div>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
