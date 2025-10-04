@@ -73,7 +73,6 @@ export const WallComponent = ({
             stroke="white"
             strokeWidth={2}
             draggable
-            dragBoundFunc={(pos) => ({ x: pos.x, y: height / 2 })}
             onDragStart={(e) => {
               e.cancelBubble = true;
               setIsDraggingHandle(true);
@@ -82,6 +81,7 @@ export const WallComponent = ({
               e.cancelBubble = true;
               const newLength = Math.max(20, e.target.x());
               e.target.x(newLength);
+              e.target.y(height / 2);
             }}
             onDragEnd={(e) => {
               e.cancelBubble = true;
