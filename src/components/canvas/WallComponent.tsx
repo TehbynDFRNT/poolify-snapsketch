@@ -1,7 +1,7 @@
 import { Group, Line, Rect, Circle } from 'react-konva';
 import { Component } from '@/types';
 import { WALL_MATERIALS } from '@/constants/components';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 interface WallComponentProps {
   component: Component;
@@ -20,6 +20,8 @@ export const WallComponent = ({
 }: WallComponentProps) => {
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
 
+  const groupRef = useRef<any>(null);
+
   const wallType = component.properties.wallMaterial || 'timber';
   const wallData = WALL_MATERIALS[wallType as keyof typeof WALL_MATERIALS];
   const length = component.dimensions.width || 1000;
@@ -28,17 +30,18 @@ export const WallComponent = ({
   const color = wallData?.color || WALL_MATERIALS.timber.color;
 
   return (
-    <Group
-      x={component.position.x}
-      y={component.position.y}
-      rotation={component.rotation}
-      draggable={!isDraggingHandle}
-      onClick={onSelect}
-      onTap={onSelect}
-      onDragEnd={(e) => {
-        onDragEnd({ x: e.target.x(), y: e.target.y() });
-      }}
-    >
+      <Group
+        ref={groupRef}
+        x={component.position.x}
+        y={component.position.y}
+        rotation={component.rotation}
+        draggable={!isDraggingHandle}
+        onClick={onSelect}
+        onTap={onSelect}
+        onDragEnd={(e) => {
+          onDragEnd({ x: e.target.x(), y: e.target.y() });
+        }}
+      >
       {/* Wall body */}
       <Rect
         x={0}
@@ -73,20 +76,34 @@ export const WallComponent = ({
             stroke="white"
             strokeWidth={2}
             draggable
+            dragBoundFunc={(pos) => {
+              const group = groupRef.current;
+              if (!group) return pos;
+              const tr = group.getAbsoluteTransform().copy();
+              const inv = tr.copy().invert();
+              const local = inv.point(pos);
+              local.y = height / 2;
+              local.x = Math.max(20, local.x);
+              return tr.point(local);
+            }}
             onDragStart={(e) => {
               e.cancelBubble = true;
               setIsDraggingHandle(true);
             }}
             onDragMove={(e) => {
               e.cancelBubble = true;
-              const newLength = Math.max(20, e.target.x());
-              e.target.x(newLength);
-              e.target.y(height / 2);
             }}
             onDragEnd={(e) => {
               e.cancelBubble = true;
-              const newLength = Math.max(20, e.target.x());
-              onExtend?.(newLength);
+              const group = groupRef.current;
+              if (group) {
+                const tr = group.getAbsoluteTransform().copy();
+                const inv = tr.copy().invert();
+                const abs = e.target.getAbsolutePosition();
+                const local = inv.point(abs);
+                const newLength = Math.max(20, local.x);
+                onExtend?.(newLength);
+              }
               setIsDraggingHandle(false);
             }}
           />

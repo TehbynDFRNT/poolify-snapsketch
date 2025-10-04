@@ -1,7 +1,7 @@
 import { Group, Line, Rect, Circle } from 'react-konva';
 import { Component } from '@/types';
 import { FENCE_TYPES } from '@/constants/components';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 interface FenceComponentProps {
   component: Component;
@@ -19,6 +19,8 @@ export const FenceComponent = ({
   onExtend,
 }: FenceComponentProps) => {
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
+
+  const groupRef = useRef<any>(null);
 
   const scale = 0.1;
   const fenceType = component.properties.fenceType || 'glass';
@@ -44,17 +46,18 @@ export const FenceComponent = ({
   }
 
   return (
-    <Group
-      x={component.position.x}
-      y={component.position.y}
-      rotation={component.rotation}
-      draggable={!isDraggingHandle}
-      onClick={onSelect}
-      onTap={onSelect}
-      onDragEnd={(e) => {
-        onDragEnd({ x: e.target.x(), y: e.target.y() });
-      }}
-    >
+      <Group
+        ref={groupRef}
+        x={component.position.x}
+        y={component.position.y}
+        rotation={component.rotation}
+        draggable={!isDraggingHandle}
+        onClick={onSelect}
+        onTap={onSelect}
+        onDragEnd={(e) => {
+          onDragEnd({ x: e.target.x(), y: e.target.y() });
+        }}
+      >
       {/* Base line */}
       <Line
         points={[0, 0, length, 0]}
@@ -92,20 +95,34 @@ export const FenceComponent = ({
             stroke="white"
             strokeWidth={2}
             draggable
+            dragBoundFunc={(pos) => {
+              const group = groupRef.current;
+              if (!group) return pos;
+              const tr = group.getAbsoluteTransform().copy();
+              const inv = tr.copy().invert();
+              const local = inv.point(pos);
+              local.y = 6;
+              local.x = Math.max(20, local.x);
+              return tr.point(local);
+            }}
             onDragStart={(e) => {
               e.cancelBubble = true;
               setIsDraggingHandle(true);
             }}
             onDragMove={(e) => {
               e.cancelBubble = true;
-              const newLength = Math.max(20, e.target.x());
-              e.target.x(newLength);
-              e.target.y(6);
             }}
             onDragEnd={(e) => {
               e.cancelBubble = true;
-              const newLength = Math.max(20, e.target.x());
-              onExtend?.(newLength);
+              const group = groupRef.current;
+              if (group) {
+                const tr = group.getAbsoluteTransform().copy();
+                const inv = tr.copy().invert();
+                const abs = e.target.getAbsolutePosition();
+                const local = inv.point(abs);
+                const newLength = Math.max(20, local.x);
+                onExtend?.(newLength);
+              }
               setIsDraggingHandle(false);
             }}
           />

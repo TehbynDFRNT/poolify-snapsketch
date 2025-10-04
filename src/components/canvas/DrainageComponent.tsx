@@ -1,7 +1,7 @@
 import { Group, Rect, Circle, Line } from 'react-konva';
 import { Component } from '@/types';
 import { DRAINAGE_TYPES } from '@/constants/components';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 interface DrainageComponentProps {
   component: Component;
@@ -20,6 +20,8 @@ export const DrainageComponent = ({
 }: DrainageComponentProps) => {
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
 
+  const groupRef = useRef<any>(null);
+
   const scale = 0.1;
   const drainageType = component.properties.drainageType || 'rock';
   const drainageData = DRAINAGE_TYPES[drainageType];
@@ -31,6 +33,7 @@ export const DrainageComponent = ({
 
   return (
     <Group
+      ref={groupRef}
       x={component.position.x}
       y={component.position.y}
       rotation={component.rotation}
@@ -86,20 +89,34 @@ export const DrainageComponent = ({
             stroke="white"
             strokeWidth={2}
             draggable
-            dragBoundFunc={(pos) => ({ x: pos.x, y: width / 2 })}
+            dragBoundFunc={(pos) => {
+              const group = groupRef.current;
+              if (!group) return pos;
+              const tr = group.getAbsoluteTransform().copy();
+              const inv = tr.copy().invert();
+              const local = inv.point(pos);
+              local.y = width / 2;
+              local.x = Math.max(width, local.x);
+              return tr.point(local);
+            }}
             onDragStart={(e) => {
               e.cancelBubble = true;
               setIsDraggingHandle(true);
             }}
             onDragMove={(e) => {
               e.cancelBubble = true;
-              const newLength = Math.max(width, e.target.x());
-              e.target.x(newLength);
             }}
             onDragEnd={(e) => {
               e.cancelBubble = true;
-              const newLength = Math.max(width, e.target.x());
-              onExtend?.(newLength / scale);
+              const group = groupRef.current;
+              if (group) {
+                const tr = group.getAbsoluteTransform().copy();
+                const inv = tr.copy().invert();
+                const abs = e.target.getAbsolutePosition();
+                const local = inv.point(abs);
+                const newLength = Math.max(width, local.x);
+                onExtend?.(newLength / scale);
+              }
               setIsDraggingHandle(false);
             }}
           />
