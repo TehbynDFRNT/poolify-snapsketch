@@ -151,29 +151,33 @@ const addSummary = (pdf: jsPDF, project: Project, x: number, y: number, width: n
   pdf.setFontSize(9);
   pdf.setFont('helvetica', 'normal');
   
-  let currentY = y + 7;
   const lineHeight = 5;
-
-  // Pools
+  const columnWidth = width / 2 - 5;
+  const column2X = x + columnWidth + 10;
+  
+  // Left column
+  let leftY = y + 7;
+  
+  // Pools (Left column)
   if (summary.pools.length > 0) {
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Pools:', x, currentY);
+    pdf.text('Pools:', x, leftY);
     pdf.setFont('helvetica', 'normal');
-    currentY += lineHeight;
+    leftY += lineHeight;
     
     summary.pools.forEach(pool => {
-      pdf.text(`  • ${pool.type} (${pool.dimensions})`, x, currentY);
-      currentY += lineHeight;
+      pdf.text(`  • ${pool.type} (${pool.dimensions})`, x, leftY);
+      leftY += lineHeight;
     });
-    currentY += 2;
+    leftY += 2;
   }
 
-  // Paving - aggregate by size
+  // Paving (Left column)
   if (summary.paving.length > 0) {
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Paving:', x, currentY);
+    pdf.text('Paving:', x, leftY);
     pdf.setFont('helvetica', 'normal');
-    currentY += lineHeight;
+    leftY += lineHeight;
     
     // Aggregate paving by size
     const aggregated = summary.paving.reduce((acc, paver) => {
@@ -188,51 +192,59 @@ const addSummary = (pdf: jsPDF, project: Project, x: number, y: number, width: n
     }, [] as typeof summary.paving);
     
     aggregated.forEach(paver => {
-      pdf.text(`  • ${paver.size}: ${paver.count} pavers (${formatArea(paver.area)})`, x, currentY);
-      currentY += lineHeight;
+      pdf.text(`  • ${paver.size}: ${paver.count} pavers`, x, leftY);
+      leftY += lineHeight;
+      pdf.text(`    (${formatArea(paver.area)})`, x, leftY);
+      leftY += lineHeight;
     });
-    currentY += 2;
+    leftY += 2;
   }
 
-  // Drainage
+  // Drainage (Left column)
   if (summary.drainage.length > 0) {
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Drainage:', x, currentY);
+    pdf.text('Drainage:', x, leftY);
     pdf.setFont('helvetica', 'normal');
-    currentY += lineHeight;
+    leftY += lineHeight;
     
     summary.drainage.forEach(drain => {
-      pdf.text(`  • ${drain.type}: ${formatLength(drain.length)}`, x, currentY);
-      currentY += lineHeight;
+      pdf.text(`  • ${drain.type}: ${formatLength(drain.length)}`, x, leftY);
+      leftY += lineHeight;
     });
-    currentY += 2;
   }
 
-  // Fencing
+  // Right column
+  let rightY = y + 7;
+
+  // Fencing (Right column)
   if (summary.fencing.length > 0) {
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Fencing:', x, currentY);
+    pdf.text('Fencing:', column2X, rightY);
     pdf.setFont('helvetica', 'normal');
-    currentY += lineHeight;
+    rightY += lineHeight;
     
     summary.fencing.forEach(fence => {
-      pdf.text(`  • ${fence.type}: ${formatLength(fence.length)} (${fence.gates} gates)`, x, currentY);
-      currentY += lineHeight;
+      pdf.text(`  • ${fence.type}:`, column2X, rightY);
+      rightY += lineHeight;
+      pdf.text(`    ${formatLength(fence.length)} (${fence.gates} gates)`, column2X, rightY);
+      rightY += lineHeight;
     });
-    currentY += 2;
+    rightY += 2;
   }
 
-  // Walls
+  // Walls (Right column)
   if (summary.walls.length > 0) {
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Retaining Walls:', x, currentY);
+    pdf.text('Retaining Walls:', column2X, rightY);
     pdf.setFont('helvetica', 'normal');
-    currentY += lineHeight;
+    rightY += lineHeight;
     
     summary.walls.forEach(wall => {
       const status = wall.status ? ` (${wall.status})` : '';
-      pdf.text(`  • ${wall.material}: ${formatLength(wall.length)} × ${formatLength(wall.height)}${status}`, x, currentY);
-      currentY += lineHeight;
+      pdf.text(`  • ${wall.material}${status}:`, column2X, rightY);
+      rightY += lineHeight;
+      pdf.text(`    ${formatLength(wall.length)} × ${formatLength(wall.height)}`, column2X, rightY);
+      rightY += lineHeight;
     });
   }
 };
