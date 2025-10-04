@@ -109,7 +109,7 @@ const addLegend = (pdf: jsPDF, x: number, y: number, width: number) => {
     { color: [93, 165, 218], label: 'Fencing' },
     { color: [140, 107, 74], label: 'Retaining Wall' },
     { color: [234, 179, 8], label: 'Boundary' },
-    { color: [146, 64, 14], label: 'House' },
+    { color: [0, 0, 0], label: 'House' },
   ];
 
   let currentY = y + 6;

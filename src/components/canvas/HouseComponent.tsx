@@ -114,7 +114,7 @@ export const HouseComponent = ({
       {closed && (
         <Line
           points={flatPoints}
-          fill="#D97706"
+          fill="#E5E5E5"
           opacity={0.3}
           closed={true}
         />
@@ -123,8 +123,8 @@ export const HouseComponent = ({
       {/* Outline */}
       <Line
         points={flatPoints}
-        stroke="#92400E"
-        strokeWidth={2}
+        stroke="#000000"
+        strokeWidth={3}
         lineCap="round"
         lineJoin="round"
       />
@@ -136,8 +136,8 @@ export const HouseComponent = ({
           x={point.x}
           y={point.y}
           radius={5}
-          fill="#92400E"
-          stroke="#D97706"
+          fill="#000000"
+          stroke="#3B82F6"
           strokeWidth={2}
         />
       ))}
@@ -153,7 +153,7 @@ export const HouseComponent = ({
           text={`${component.properties.area.toFixed(1)} m²`}
           fontSize={16}
           fontStyle="bold"
-          fill="#92400E"
+          fill="#000000"
           offsetY={-20}
           listening={false}
         />
