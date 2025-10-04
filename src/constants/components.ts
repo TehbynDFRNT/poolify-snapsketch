@@ -4,8 +4,8 @@ export const PAVER_SIZES = {
 };
 
 export const DRAINAGE_TYPES = {
-  rock: { width: 100, label: 'Rock Drainage', color: '#B8956A' },
-  ultradrain: { width: 100, label: 'Ultradrain', color: '#5A5A5A' },
+  rock: { width: 100, label: 'Rock Drainage', color: 'hsl(215, 8%, 62%)' },
+  ultradrain: { width: 100, label: 'Ultradrain', color: 'hsl(0, 0%, 36%)' },
 };
 
 export const FENCE_TYPES = {
@@ -15,8 +15,8 @@ export const FENCE_TYPES = {
 };
 
 export const WALL_MATERIALS = {
-  timber: { label: 'Timber Wall', color: '#8B6F47' },
-  concrete: { label: 'Concrete Wall', color: '#8C8C8C' },
+  timber: { label: 'Timber Wall', color: 'hsl(30, 35%, 40%)' },
+  concrete: { label: 'Concrete Wall', color: 'hsl(0, 0%, 65%)' },
 };
 
 export const GATE_WIDTH = 900; // mm

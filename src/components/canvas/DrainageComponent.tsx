@@ -26,7 +26,7 @@ export const DrainageComponent = ({
   const length = (component.properties.length || 1000) * scale;
   const width = drainageData.width * scale;
 
-  const color = drainageType === 'rock' ? '#B8956A' : '#5A5A5A';
+  const color = drainageData.color;
   const pattern = drainageType === 'rock' ? 'dots' : 'solid';
 
   return (
