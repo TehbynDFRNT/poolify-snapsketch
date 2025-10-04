@@ -31,11 +31,13 @@ export const PavingAreaComponent = ({ component, isSelected, onSelect }: PavingA
             y={paver.position.y}
             width={paver.width}
             height={paver.height}
-            fill={paver.isEdgePaver ? '#FAF7F0' : '#F5F1E8'}
-            stroke={paver.isEdgePaver ? '#E5D9C6' : '#D4C5B0'}
-            strokeWidth={1}
-            dash={paver.isEdgePaver ? [4, 4] : []}
-            opacity={paver.isEdgePaver ? 0.7 : 1}
+            // More distinct colors: full pavers are cream, edge pavers are light yellow/orange
+            fill={paver.isEdgePaver ? '#FEF3C7' : '#F5F1E8'}
+            // Visible stroke for all pavers
+            stroke={paver.isEdgePaver ? '#F59E0B' : '#A8A29E'}
+            strokeWidth={2}
+            dash={paver.isEdgePaver ? [8, 4] : []}
+            opacity={paver.isEdgePaver ? 0.8 : 1}
             listening={false}
           />
 
@@ -45,8 +47,8 @@ export const PavingAreaComponent = ({ component, isSelected, onSelect }: PavingA
               x={paver.position.x + paver.width / 4}
               y={paver.position.y + paver.height / 2 - 6}
               text="✂"
-              fontSize={12}
-              fill="#EF4444"
+              fontSize={14}
+              fill="#DC2626"
               listening={false}
             />
           )}

@@ -38,12 +38,29 @@ export function fillAreaWithPavers(
   // Get paver dimensions
   const { width: paverWidth, height: paverHeight } = getPaverDimensions(paverSize, paverOrientation);
   
+  console.log('Filling area with pavers:', {
+    paverSize,
+    paverOrientation,
+    paverWidth,
+    paverHeight,
+    showEdgePavers,
+    boundaryPoints: boundary.length
+  });
+  
   // Get bounding box
   const bbox = getBoundingBox(boundary);
+  
+  console.log('Bounding box:', {
+    width: bbox.width,
+    height: bbox.height,
+    area: (bbox.width * bbox.height) / 1000000,
+  });
   
   // Calculate grid
   const cols = Math.ceil(bbox.width / paverWidth);
   const rows = Math.ceil(bbox.height / paverHeight);
+  
+  console.log('Grid dimensions:', { rows, cols, maxPossible: rows * cols });
   
   // Create grid
   for (let row = 0; row < rows; row++) {
@@ -84,6 +101,12 @@ export function fillAreaWithPavers(
     }
   }
   
+  console.log('Pavers created:', {
+    total: pavers.length,
+    full: pavers.filter(p => !p.isEdgePaver).length,
+    edge: pavers.filter(p => p.isEdgePaver).length
+  });
+  
   return pavers;
 }
 
@@ -95,15 +118,28 @@ export function calculateStatistics(
   const edgePavers = pavers.filter(p => p.isEdgePaver).length;
   const totalPavers = fullPavers + edgePavers;
   
-  // Calculate area
+  // Calculate area (area should be in square meters)
   const paverAreaM2 = pavers.length > 0 
-    ? (pavers[0].width * pavers[0].height) / 1000000
+    ? (pavers[0].width * pavers[0].height) / 1000000 // mm² to m²
     : 0;
   const totalArea = paverAreaM2 * totalPavers;
   
-  // Calculate order quantity
+  // Calculate order quantity with wastage
   const wastageAmount = Math.ceil(totalPavers * (wastagePercentage / 100));
   const orderQuantity = totalPavers + wastageAmount;
+  
+  // Debug logging
+  console.log('Paving Statistics:', {
+    totalPavers,
+    fullPavers,
+    edgePavers,
+    paverAreaM2: paverAreaM2.toFixed(4),
+    totalArea: totalArea.toFixed(2),
+    wastagePercentage,
+    wastageAmount,
+    orderQuantity,
+    samplePaverSize: pavers.length > 0 ? `${pavers[0].width}×${pavers[0].height}mm` : 'none'
+  });
   
   return {
     fullPavers,
