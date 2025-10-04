@@ -254,6 +254,36 @@ const PropertiesContent = ({
             </div>
           )}
 
+          {component.type === 'paver' && (
+            <div>
+              <Label className="text-xs">Paver Size</Label>
+              <div className="flex gap-2 mt-1">
+                <Button
+                  variant={component.dimensions.width === 400 && component.dimensions.height === 400 ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => onUpdate(component.id, { 
+                    dimensions: { width: 400, height: 400 },
+                    properties: { ...component.properties, paverSize: '400x400' }
+                  })}
+                  className="flex-1"
+                >
+                  400 × 400
+                </Button>
+                <Button
+                  variant={component.dimensions.width === 400 && component.dimensions.height === 600 ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => onUpdate(component.id, { 
+                    dimensions: { width: 400, height: 600 },
+                    properties: { ...component.properties, paverSize: '400x600' }
+                  })}
+                  className="flex-1"
+                >
+                  400 × 600
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="x" className="text-xs">X Position</Label>
