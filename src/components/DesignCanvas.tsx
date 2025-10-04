@@ -1,7 +1,17 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Menu as MenuIcon, Undo2, Redo2, Download } from 'lucide-react';
+import { ArrowLeft, Save, Menu as MenuIcon, Undo2, Redo2, Download, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useDesignStore } from '@/store/designStore';
 import { loadProject } from '@/utils/storage';
 import { toast } from 'sonner';
@@ -20,6 +30,7 @@ export const DesignCanvas = () => {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [activeTool, setActiveTool] = useState<ToolType>('select');
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   
   useKeyboardShortcuts(); // Enable keyboard shortcuts
@@ -28,6 +39,7 @@ export const DesignCanvas = () => {
     currentProject,
     setCurrentProject,
     saveCurrentProject,
+    clearAll,
     undo,
     redo,
     historyIndex,
@@ -115,6 +127,12 @@ export const DesignCanvas = () => {
     }
   };
 
+  const handleClearAll = () => {
+    clearAll();
+    setClearAllDialogOpen(false);
+    toast.success('Canvas cleared');
+  };
+
   if (!currentProject) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -173,6 +191,16 @@ export const DesignCanvas = () => {
               </Button>
             </div>
 
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="gap-2 text-destructive hover:text-destructive"
+              onClick={() => setClearAllDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="hidden md:inline">Clear All</span>
+            </Button>
+
             <Button onClick={handleSave} size="sm" className="gap-2">
               <Save className="h-4 w-4" />
               <span className="hidden md:inline">Save</span>
@@ -196,6 +224,23 @@ export const DesignCanvas = () => {
         onOpenChange={setExportDialogOpen}
         onExport={handleExport}
       />
+
+      <AlertDialog open={clearAllDialogOpen} onOpenChange={setClearAllDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear all components?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove all components from the canvas. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleClearAll} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Clear All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
