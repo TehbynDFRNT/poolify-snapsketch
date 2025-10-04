@@ -3,10 +3,23 @@ export interface Project {
   customerName: string;
   address: string;
   notes?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: Date | string;
+  updatedAt: Date | string;
   components: Component[];
 }
+
+export type ToolType = 
+  | 'select' 
+  | 'hand'
+  | 'pool' 
+  | 'paver' 
+  | 'drainage' 
+  | 'fence' 
+  | 'wall' 
+  | 'boundary'
+  | 'house'
+  | 'reference_line'
+  | 'quick_measure';
 
 export type ComponentType = 
   | 'pool' 

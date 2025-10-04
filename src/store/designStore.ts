@@ -43,6 +43,7 @@ interface DesignStore {
   
   getMeasurements: () => Summary;
   saveCurrentProject: () => void;
+  updateCurrentProject: (updates: Partial<Project>) => void;
   loadProjectById: (id: string) => void;
   clearAll: () => void;
 }
@@ -190,6 +191,20 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     const updatedProject: Project = {
       ...currentProject,
       components,
+      updatedAt: new Date(),
+    };
+    
+    saveProject(updatedProject);
+    set({ currentProject: updatedProject });
+  },
+
+  updateCurrentProject: (updates) => {
+    const { currentProject } = get();
+    if (!currentProject) return;
+    
+    const updatedProject: Project = {
+      ...currentProject,
+      ...updates,
       updatedAt: new Date(),
     };
     

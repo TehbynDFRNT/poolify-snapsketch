@@ -41,7 +41,11 @@ export const getAllProjects = (): Project[] => {
     return ids
       .map(id => loadProject(id))
       .filter((p): p is Project => p !== null)
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+      .sort((a, b) => {
+        const aTime = typeof a.updatedAt === 'string' ? new Date(a.updatedAt).getTime() : a.updatedAt.getTime();
+        const bTime = typeof b.updatedAt === 'string' ? new Date(b.updatedAt).getTime() : b.updatedAt.getTime();
+        return bTime - aTime;
+      });
   } catch (error) {
     console.error('Failed to load projects list:', error);
     return [];

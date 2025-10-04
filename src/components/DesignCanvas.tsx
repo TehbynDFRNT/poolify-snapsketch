@@ -1,7 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Menu as MenuIcon, Undo2, Redo2, Download, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,14 +13,14 @@ import {
 import { useDesignStore } from '@/store/designStore';
 import { loadProject } from '@/utils/storage';
 import { toast } from 'sonner';
-import { Toolbar, ToolType } from './Toolbar';
 import { Canvas } from './Canvas';
-import { PropertiesPanel } from './PropertiesPanel';
+import { TopBar } from './TopBar';
+import { BottomPanel } from './BottomPanel';
 import { ExportDialog } from './ExportDialog';
-import { format } from 'date-fns';
-import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { exportToPDF } from '@/utils/pdfExport';
-import { ExportOptions } from '@/types';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import type { ToolType, ExportOptions } from '@/types';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 
 export const DesignCanvas = () => {
   const { id } = useParams<{ id: string }>();
@@ -31,7 +29,8 @@ export const DesignCanvas = () => {
   const [activeTool, setActiveTool] = useState<ToolType>('select');
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(350);
+  const [menuOpen, setMenuOpen] = useState(false);
   
   useKeyboardShortcuts(); // Enable keyboard shortcuts
   
@@ -44,6 +43,10 @@ export const DesignCanvas = () => {
     redo,
     historyIndex,
     history,
+    gridVisible,
+    toggleGrid,
+    selectedComponentId,
+    components,
   } = useDesignStore();
 
   // Tool keyboard shortcuts
@@ -57,15 +60,14 @@ export const DesignCanvas = () => {
       // Tool shortcuts
       if (e.key === 'v' || e.key === 'V') setActiveTool('select');
       if (e.key === 'h' || e.key === 'H') setActiveTool('hand');
-      if (e.key === '1') setActiveTool('pool');
-      if (e.key === '2') setActiveTool('paver');
-      if (e.key === '3') setActiveTool('drainage');
-      if (e.key === '4') setActiveTool('fence');
-      if (e.key === '5') setActiveTool('wall');
-      if (e.key === '6') setActiveTool('boundary');
-      if (e.key === '7') setActiveTool('house');
+      if (e.key === 'b' || e.key === 'B') setActiveTool('boundary');
+      if (e.key === 'p' || e.key === 'P') setActiveTool('pool');
+      if (e.key === 'a' || e.key === 'A') setActiveTool('paver');
+      if (e.key === 'd' || e.key === 'D') setActiveTool('drainage');
+      if (e.key === 'f' || e.key === 'F') setActiveTool('fence');
+      if (e.key === 'w' || e.key === 'W') setActiveTool('wall');
       if (e.key === 'm' || e.key === 'M') setActiveTool('quick_measure');
-      if (e.key === 'l' || e.key === 'L') setActiveTool('reference_line');
+      if (e.key === 'r' || e.key === 'R') setActiveTool('reference_line');
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -77,7 +79,10 @@ export const DesignCanvas = () => {
       const project = loadProject(id);
       if (project) {
         setCurrentProject(project);
-        setLastSaved(project.updatedAt);
+        const updatedDate = typeof project.updatedAt === 'string' 
+          ? new Date(project.updatedAt)
+          : project.updatedAt;
+        setLastSaved(updatedDate);
       } else {
         toast.error('Project not found');
         navigate('/');
@@ -133,6 +138,10 @@ export const DesignCanvas = () => {
     toast.success('Canvas cleared');
   };
 
+  const selectedComponent = selectedComponentId 
+    ? components.find(c => c.id === selectedComponentId) || null
+    : null;
+
   if (!currentProject) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -141,85 +150,27 @@ export const DesignCanvas = () => {
     );
   }
 
-  const canUndo = historyIndex > 0;
-  const canRedo = historyIndex < history.length - 1;
-
   return (
-    <div className="flex flex-col h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-card px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={handleBack}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div>
-              <h1 className="text-lg font-semibold text-foreground">
-                {currentProject.customerName}
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                {currentProject.address}
-              </p>
-            </div>
-          </div>
+    <div className="h-screen flex flex-col">
+      {/* Top Bar */}
+      <TopBar
+        projectName={currentProject.customerName || 'Untitled Project'}
+        lastSaved={lastSaved}
+        activeTool={activeTool}
+        onToolChange={setActiveTool}
+        canUndo={historyIndex > 0}
+        canRedo={historyIndex < history.length - 1}
+        onUndo={undo}
+        onRedo={redo}
+        gridVisible={gridVisible}
+        onGridToggle={toggleGrid}
+        onSave={handleSave}
+        onExport={() => setExportDialogOpen(true)}
+        onMenuClick={() => setMenuOpen(true)}
+      />
 
-          <div className="flex items-center gap-3">
-            {lastSaved && (
-              <span className="text-sm text-muted-foreground hidden md:inline">
-                💾 Auto-saved: {format(lastSaved, 'h:mm a')}
-              </span>
-            )}
-            
-            <div className="flex items-center gap-1 border-r border-border pr-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={undo}
-                disabled={!canUndo}
-                title="Undo (Ctrl+Z)"
-              >
-                <Undo2 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={redo}
-                disabled={!canRedo}
-                title="Redo (Ctrl+Y)"
-              >
-                <Redo2 className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="gap-2 text-destructive hover:text-destructive"
-              onClick={() => setClearAllDialogOpen(true)}
-            >
-              <Trash2 className="h-4 w-4" />
-              <span className="hidden md:inline">Clear All</span>
-            </Button>
-
-            <Button onClick={handleSave} size="sm" className="gap-2">
-              <Save className="h-4 w-4" />
-              <span className="hidden md:inline">Save</span>
-            </Button>
-
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="gap-2"
-              onClick={() => setExportDialogOpen(true)}
-            >
-              <Download className="h-4 w-4" />
-              <span className="hidden md:inline">Export PDF</span>
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <ExportDialog 
+      {/* Dialogs */}
+      <ExportDialog
         open={exportDialogOpen}
         onOpenChange={setExportDialogOpen}
         onExport={handleExport}
@@ -242,23 +193,32 @@ export const DesignCanvas = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Toolbar - Left sidebar */}
-        <div className="w-20 border-r border-border bg-card overflow-y-auto">
-          <Toolbar activeTool={activeTool} onToolChange={setActiveTool} />
-        </div>
+      <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Menu</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 space-y-2">
+            <p className="text-sm text-muted-foreground">Additional options will appear here</p>
+          </div>
+        </SheetContent>
+      </Sheet>
 
-        {/* Canvas - Center */}
-        <div className="flex-1 overflow-hidden">
-          <Canvas activeTool={activeTool} />
-        </div>
+      {/* Canvas - takes remaining space */}
+      <main 
+        className="flex-1 overflow-hidden relative"
+        style={{ height: `calc(100vh - 60px - ${bottomPanelHeight}px)` }}
+      >
+        <Canvas activeTool={activeTool} />
+      </main>
 
-        {/* Properties - Right sidebar */}
-        <div className="w-80 border-l border-border bg-card overflow-y-auto">
-          <PropertiesPanel />
-        </div>
-      </div>
+      {/* Bottom Panel */}
+      <BottomPanel
+        height={bottomPanelHeight}
+        onHeightChange={setBottomPanelHeight}
+        selectedComponent={selectedComponent}
+        project={currentProject}
+      />
     </div>
   );
 };

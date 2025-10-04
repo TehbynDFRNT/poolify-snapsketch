@@ -1,0 +1,485 @@
+import { useState, useEffect } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Component, Project } from '@/types';
+import { useDesignStore } from '@/store/designStore';
+import { toast } from 'sonner';
+
+interface BottomPanelProps {
+  height: number;
+  onHeightChange: (height: number) => void;
+  selectedComponent: Component | null;
+  project: Project;
+}
+
+type TabType = 'properties' | 'materials' | 'notes';
+
+export const BottomPanel = ({
+  height,
+  onHeightChange,
+  selectedComponent,
+  project,
+}: BottomPanelProps) => {
+  const [activeTab, setActiveTab] = useState<TabType>('properties');
+  const [isResizing, setIsResizing] = useState(false);
+  const [notes, setNotes] = useState(project.notes || '');
+  const [hasUnsavedNotes, setHasUnsavedNotes] = useState(false);
+
+  const { updateComponent, deleteComponent, duplicateComponent, components, updateCurrentProject } = useDesignStore();
+
+  const handleMouseDown = () => setIsResizing(true);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newHeight = window.innerHeight - e.clientY - 60;
+      onHeightChange(Math.max(40, Math.min(600, newHeight)));
+    };
+
+    const handleMouseUp = () => setIsResizing(false);
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing, onHeightChange]);
+
+  useEffect(() => {
+    setNotes(project.notes || '');
+    setHasUnsavedNotes(false);
+  }, [project.notes]);
+
+  const handleNotesChange = (value: string) => {
+    setNotes(value);
+    setHasUnsavedNotes(value !== (project.notes || ''));
+  };
+
+  const handleSaveNotes = () => {
+    updateCurrentProject({ notes });
+    setHasUnsavedNotes(false);
+    toast.success('Notes saved');
+  };
+
+  const isCollapsed = height <= 100;
+
+  const toggleCollapse = () => {
+    onHeightChange(isCollapsed ? 350 : 40);
+  };
+
+  // Calculate materials summary
+  const materialsSummary = {
+    pools: components.filter(c => c.type === 'pool'),
+    pavers: components.filter(c => c.type === 'paver'),
+    drainage: components.filter(c => c.type === 'drainage'),
+    fences: components.filter(c => c.type === 'fence'),
+    walls: components.filter(c => c.type === 'wall'),
+  };
+
+  return (
+    <div
+      className="border-t bg-background flex flex-col flex-shrink-0"
+      style={{ height: `${height}px` }}
+    >
+      {/* Resize Handle */}
+      <div
+        onMouseDown={handleMouseDown}
+        className="h-2 bg-muted hover:bg-primary/40 cursor-ns-resize active:bg-primary/60 transition-colors"
+      />
+
+      {isCollapsed ? (
+        // Collapsed state - just show current info and expand button
+        <div className="flex items-center justify-between px-4 h-10">
+          <span className="text-sm text-muted-foreground">
+            {activeTab === 'properties' && selectedComponent
+              ? `${selectedComponent.type} selected`
+              : activeTab === 'materials'
+              ? 'Materials Summary'
+              : 'Project Notes'}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleCollapse}
+            className="min-w-[44px] min-h-[44px]"
+          >
+            <ChevronUp className="w-4 h-4" />
+          </Button>
+        </div>
+      ) : (
+        <>
+          {/* Tabs */}
+          <div className="flex border-b">
+            <button
+              onClick={() => setActiveTab('properties')}
+              className={`
+                px-4 py-2 font-medium text-sm transition-colors
+                ${activeTab === 'properties'
+                  ? 'border-b-2 border-primary text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+                }
+              `}
+            >
+              Properties
+              {selectedComponent && (
+                <span className="ml-2 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                  {selectedComponent.type}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setActiveTab('materials')}
+              className={`
+                px-4 py-2 font-medium text-sm transition-colors
+                ${activeTab === 'materials'
+                  ? 'border-b-2 border-primary text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+                }
+              `}
+            >
+              Materials Summary
+            </button>
+
+            <button
+              onClick={() => setActiveTab('notes')}
+              className={`
+                px-4 py-2 font-medium text-sm transition-colors
+                ${activeTab === 'notes'
+                  ? 'border-b-2 border-primary text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+                }
+              `}
+            >
+              Notes
+              {hasUnsavedNotes && (
+                <span className="ml-2 w-2 h-2 bg-orange-500 rounded-full inline-block" />
+              )}
+            </button>
+
+            {/* Collapse button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleCollapse}
+              className="ml-auto min-w-[44px] min-h-[44px]"
+              title="Collapse panel"
+            >
+              <ChevronDown className="w-4 h-4" />
+            </Button>
+          </div>
+
+          {/* Tab Content */}
+          <ScrollArea className="flex-1">
+            <div className="p-4">
+              {activeTab === 'properties' && (
+                <PropertiesContent 
+                  component={selectedComponent}
+                  onUpdate={updateComponent}
+                  onDelete={deleteComponent}
+                  onDuplicate={duplicateComponent}
+                />
+              )}
+
+              {activeTab === 'materials' && (
+                <MaterialsSummary summary={materialsSummary} />
+              )}
+
+              {activeTab === 'notes' && (
+                <NotesEditor
+                  notes={notes}
+                  onChange={handleNotesChange}
+                  onSave={handleSaveNotes}
+                  hasUnsaved={hasUnsavedNotes}
+                />
+              )}
+            </div>
+          </ScrollArea>
+        </>
+      )}
+    </div>
+  );
+};
+
+// Properties Tab Content
+const PropertiesContent = ({
+  component,
+  onUpdate,
+  onDelete,
+  onDuplicate,
+}: {
+  component: Component | null;
+  onUpdate: (id: string, updates: Partial<Component>) => void;
+  onDelete: (id: string) => void;
+  onDuplicate: (id: string) => void;
+}) => {
+  if (!component) {
+    return (
+      <div className="text-center text-muted-foreground py-8">
+        <p>Select a component to view properties</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Component Properties</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Type</Label>
+              <div className="text-sm font-medium capitalize">{component.type}</div>
+            </div>
+            <div>
+              <Label className="text-xs">ID</Label>
+              <div className="text-xs text-muted-foreground font-mono">{component.id.slice(0, 8)}</div>
+            </div>
+          </div>
+
+          {component.type === 'pool' && component.properties.poolId && (
+            <div>
+              <Label className="text-xs">Pool Model</Label>
+              <div className="text-sm font-medium">{component.properties.poolId}</div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="x" className="text-xs">X Position</Label>
+              <Input
+                id="x"
+                type="number"
+                value={Math.round(component.position.x)}
+                onChange={(e) => onUpdate(component.id, { position: { ...component.position, x: Number(e.target.value) } })}
+                className="h-8"
+              />
+            </div>
+            <div>
+              <Label htmlFor="y" className="text-xs">Y Position</Label>
+              <Input
+                id="y"
+                type="number"
+                value={Math.round(component.position.y)}
+                onChange={(e) => onUpdate(component.id, { position: { ...component.position, y: Number(e.target.value) } })}
+                className="h-8"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="width" className="text-xs">Width</Label>
+              <Input
+                id="width"
+                type="number"
+                value={Math.round(component.dimensions.width)}
+                onChange={(e) => onUpdate(component.id, { dimensions: { ...component.dimensions, width: Number(e.target.value) } })}
+                className="h-8"
+              />
+            </div>
+            <div>
+              <Label htmlFor="height" className="text-xs">Height</Label>
+              <Input
+                id="height"
+                type="number"
+                value={Math.round(component.dimensions.height)}
+                onChange={(e) => onUpdate(component.id, { dimensions: { ...component.dimensions, height: Number(e.target.value) } })}
+                className="h-8"
+              />
+            </div>
+          </div>
+
+          {component.rotation !== undefined && (
+            <div>
+              <Label htmlFor="rotation" className="text-xs">Rotation (degrees)</Label>
+              <Input
+                id="rotation"
+                type="number"
+                value={Math.round(component.rotation)}
+                onChange={(e) => onUpdate(component.id, { rotation: Number(e.target.value) })}
+                className="h-8"
+              />
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onDuplicate(component.id)}
+              className="flex-1"
+            >
+              Duplicate
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => onDelete(component.id)}
+              className="flex-1"
+            >
+              Delete
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+// Materials Summary Tab Content
+const MaterialsSummary = ({
+  summary,
+}: {
+  summary: {
+    pools: Component[];
+    pavers: Component[];
+    drainage: Component[];
+    fences: Component[];
+    walls: Component[];
+  };
+}) => {
+  return (
+    <div className="space-y-4">
+      <h3 className="font-semibold text-foreground">Project Materials</h3>
+
+      {summary.pools.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Pools ({summary.pools.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1">
+              {summary.pools.map((pool, i) => (
+                <li key={pool.id} className="text-sm text-muted-foreground">
+                  • {pool.properties.poolId || 'Pool'} at ({Math.round(pool.position.x)}, {Math.round(pool.position.y)})
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {summary.pavers.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Paving Areas ({summary.pavers.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1">
+              {summary.pavers.map((paver, i) => (
+                <li key={paver.id} className="text-sm text-muted-foreground">
+                  • {paver.properties.paverSize || 'Paver'} - {Math.round(paver.dimensions.width * paver.dimensions.height / 10000)} m²
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {summary.drainage.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Drainage ({summary.drainage.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1">
+              {summary.drainage.map((drain, i) => (
+                <li key={drain.id} className="text-sm text-muted-foreground">
+                  • {drain.properties.drainageType || 'Drainage'} - {Math.round(drain.properties.length || 0)}mm
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {summary.fences.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Fencing ({summary.fences.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1">
+              {summary.fences.map((fence, i) => (
+                <li key={fence.id} className="text-sm text-muted-foreground">
+                  • {fence.properties.fenceType || 'Fence'} - {Math.round(fence.dimensions.width)}mm
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {summary.walls.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Walls ({summary.walls.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1">
+              {summary.walls.map((wall, i) => (
+                <li key={wall.id} className="text-sm text-muted-foreground">
+                  • {wall.properties.wallMaterial || 'Wall'} - {Math.round(wall.dimensions.width)}mm × {wall.properties.wallHeight || 0}mm high
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {Object.values(summary).every(arr => arr.length === 0) && (
+        <div className="text-center text-muted-foreground py-8">
+          <p>No components added yet</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Notes Tab Content
+const NotesEditor = ({
+  notes,
+  onChange,
+  onSave,
+  hasUnsaved,
+}: {
+  notes: string;
+  onChange: (value: string) => void;
+  onSave: () => void;
+  hasUnsaved: boolean;
+}) => {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-foreground">Project Notes</h3>
+        {hasUnsaved && (
+          <span className="text-xs text-orange-600">Unsaved changes</span>
+        )}
+      </div>
+      <Textarea
+        value={notes}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Add notes about this project..."
+        className="min-h-[200px] resize-none"
+      />
+      <Button
+        onClick={onSave}
+        disabled={!hasUnsaved}
+        className="w-full"
+      >
+        Save Notes
+      </Button>
+    </div>
+  );
+};
