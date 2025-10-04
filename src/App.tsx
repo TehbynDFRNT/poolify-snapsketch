@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { HomePage } from "./components/HomePage";
 import { DesignCanvas } from "./components/DesignCanvas";
+import { InstallPrompt } from "./components/InstallPrompt";
+import { IOSInstallPrompt } from "./components/IOSInstallPrompt";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +24,8 @@ const App = () => (
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
+      <InstallPrompt />
+      <IOSInstallPrompt />
     </TooltipProvider>
   </QueryClientProvider>
 );

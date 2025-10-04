@@ -2,23 +2,71 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pool Design Tool - Professional CAD Design at 1:100 Scale</title>
-    <meta name="description" content="Professional pool design tool for creating accurate site plans with automatic measurements and PDF exports at 1:100 scale" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
+    <!-- Primary Meta Tags -->
+    <title>Pool Design Tool - Professional CAD for Pool Designs</title>
+    <meta name="title" content="Pool Design Tool - Professional CAD for Pool Designs" />
+    <meta name="description" content="Create professional pool and landscape designs with accurate measurements, materials, and scaled PDF exports." />
     <meta name="author" content="Pool Design Tool" />
-
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
     <meta property="og:title" content="Pool Design Tool - Professional CAD Design" />
     <meta property="og:description" content="Create professional pool designs with drag-and-drop components and automatic measurements" />
-    <meta property="og:type" content="website" />
     <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
-
+    
+    <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@lovable_dev" />
     <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+    
+    <!-- Theme Colors -->
+    <meta name="theme-color" content="#3B82F6" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#3B82F6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1E40AF" />
+    
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16x16.png" />
+    
+    <!-- Apple Touch Icons (iOS) -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="/icons/icon-128x128.png" />
+    
+    <!-- iOS Meta Tags (Critical for "Add to Home Screen") -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Pool Design" />
+    
+    <!-- Microsoft Tiles (Windows) -->
+    <meta name="msapplication-TileColor" content="#3B82F6" />
+    <meta name="msapplication-TileImage" content="/icons/icon-144x144.png" />
+    <meta name="msapplication-config" content="/browserconfig.xml" />
   </head>
 
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(registration => {
+              console.log('✅ Service Worker registered:', registration);
+            })
+            .catch(error => {
+              console.log('❌ Service Worker registration failed:', error);
+            });
+        });
+      }
+    </script>
   </body>
 </html>
