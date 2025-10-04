@@ -45,8 +45,9 @@ export interface ComponentProperties {
   gates?: Array<{ position: number; width: number }>;
   
   // Wall
-  wallMaterial?: 'timber' | 'concrete';
+  wallMaterial?: 'timber' | 'concrete' | 'concrete_sleeper' | 'sandstone';
   wallHeight?: number;
+  wallStatus?: 'proposed' | 'existing';
   
   // Boundary
   points?: Array<{ x: number; y: number }>;
@@ -101,6 +102,7 @@ export interface Summary {
     material: string;
     length: number;
     height: number;
+    status?: string;
   }>;
 }
 

@@ -21,11 +21,11 @@ export const WallComponent = ({
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
 
   const wallType = component.properties.wallMaterial || 'timber';
-  const wallData = WALL_MATERIALS[wallType];
+  const wallData = WALL_MATERIALS[wallType as keyof typeof WALL_MATERIALS];
   const length = component.dimensions.width || 1000;
   const height = 15; // Wall height in pixels
 
-  const color = wallData.color;
+  const color = wallData?.color || WALL_MATERIALS.timber.color;
 
   return (
     <Group

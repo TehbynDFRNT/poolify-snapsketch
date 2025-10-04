@@ -78,13 +78,16 @@ export const calculateMeasurements = (components: Component[]): Summary => {
 
       case 'wall': {
         const material = component.properties.wallMaterial || 'timber';
+        const materialData = WALL_MATERIALS[material as keyof typeof WALL_MATERIALS];
         const length = component.dimensions.width;
         const height = component.properties.wallHeight || 1200;
+        const status = component.properties.wallStatus || 'proposed';
         
         summary.walls.push({
-          material: WALL_MATERIALS[material].label,
+          material: materialData?.label || 'Timber',
           length,
           height,
+          status,
         });
         break;
       }

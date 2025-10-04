@@ -157,10 +157,13 @@ export const PropertiesPanel = () => {
           <Card>
             <CardHeader>
               <CardTitle>
-                {poolData ? poolData.name : selectedComponent.type.charAt(0).toUpperCase() + selectedComponent.type.slice(1)}
+                {poolData ? poolData.name : 
+                 selectedComponent.type === 'wall' ? 'Retaining Wall' :
+                 selectedComponent.type.charAt(0).toUpperCase() + selectedComponent.type.slice(1)}
               </CardTitle>
               <CardDescription>
-                {selectedComponent.type.charAt(0).toUpperCase() + selectedComponent.type.slice(1)}
+                {selectedComponent.type === 'wall' ? 'Retaining Wall' : 
+                 selectedComponent.type.charAt(0).toUpperCase() + selectedComponent.type.slice(1)}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -345,6 +348,89 @@ export const PropertiesPanel = () => {
                       <Trash2 className="h-4 w-4 mr-2" />
                       Delete {selectedComponent.type === 'quick_measure' ? 'Quick Measure' : 'Reference Line'}
                     </Button>
+                  </>
+                )}
+                
+                {/* Wall Properties */}
+                {selectedComponent.type === 'wall' && (
+                  <>
+                    <div>
+                      <Label className="text-sm font-medium mb-2">Material Type</Label>
+                      <select
+                        value={selectedComponent.properties.wallMaterial || 'timber'}
+                        onChange={(e) => updateComponent(selectedComponent.id, {
+                          properties: {
+                            ...selectedComponent.properties,
+                            wallMaterial: e.target.value as 'timber' | 'concrete' | 'concrete_sleeper' | 'sandstone'
+                          }
+                        })}
+                        className="w-full px-3 py-2 border rounded-md bg-background"
+                      >
+                        <option value="timber">Timber</option>
+                        <option value="concrete">Concrete</option>
+                        <option value="concrete_sleeper">Concrete Sleeper</option>
+                        <option value="sandstone">Sandstone</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <Label className="text-sm font-medium mb-2">Height (meters)</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0.1"
+                        value={((selectedComponent.properties.wallHeight || 1200) / 1000).toFixed(1)}
+                        onChange={(e) => {
+                          const heightInMeters = parseFloat(e.target.value);
+                          if (!isNaN(heightInMeters) && heightInMeters > 0) {
+                            updateComponent(selectedComponent.id, {
+                              properties: {
+                                ...selectedComponent.properties,
+                                wallHeight: heightInMeters * 1000 // Store in mm
+                              }
+                            });
+                          }
+                        }}
+                        placeholder="1.2"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {selectedComponent.properties.wallHeight || 1200}mm
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label className="text-sm font-medium mb-2">Status</Label>
+                      <div className="flex gap-2">
+                        <Button
+                          variant={selectedComponent.properties.wallStatus !== 'existing' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => updateComponent(selectedComponent.id, {
+                            properties: {
+                              ...selectedComponent.properties,
+                              wallStatus: 'proposed'
+                            }
+                          })}
+                          className="flex-1"
+                        >
+                          Proposed
+                        </Button>
+                        <Button
+                          variant={selectedComponent.properties.wallStatus === 'existing' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => updateComponent(selectedComponent.id, {
+                            properties: {
+                              ...selectedComponent.properties,
+                              wallStatus: 'existing'
+                            }
+                          })}
+                          className="flex-1"
+                        >
+                          Existing
+                        </Button>
+                      </div>
+                    </div>
+
+                    <Separator />
                   </>
                 )}
                 
@@ -558,6 +644,9 @@ export const PropertiesPanel = () => {
                     <div key={i} className="text-sm text-muted-foreground mb-1">
                       • {wall.material}: {formatLength(wall.length)}
                       <div className="ml-4">Height: {formatLength(wall.height)}</div>
+                      {wall.status && (
+                        <div className="ml-4 text-xs">({wall.status})</div>
+                      )}
                     </div>
                   ))}
                 </div>

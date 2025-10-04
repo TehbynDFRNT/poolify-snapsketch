@@ -15,8 +15,10 @@ export const FENCE_TYPES = {
 };
 
 export const WALL_MATERIALS = {
-  timber: { label: 'Timber Wall', color: 'hsl(30, 35%, 40%)' },
-  concrete: { label: 'Concrete Wall', color: 'hsl(0, 0%, 65%)' },
+  timber: { label: 'Timber', color: 'hsl(30, 35%, 40%)' },
+  concrete: { label: 'Concrete', color: 'hsl(0, 0%, 65%)' },
+  concrete_sleeper: { label: 'Concrete Sleeper', color: 'hsl(0, 0%, 55%)' },
+  sandstone: { label: 'Sandstone', color: 'hsl(40, 40%, 65%)' },
 };
 
 export const GATE_WIDTH = 900; // mm
