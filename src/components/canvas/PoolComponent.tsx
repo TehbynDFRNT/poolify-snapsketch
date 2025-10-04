@@ -54,6 +54,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
         align="center"
         offsetX={10}
         offsetY={5}
+        rotation={-component.rotation}
       />
 
       {/* Shallow End label (150mm inset) */}
@@ -67,6 +68,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
         align="center"
         offsetX={10}
         offsetY={5}
+        rotation={-component.rotation}
       />
 
       {/* Selection border */}
