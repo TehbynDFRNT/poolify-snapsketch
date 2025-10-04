@@ -42,8 +42,8 @@ export const PaverComponent = ({
           y={row * scaledHeight}
           width={scaledWidth}
           height={scaledHeight}
-          fill="rgba(150, 150, 150, 0.5)"
-          stroke="#888"
+          fill="#F3EBD9"
+          stroke="#D4C5A9"
           strokeWidth={1}
         />
       );

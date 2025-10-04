@@ -104,7 +104,7 @@ const addLegend = (pdf: jsPDF, x: number, y: number, width: number) => {
   
   const legendItems = [
     { color: [59, 130, 246], label: 'Pool' },
-    { color: [150, 150, 150], label: 'Paving' },
+    { color: [243, 235, 217], label: 'Paving' },
     { color: [152, 156, 164], label: 'Drainage' },
     { color: [93, 165, 218], label: 'Fencing' },
     { color: [140, 107, 74], label: 'Retaining Wall' },
