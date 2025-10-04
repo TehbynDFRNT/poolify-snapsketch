@@ -1,4 +1,4 @@
-import { Group, Rect, Circle } from 'react-konva';
+import { Group, Rect, Circle, Line } from 'react-konva';
 import { Component } from '@/types';
 import { DRAINAGE_TYPES } from '@/constants/components';
 import { useState } from 'react';
@@ -47,11 +47,22 @@ export const DrainageComponent = ({
         y={0}
         width={length}
         height={width}
-        fill={pattern === 'dots' ? color : color}
+        fill={color}
         stroke={color}
         strokeWidth={2}
         opacity={0.7}
       />
+
+      {/* Black drainage lines/gaps */}
+      {drainageType === 'rock' && Array.from({ length: Math.floor(length / 20) }).map((_, i) => (
+        <Line
+          key={i}
+          points={[i * 20 + 10, 0, i * 20 + 10, width]}
+          stroke="black"
+          strokeWidth={2}
+          opacity={0.6}
+        />
+      ))}
 
       {/* Selection border and handle */}
       {isSelected && (
