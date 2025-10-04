@@ -3,7 +3,7 @@ import { Stage, Layer, Line, Circle, Text } from 'react-konva';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
 import { Button } from '@/components/ui/button';
-import { ZoomIn, ZoomOut, Maximize } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize, Lock, Unlock } from 'lucide-react';
 import { PoolComponent } from './canvas/PoolComponent';
 import { PaverComponent } from './canvas/PaverComponent';
 import { DrainageComponent } from './canvas/DrainageComponent';
@@ -43,6 +43,8 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
     pan,
     setPan,
     gridVisible,
+    zoomLocked,
+    toggleZoomLock,
     components,
     selectedComponentId,
     selectComponent,
@@ -263,6 +265,12 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
         setShiftPressed(true);
       }
       
+      // Zoom lock toggle (L key)
+      if (e.key === 'l' && !e.ctrlKey && !e.metaKey && !isDrawing && !isMeasuring) {
+        e.preventDefault();
+        toggleZoomLock();
+      }
+      
       // Drawing shortcuts
       if (isDrawing) {
         if (e.key === 'Enter') {
@@ -296,7 +304,7 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [isDrawing, drawingPoints, isMeasuring]);
+  }, [isDrawing, drawingPoints, isMeasuring, toggleZoomLock]);
 
   // Reset drawing when tool changes
   useEffect(() => {
@@ -388,6 +396,9 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
 
   const handleWheel = (e: any) => {
     e.evt.preventDefault();
+    
+    // Don't zoom if locked
+    if (zoomLocked) return;
     
     const scaleBy = 1.05;
     const stage = e.target.getStage();
@@ -852,14 +863,23 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
 
       {/* Zoom Controls */}
       <div className="absolute bottom-4 right-4 flex gap-2 bg-card border border-border rounded-lg p-2 shadow-lg">
-        <Button variant="ghost" size="icon" onClick={handleZoomOut} title="Zoom Out">
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={toggleZoomLock} 
+          title={zoomLocked ? "Unlock Zoom" : "Lock Zoom"}
+          className={zoomLocked ? "text-primary" : ""}
+        >
+          {zoomLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+        </Button>
+        <Button variant="ghost" size="icon" onClick={handleZoomOut} title="Zoom Out" disabled={zoomLocked}>
           <ZoomOut className="h-4 w-4" />
         </Button>
         <Button variant="ghost" size="sm" onClick={handleFitView} title="Fit to View">
           <Maximize className="h-4 w-4 mr-2" />
           {Math.round(zoom * 100)}%
         </Button>
-        <Button variant="ghost" size="icon" onClick={handleZoomIn} title="Zoom In">
+        <Button variant="ghost" size="icon" onClick={handleZoomIn} title="Zoom In" disabled={zoomLocked}>
           <ZoomIn className="h-4 w-4" />
         </Button>
       </div>

@@ -18,6 +18,7 @@ interface DesignStore {
   pan: { x: number; y: number };
   gridVisible: boolean;
   snapEnabled: boolean;
+  zoomLocked: boolean;
   
   // History
   history: Component[][];
@@ -38,6 +39,7 @@ interface DesignStore {
   setPan: (pan: { x: number; y: number }) => void;
   toggleGrid: () => void;
   toggleSnap: () => void;
+  toggleZoomLock: () => void;
   
   getMeasurements: () => Summary;
   saveCurrentProject: () => void;
@@ -54,6 +56,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   pan: { x: 0, y: 0 },
   gridVisible: true,
   snapEnabled: true,
+  zoomLocked: false,
   
   history: [[]],
   historyIndex: 0,
@@ -173,6 +176,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   setPan: (pan) => set({ pan }),
   toggleGrid: () => set((state) => ({ gridVisible: !state.gridVisible })),
   toggleSnap: () => set((state) => ({ snapEnabled: !state.snapEnabled })),
+  toggleZoomLock: () => set((state) => ({ zoomLocked: !state.zoomLocked })),
   
   getMeasurements: () => {
     const { components } = get();
