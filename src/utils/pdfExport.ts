@@ -32,14 +32,34 @@ export const exportToPDF = async (
   pdf.text(`Scale: ${options.scale}`, margin, margin + 18);
   pdf.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth - margin - 40, margin + 18);
 
-  // Add canvas image
+  // Add canvas image with proper aspect ratio
   const canvasY = margin + 25;
-  const canvasHeight = pageHeight * 0.5;
-  const canvasWidth = contentWidth;
+  const maxCanvasHeight = pageHeight * 0.55;
+  const maxCanvasWidth = contentWidth;
+  
+  // Calculate dimensions maintaining aspect ratio
+  const canvasAspectRatio = canvasElement.width / canvasElement.height;
+  let canvasWidth = maxCanvasWidth;
+  let canvasHeight = canvasWidth / canvasAspectRatio;
+  
+  // If height is too large, scale based on height instead
+  if (canvasHeight > maxCanvasHeight) {
+    canvasHeight = maxCanvasHeight;
+    canvasWidth = canvasHeight * canvasAspectRatio;
+  }
 
   try {
-    const canvasData = canvasElement.toDataURL('image/png');
-    pdf.addImage(canvasData, 'PNG', margin, canvasY, canvasWidth, canvasHeight);
+    const canvasData = canvasElement.toDataURL('image/png', 1.0);
+    
+    // Center the canvas horizontally if it's smaller than max width
+    const canvasX = margin + (maxCanvasWidth - canvasWidth) / 2;
+    
+    // Add a border around the canvas
+    pdf.setDrawColor(200, 200, 200);
+    pdf.setLineWidth(0.5);
+    pdf.rect(canvasX, canvasY, canvasWidth, canvasHeight);
+    
+    pdf.addImage(canvasData, 'PNG', canvasX, canvasY, canvasWidth, canvasHeight);
   } catch (error) {
     console.error('Failed to add canvas to PDF:', error);
   }
@@ -75,7 +95,7 @@ export const exportToPDF = async (
 };
 
 const addLegend = (pdf: jsPDF, x: number, y: number, width: number) => {
-  pdf.setFontSize(12);
+  pdf.setFontSize(11);
   pdf.setFont('helvetica', 'bold');
   pdf.text('Legend', x, y);
 
@@ -83,35 +103,41 @@ const addLegend = (pdf: jsPDF, x: number, y: number, width: number) => {
   pdf.setFont('helvetica', 'normal');
   
   const legendItems = [
-    { color: '#3b82f6', label: 'Pool' },
-    { color: '#d4d4d4', label: 'Paving' },
-    { color: '#9ca3af', label: 'Drainage' },
-    { color: '#6b7280', label: 'Fencing' },
-    { color: '#78350f', label: 'Retaining Wall' },
-    { color: '#22c55e', label: 'Boundary' },
-    { color: '#f59e0b', label: 'House' },
+    { color: [59, 130, 246], label: 'Pool' },
+    { color: [212, 212, 212], label: 'Paving' },
+    { color: [156, 163, 175], label: 'Drainage' },
+    { color: [107, 114, 128], label: 'Fencing' },
+    { color: [120, 53, 15], label: 'Retaining Wall' },
+    { color: [34, 197, 94], label: 'Boundary' },
+    { color: [245, 158, 11], label: 'House' },
   ];
 
-  let currentY = y + 7;
-  const boxSize = 4;
-  const itemSpacing = 20;
+  let currentY = y + 6;
+  const boxSize = 5;
+  const spacing = 3;
   let currentX = x;
 
   legendItems.forEach((item, index) => {
-    // Draw colored box
-    pdf.setFillColor(item.color);
-    pdf.rect(currentX, currentY - 3, boxSize, boxSize, 'F');
-    
-    // Draw label
-    pdf.text(item.label, currentX + boxSize + 2, currentY);
-    
-    currentX += itemSpacing + pdf.getTextWidth(item.label);
+    const textWidth = pdf.getTextWidth(item.label);
+    const itemWidth = boxSize + spacing + textWidth;
     
     // Wrap to next row if needed
-    if (currentX > x + width - 40 && index < legendItems.length - 1) {
+    if (currentX + itemWidth > x + width && index > 0) {
       currentX = x;
       currentY += 7;
     }
+    
+    // Draw colored box with border
+    pdf.setFillColor(item.color[0], item.color[1], item.color[2]);
+    pdf.setDrawColor(100, 100, 100);
+    pdf.setLineWidth(0.2);
+    pdf.rect(currentX, currentY - boxSize + 1, boxSize, boxSize, 'FD');
+    
+    // Draw label
+    pdf.setTextColor(0, 0, 0);
+    pdf.text(item.label, currentX + boxSize + spacing, currentY);
+    
+    currentX += itemWidth + 10;
   });
 };
 
