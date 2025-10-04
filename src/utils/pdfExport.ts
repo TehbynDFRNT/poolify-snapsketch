@@ -104,12 +104,12 @@ const addLegend = (pdf: jsPDF, x: number, y: number, width: number) => {
   
   const legendItems = [
     { color: [59, 130, 246], label: 'Pool' },
-    { color: [212, 212, 212], label: 'Paving' },
-    { color: [156, 163, 175], label: 'Drainage' },
-    { color: [107, 114, 128], label: 'Fencing' },
-    { color: [120, 53, 15], label: 'Retaining Wall' },
-    { color: [34, 197, 94], label: 'Boundary' },
-    { color: [245, 158, 11], label: 'House' },
+    { color: [150, 150, 150], label: 'Paving' },
+    { color: [152, 156, 164], label: 'Drainage' },
+    { color: [93, 165, 218], label: 'Fencing' },
+    { color: [140, 107, 74], label: 'Retaining Wall' },
+    { color: [234, 179, 8], label: 'Boundary' },
+    { color: [146, 64, 14], label: 'House' },
   ];
 
   let currentY = y + 6;
@@ -168,14 +168,26 @@ const addSummary = (pdf: jsPDF, project: Project, x: number, y: number, width: n
     currentY += 2;
   }
 
-  // Paving
+  // Paving - aggregate by size
   if (summary.paving.length > 0) {
     pdf.setFont('helvetica', 'bold');
     pdf.text('Paving:', x, currentY);
     pdf.setFont('helvetica', 'normal');
     currentY += lineHeight;
     
-    summary.paving.forEach(paver => {
+    // Aggregate paving by size
+    const aggregated = summary.paving.reduce((acc, paver) => {
+      const existing = acc.find(p => p.size === paver.size);
+      if (existing) {
+        existing.count += paver.count;
+        existing.area += paver.area;
+      } else {
+        acc.push({ ...paver });
+      }
+      return acc;
+    }, [] as typeof summary.paving);
+    
+    aggregated.forEach(paver => {
       pdf.text(`  • ${paver.size}: ${paver.count} pavers (${formatArea(paver.area)})`, x, currentY);
       currentY += lineHeight;
     });

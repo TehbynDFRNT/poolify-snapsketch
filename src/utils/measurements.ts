@@ -31,7 +31,7 @@ export const calculateMeasurements = (components: Component[]): Summary => {
         const paverDim = PAVER_SIZES[size];
         const area = (totalCount * paverDim.width * paverDim.height) / 1000000; // Convert to m²
 
-        const existing = summary.paving.find(p => p.size === size);
+        const existing = summary.paving.find(p => p.size === PAVER_SIZES[size].label);
         if (existing) {
           existing.count += totalCount;
           existing.area += area;
