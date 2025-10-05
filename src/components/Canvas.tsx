@@ -72,8 +72,23 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
     };
 
     updateDimensions();
+    
+    // Watch for window resize
     window.addEventListener('resize', updateDimensions);
-    return () => window.removeEventListener('resize', updateDimensions);
+    
+    // Watch for container size changes (e.g., when properties panel collapses)
+    const resizeObserver = new ResizeObserver(() => {
+      updateDimensions();
+    });
+    
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+    
+    return () => {
+      window.removeEventListener('resize', updateDimensions);
+      resizeObserver.disconnect();
+    };
   }, []);
 
   // Handle mouse move for drawing tools
