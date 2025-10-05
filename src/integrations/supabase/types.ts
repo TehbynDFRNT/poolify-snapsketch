@@ -230,7 +230,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      check_user_project_access: {
+        Args: { project_id: string; user_id: string }
+        Returns: {
+          has_access: boolean
+          permission: Database["public"]["Enums"]["share_permission"]
+        }[]
+      }
     }
     Enums: {
       app_role: "sales_rep" | "designer" | "admin"
