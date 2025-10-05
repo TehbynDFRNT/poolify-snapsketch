@@ -1,3 +1,5 @@
+import { GRID_CONFIG } from '@/constants/grid';
+
 interface Point {
   x: number;
   y: number;
@@ -6,10 +8,12 @@ interface Point {
 interface Paver {
   id: string;
   position: Point;
-  width: number;
-  height: number;
+  width: number; // pixels on canvas
+  height: number; // pixels on canvas
   isEdgePaver: boolean;
   cutPercentage?: number;
+  mmWidth?: number; // original paver width in mm
+  mmHeight?: number; // original paver height in mm
 }
 
 export function getPaverDimensions(
@@ -35,32 +39,18 @@ export function fillAreaWithPavers(
 ): Paver[] {
   const pavers: Paver[] = [];
   
-  // Get paver dimensions
-  const { width: paverWidth, height: paverHeight } = getPaverDimensions(paverSize, paverOrientation);
+  // Get paver dimensions (mm) and convert to canvas pixels
+  const { width: paverWidthMm, height: paverHeightMm } = getPaverDimensions(paverSize, paverOrientation);
+  const pxPerMm = GRID_CONFIG.spacing / 100; // 10px per 100mm => 0.1 px/mm
+  const paverWidth = paverWidthMm * pxPerMm;
+  const paverHeight = paverHeightMm * pxPerMm;
   
-  console.log('Filling area with pavers:', {
-    paverSize,
-    paverOrientation,
-    paverWidth,
-    paverHeight,
-    showEdgePavers,
-    boundaryPoints: boundary.length
-  });
-  
-  // Get bounding box
+  // Get bounding box (canvas pixels)
   const bbox = getBoundingBox(boundary);
   
-  console.log('Bounding box:', {
-    width: bbox.width,
-    height: bbox.height,
-    area: (bbox.width * bbox.height) / 1000000,
-  });
-  
-  // Calculate grid
+  // Calculate grid counts using pixel sizes
   const cols = Math.ceil(bbox.width / paverWidth);
   const rows = Math.ceil(bbox.height / paverHeight);
-  
-  console.log('Grid dimensions:', { rows, cols, maxPossible: rows * cols });
   
   // Create grid
   for (let row = 0; row < rows; row++) {
@@ -95,17 +85,13 @@ export function fillAreaWithPavers(
             height: paverHeight,
             isEdgePaver: isEdge,
             cutPercentage: isEdge ? Math.round((cornersOutside.length / 4) * 100) : 0,
+            mmWidth: paverWidthMm,
+            mmHeight: paverHeightMm,
           });
         }
       }
     }
   }
-  
-  console.log('Pavers created:', {
-    total: pavers.length,
-    full: pavers.filter(p => !p.isEdgePaver).length,
-    edge: pavers.filter(p => p.isEdgePaver).length
-  });
   
   return pavers;
 }
@@ -119,27 +105,18 @@ export function calculateStatistics(
   const totalPavers = fullPavers + edgePavers;
   
   // Calculate area (area should be in square meters)
-  const paverAreaM2 = pavers.length > 0 
-    ? (pavers[0].width * pavers[0].height) / 1000000 // mm² to m²
-    : 0;
+  let paverAreaM2 = 0;
+  if (pavers.length > 0) {
+    const pxPerMm = GRID_CONFIG.spacing / 100; // 0.1 px/mm
+    const mmW = pavers[0].mmWidth ?? (pavers[0].width / pxPerMm);
+    const mmH = pavers[0].mmHeight ?? (pavers[0].height / pxPerMm);
+    paverAreaM2 = (mmW * mmH) / 1000000; // mm² to m²
+  }
   const totalArea = paverAreaM2 * totalPavers;
   
   // Calculate order quantity with wastage
   const wastageAmount = Math.ceil(totalPavers * (wastagePercentage / 100));
   const orderQuantity = totalPavers + wastageAmount;
-  
-  // Debug logging
-  console.log('Paving Statistics:', {
-    totalPavers,
-    fullPavers,
-    edgePavers,
-    paverAreaM2: paverAreaM2.toFixed(4),
-    totalArea: totalArea.toFixed(2),
-    wastagePercentage,
-    wastageAmount,
-    orderQuantity,
-    samplePaverSize: pavers.length > 0 ? `${pavers[0].width}×${pavers[0].height}mm` : 'none'
-  });
   
   return {
     fullPavers,
@@ -204,13 +181,16 @@ export function validateBoundary(
   // Additional validation if paver info provided
   if (paverSize && orientation) {
     const bbox = getBoundingBox(points);
-    const { width: paverWidth, height: paverHeight } = getPaverDimensions(paverSize, orientation);
+    const { width: paverWidthMm, height: paverHeightMm } = getPaverDimensions(paverSize, orientation);
+    const pxPerMm = GRID_CONFIG.spacing / 100;
+    const paverWidth = paverWidthMm * pxPerMm;
+    const paverHeight = paverHeightMm * pxPerMm;
     
     // Check if area is large enough to fit at least one paver
     if (bbox.width < paverWidth || bbox.height < paverHeight) {
       return { 
         valid: false, 
-        error: `Area too small to fit ${paverSize} pavers (needs at least ${paverWidth}×${paverHeight}mm)` 
+        error: `Area too small to fit ${paverSize} pavers (needs at least ${paverWidthMm}×${paverHeightMm}mm)` 
       };
     }
   }
@@ -257,3 +237,4 @@ function calculatePolygonArea(points: Point[]): number {
   }
   return Math.abs(area / 2);
 }
+
