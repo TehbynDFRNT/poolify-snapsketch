@@ -14,7 +14,217 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      activity_log: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          id: string
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_log_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comments: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      companies: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          owner_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          company_id: string | null
+          created_at: string
+          full_name: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          company_id?: string | null
+          created_at?: string
+          full_name: string
+          id: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          company_id?: string | null
+          created_at?: string
+          full_name?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_shares: {
+        Row: {
+          id: string
+          permission: Database["public"]["Enums"]["share_permission"]
+          project_id: string
+          revoked_at: string | null
+          shared_at: string
+          shared_by: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          permission?: Database["public"]["Enums"]["share_permission"]
+          project_id: string
+          revoked_at?: string | null
+          shared_at?: string
+          shared_by: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          permission?: Database["public"]["Enums"]["share_permission"]
+          project_id?: string
+          revoked_at?: string | null
+          shared_at?: string
+          shared_by?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_shares_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          address: string
+          company_id: string | null
+          components: Json
+          created_at: string
+          customer_name: string
+          id: string
+          is_archived: boolean
+          notes: string | null
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          address: string
+          company_id?: string | null
+          components?: Json
+          created_at?: string
+          customer_name: string
+          id?: string
+          is_archived?: boolean
+          notes?: string | null
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          company_id?: string | null
+          components?: Json
+          created_at?: string
+          customer_name?: string
+          id?: string
+          is_archived?: boolean
+          notes?: string | null
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +233,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      app_role: "sales_rep" | "designer" | "admin"
+      share_permission: "view" | "edit" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +361,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["sales_rep", "designer", "admin"],
+      share_permission: ["view", "edit", "admin"],
+    },
   },
 } as const
