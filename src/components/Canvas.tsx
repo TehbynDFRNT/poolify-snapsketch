@@ -269,6 +269,13 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
       config.showEdgePavers
     );
     
+    // Warn if no pavers were generated
+    if (pavers.length === 0) {
+      toast.error('Area is too small to fit any pavers. Please draw a larger area.');
+      setPavingBoundary([]);
+      return;
+    }
+    
     // Calculate statistics
     const statistics = calculateStatistics(pavers, config.wastagePercentage);
     
@@ -290,7 +297,7 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
     });
     
     setPavingBoundary([]);
-    toast.success('Paving area created');
+    toast.success(`Paving area created with ${pavers.length} pavers`);
   };
 
   // Finish drawing and create component

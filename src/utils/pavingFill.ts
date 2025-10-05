@@ -179,7 +179,11 @@ function isPointInPolygon(point: Point, polygon: Point[]): boolean {
   return inside;
 }
 
-export function validateBoundary(points: Point[]): { valid: boolean; error?: string } {
+export function validateBoundary(
+  points: Point[], 
+  paverSize?: '400x400' | '400x600',
+  orientation?: 'vertical' | 'horizontal'
+): { valid: boolean; error?: string } {
   if (points.length < 3) {
     return { valid: false, error: 'Need at least 3 points' };
   }
@@ -195,6 +199,20 @@ export function validateBoundary(points: Point[]): { valid: boolean; error?: str
   
   if (area > 10000000000) {
     return { valid: false, error: 'Area too large (maximum 10,000 m²)' };
+  }
+  
+  // Additional validation if paver info provided
+  if (paverSize && orientation) {
+    const bbox = getBoundingBox(points);
+    const { width: paverWidth, height: paverHeight } = getPaverDimensions(paverSize, orientation);
+    
+    // Check if area is large enough to fit at least one paver
+    if (bbox.width < paverWidth || bbox.height < paverHeight) {
+      return { 
+        valid: false, 
+        error: `Area too small to fit ${paverSize} pavers (needs at least ${paverWidth}×${paverHeight}mm)` 
+      };
+    }
   }
   
   return { valid: true };

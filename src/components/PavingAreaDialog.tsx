@@ -42,6 +42,16 @@ export const PavingAreaDialog = ({ open, onOpenChange, boundary, onConfirm }: Pa
   );
 
   const handleConfirm = () => {
+    // Validate that area can fit pavers before confirming
+    const { validateBoundary } = require('@/utils/pavingFill');
+    const validation = validateBoundary(boundary, paverSize, paverOrientation);
+    
+    if (!validation.valid) {
+      const { toast } = require('sonner');
+      toast.error(validation.error || 'Invalid paving area');
+      return;
+    }
+    
     onConfirm({
       paverSize,
       paverOrientation,
