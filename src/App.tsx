@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./hooks/useAuth";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { HomePage } from "./components/HomePage";
+import { CloudHomePage } from "./components/CloudHomePage";
 import { DesignCanvas } from "./components/DesignCanvas";
 import { InstallPrompt } from "./components/InstallPrompt";
 import { IOSInstallPrompt } from "./components/IOSInstallPrompt";
@@ -13,6 +13,8 @@ import { SignUp } from "./pages/SignUp";
 import { Login } from "./pages/Login";
 import { ForgotPassword } from "./pages/ForgotPassword";
 import { ResetPassword } from "./pages/ResetPassword";
+import { ProfileSettings } from "./pages/ProfileSettings";
+import { TeamManagement } from "./pages/TeamManagement";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,12 +39,22 @@ const App = () => (
             {/* Protected routes */}
             <Route path="/projects" element={
               <ProtectedRoute>
-                <HomePage />
+                <CloudHomePage />
               </ProtectedRoute>
             } />
             <Route path="/project/:id" element={
               <ProtectedRoute>
                 <DesignCanvas />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings/profile" element={
+              <ProtectedRoute>
+                <ProfileSettings />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings/team" element={
+              <ProtectedRoute>
+                <TeamManagement />
               </ProtectedRoute>
             } />
             

@@ -10,8 +10,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { useDesignStore } from '@/store/designStore';
-import { loadProject } from '@/utils/storage';
 import { toast } from 'sonner';
 import { Canvas } from './Canvas';
 import { TopBar } from './TopBar';
@@ -25,12 +26,15 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 export const DesignCanvas = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [activeTool, setActiveTool] = useState<ToolType>('select');
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(350);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [permission, setPermission] = useState<'view' | 'edit' | 'admin' | 'owner'>('owner');
+  const [loading, setLoading] = useState(true);
   
   useKeyboardShortcuts(); // Enable keyboard shortcuts
   
@@ -75,42 +79,101 @@ export const DesignCanvas = () => {
   }, []);
 
   useEffect(() => {
-    if (id) {
-      const project = loadProject(id);
-      if (project) {
-        setCurrentProject(project);
-        const updatedDate = typeof project.updatedAt === 'string' 
-          ? new Date(project.updatedAt)
-          : project.updatedAt;
-        setLastSaved(updatedDate);
-      } else {
-        toast.error('Project not found');
-        navigate('/');
-      }
+    if (id && user) {
+      loadCloudProject(id);
     }
-  }, [id, setCurrentProject, navigate]);
+  }, [id, user]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (currentProject) {
-        saveCurrentProject();
-        setLastSaved(new Date());
-        toast.success('Auto-saved', { duration: 1000 });
+  const loadCloudProject = async (projectId: string) => {
+    if (!user) return;
+
+    try {
+      // Check if user owns the project
+      const { data: project, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .single();
+
+      if (error) throw error;
+
+      if (!project) {
+        toast.error('Project not found');
+        navigate('/projects');
+        return;
       }
-    }, 30000); // Every 30 seconds
 
+      // Check permission
+      if (project.owner_id === user.id) {
+        setPermission('owner');
+      } else {
+        // Check if shared
+        const { data: share } = await supabase
+          .from('project_shares')
+          .select('permission')
+          .eq('project_id', projectId)
+          .eq('user_id', user.id)
+          .is('revoked_at', null)
+          .single();
+
+        if (share) {
+          setPermission(share.permission as any);
+        } else {
+          toast.error('You do not have access to this project');
+          navigate('/projects');
+          return;
+        }
+      }
+
+      // Load project into store
+      setCurrentProject({
+        id: project.id,
+        customerName: project.customer_name,
+        address: project.address,
+        notes: project.notes || '',
+        createdAt: new Date(project.created_at),
+        updatedAt: new Date(project.updated_at),
+        components: (project.components as any) || [],
+      });
+
+      setLastSaved(new Date(project.updated_at));
+      setLoading(false);
+    } catch (error: any) {
+      toast.error(error.message);
+      navigate('/projects');
+    }
+  };
+
+  // Auto-save to cloud
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (currentProject && user && id && permission !== 'view') {
+        await handleSave();
+      }
+    }, 30000);
     return () => clearInterval(interval);
-  }, [currentProject, saveCurrentProject]);
+  }, [currentProject, components, user, id, permission]);
 
-  const handleSave = () => {
-    saveCurrentProject();
-    setLastSaved(new Date());
-    toast.success('Project saved');
+  const handleSave = async () => {
+    if (!currentProject || !user || !id || permission === 'view') return;
+    try {
+      await supabase.from('projects').update({
+        customer_name: currentProject.customerName,
+        address: currentProject.address,
+        notes: currentProject.notes,
+        components: components as any,
+        updated_at: new Date().toISOString(),
+      }).eq('id', id);
+      setLastSaved(new Date());
+      toast.success('Project saved');
+    } catch (error: any) {
+      toast.error('Save failed');
+    }
   };
 
   const handleBack = () => {
-    saveCurrentProject();
-    navigate('/');
+    handleSave();
+    navigate('/projects');
   };
 
   const handleExport = async (options: ExportOptions) => {
