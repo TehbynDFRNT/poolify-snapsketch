@@ -10,6 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useDesignStore } from '@/store/designStore';
@@ -262,7 +263,16 @@ export const DesignCanvas = () => {
             <SheetTitle>Menu</SheetTitle>
           </SheetHeader>
           <div className="mt-4 space-y-2">
-            <p className="text-sm text-muted-foreground">Additional options will appear here</p>
+            <Button
+              variant="destructive"
+              className="w-full"
+              onClick={() => {
+                setMenuOpen(false);
+                setClearAllDialogOpen(true);
+              }}
+            >
+              Clear All Components
+            </Button>
           </div>
         </SheetContent>
       </Sheet>
