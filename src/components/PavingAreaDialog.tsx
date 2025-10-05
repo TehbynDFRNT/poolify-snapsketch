@@ -5,6 +5,8 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'sonner';
+import { validateBoundary } from '@/utils/pavingFill';
 
 interface Point {
   x: number;
@@ -43,11 +45,9 @@ export const PavingAreaDialog = ({ open, onOpenChange, boundary, onConfirm }: Pa
 
   const handleConfirm = () => {
     // Validate that area can fit pavers before confirming
-    const { validateBoundary } = require('@/utils/pavingFill');
     const validation = validateBoundary(boundary, paverSize, paverOrientation);
     
     if (!validation.valid) {
-      const { toast } = require('sonner');
       toast.error(validation.error || 'Invalid paving area');
       return;
     }
