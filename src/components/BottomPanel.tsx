@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, ZoomIn, ZoomOut, Maximize, Lock, Unlock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,8 +10,6 @@ import { Component, Project } from '@/types';
 import { useDesignStore } from '@/store/designStore';
 import { fillAreaWithPavers, calculateStatistics } from '@/utils/pavingFill';
 import { calculateMeasurements } from '@/utils/measurements';
-import { transformPoolOutline, boundingBoxesOverlap, getPoolBoundingBox, ExcludeZone } from '@/utils/geometry';
-import { POOL_LIBRARY } from '@/constants/pools';
 import { toast } from 'sonner';
 
 interface BottomPanelProps {
@@ -94,7 +92,7 @@ export const BottomPanel = ({
   // Calculate materials summary
   const materialsSummary = {
     pools: components.filter(c => c.type === 'pool'),
-    pavingAreas: components.filter(c => c.type === 'paving_area'),
+    pavers: components.filter(c => c.type === 'paver'),
     drainage: components.filter(c => c.type === 'drainage'),
     fences: components.filter(c => c.type === 'fence'),
     walls: components.filter(c => c.type === 'wall'),
@@ -293,7 +291,7 @@ export const BottomPanel = ({
               )}
 
               {activeTab === 'materials' && (
-                <MaterialsSummary summary={materialsSummary} allComponents={components} />
+                <MaterialsSummary summary={materialsSummary} />
               )}
 
               {activeTab === 'notes' && (
@@ -644,16 +642,14 @@ const PropertiesContent = ({
 // Materials Summary Tab Content
 const MaterialsSummary = ({
   summary,
-  allComponents,
 }: {
   summary: {
     pools: Component[];
-    pavingAreas: Component[];
+    pavers: Component[];
     drainage: Component[];
     fences: Component[];
     walls: Component[];
   };
-  allComponents: Component[];
 }) => {
   return (
     <div className="space-y-4">
@@ -666,87 +662,29 @@ const MaterialsSummary = ({
           </CardHeader>
           <CardContent>
             <ul className="space-y-1">
-              {summary.pools.map((pool, i) => {
-                const poolData = POOL_LIBRARY.find(p => p.id === pool.properties.poolId);
-                return (
-                  <li key={pool.id} className="text-sm text-muted-foreground">
-                    • {poolData?.name || pool.properties.poolId || 'Pool'} - {poolData?.length}mm × {poolData?.width}mm
-                  </li>
-                );
-              })}
+              {summary.pools.map((pool, i) => (
+                <li key={pool.id} className="text-sm text-muted-foreground">
+                  • {pool.properties.poolId || 'Pool'} at ({Math.round(pool.position.x)}, {Math.round(pool.position.y)})
+                </li>
+              ))}
             </ul>
           </CardContent>
         </Card>
       )}
 
-      {summary.pavingAreas.length > 0 && (
+      {summary.pavers.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Paving Areas ({summary.pavingAreas.length})</CardTitle>
+            <CardTitle className="text-sm">Paving Areas ({summary.pavers.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {summary.pavingAreas.map((area) => {
-                // Recalculate statistics with pool exclusions
-                const boundary = area.properties.boundary || [];
-                const paverSize = area.properties.paverSize || '400x400';
-                const paverOrientation = area.properties.paverOrientation || 'vertical';
-                const wastagePercentage = area.properties.wastagePercentage || 10;
-                
-                // Find overlapping pools
-                const overlappingPools = allComponents.filter(c => 
-                  c.type === 'pool' && 
-                  c.id !== area.id &&
-                  boundingBoxesOverlap(boundary, getPoolBoundingBox(c))
-                );
-                
-                // Create exclude zones
-                const excludeZones: ExcludeZone[] = overlappingPools
-                  .map(pool => {
-                    const poolData = POOL_LIBRARY.find(p => p.id === pool.properties.poolId);
-                    if (!poolData) return null;
-                    
-                    return {
-                      outline: transformPoolOutline(poolData.outline, pool.position, pool.rotation),
-                      componentId: pool.id
-                    };
-                  })
-                  .filter(Boolean) as ExcludeZone[];
-                
-                // Recalculate pavers with pool exclusions
-                const filteredPavers = boundary.length > 0 
-                  ? fillAreaWithPavers(
-                      boundary,
-                      paverSize,
-                      paverOrientation,
-                      true, // include edge pavers for counting
-                      excludeZones.length > 0 ? excludeZones : undefined
-                    )
-                  : [];
-                
-                // Calculate final statistics
-                const stats = calculateStatistics(filteredPavers, wastagePercentage);
-                
-                return (
-                  <div key={area.id} className="text-sm space-y-1">
-                    <div className="font-medium text-foreground">
-                      {paverSize} Pavers
-                    </div>
-                    <div className="text-muted-foreground space-y-0.5">
-                      <div>• Full pavers: {stats.fullPavers}</div>
-                      <div>• Edge pavers: {stats.edgePavers}</div>
-                      <div>• Total area: {stats.totalArea.toFixed(2)} m²</div>
-                      <div className="font-medium">• Order quantity: {stats.orderQuantity} pavers</div>
-                      {overlappingPools.length > 0 && (
-                        <div className="text-xs text-amber-600 mt-1">
-                          ⚠ Excludes {overlappingPools.length} pool{overlappingPools.length > 1 ? 's' : ''}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <ul className="space-y-1">
+              {summary.pavers.map((paver, i) => (
+                <li key={paver.id} className="text-sm text-muted-foreground">
+                  • {paver.properties.paverSize || 'Paver'} - {Math.round(paver.dimensions.width * paver.dimensions.height / 10000)} m²
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       )}

@@ -15,7 +15,7 @@ import { ReferenceLineComponent } from './canvas/ReferenceLineComponent';
 import { PavingAreaComponent } from './canvas/PavingAreaComponent';
 import { PavingAreaDialog, PavingConfig } from './PavingAreaDialog';
 import { fillAreaWithPavers, calculateStatistics, validateBoundary } from '@/utils/pavingFill';
-import { snapToGrid, smartSnap, snapToPaverEdges } from '@/utils/snap';
+import { snapToGrid, smartSnap } from '@/utils/snap';
 import { toast } from 'sonner';
 import { PAVER_SIZES } from '@/constants/components';
 import { PoolSelector } from './PoolSelector';
@@ -487,22 +487,9 @@ export const Canvas = ({
 
   const handlePoolSelected = (pool: Pool) => {
     if (pendingPoolPosition) {
-      // Find paving area to get paver settings for snapping
-      const pavingArea = components.find(c => c.type === 'paving_area');
-      let snappedPosition = pendingPoolPosition;
-      
-      if (pavingArea?.properties?.boundary && pavingArea?.properties?.paverSize && pavingArea?.properties?.paverOrientation) {
-        snappedPosition = snapToPaverEdges(
-          pendingPoolPosition,
-          pavingArea.properties.boundary as Array<{ x: number; y: number }>,
-          pavingArea.properties.paverSize as '400x400' | '400x600',
-          pavingArea.properties.paverOrientation as 'vertical' | 'horizontal'
-        );
-      }
-      
       addComponent({
         type: 'pool',
-        position: snappedPosition,
+        position: pendingPoolPosition,
         rotation: 0,
         dimensions: { width: pool.length, height: pool.width },
         properties: {
@@ -907,19 +894,10 @@ export const Canvas = ({
                     isSelected={isSelected}
                     onSelect={() => selectComponent(component.id)}
                     onDragEnd={(pos) => {
-                      // Find paving area to get paver settings for snapping
-                      const pavingArea = components.find(c => c.type === 'paving_area');
-                      let snapped = { x: snapToGrid(pos.x), y: snapToGrid(pos.y) };
-                      
-                      if (pavingArea?.properties?.boundary && pavingArea?.properties?.paverSize && pavingArea?.properties?.paverOrientation) {
-                        snapped = snapToPaverEdges(
-                          pos,
-                          pavingArea.properties.boundary as Array<{ x: number; y: number }>,
-                          pavingArea.properties.paverSize as '400x400' | '400x600',
-                          pavingArea.properties.paverOrientation as 'vertical' | 'horizontal'
-                        );
-                      }
-                      
+                      const snapped = {
+                        x: snapToGrid(pos.x),
+                        y: snapToGrid(pos.y),
+                      };
                       updateComponent(component.id, { position: snapped });
                     }}
                   />
