@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Group, Line, Text, Circle, Rect } from 'react-konva';
 import { Component } from '@/types';
 import { POOL_LIBRARY } from '@/constants/pools';
+import { calculatePoolCoping } from '@/utils/copingCalculation';
 
 interface PoolComponentProps {
   component: Component;
@@ -21,6 +22,10 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   const scaledOutline = poolData.outline.map(p => ({ x: p.x * scale, y: p.y * scale }));
   const points = scaledOutline.flatMap(p => [p.x, p.y]);
 
+  // Calculate coping if enabled
+  const showCoping = component.properties.showCoping ?? false;
+  const copingCalc = showCoping && poolData ? calculatePoolCoping(poolData) : null;
+
   return (
     <Group
       ref={groupRef}
@@ -34,6 +39,32 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
         onDragEnd({ x: e.target.x(), y: e.target.y() });
       }}
     >
+      {/* Render coping FIRST (so it's behind the pool) */}
+      {showCoping && copingCalc && (
+        <Group>
+          {/* Render all coping pavers */}
+          {[
+            ...copingCalc.deepEnd.paverPositions,
+            ...copingCalc.shallowEnd.paverPositions,
+            ...copingCalc.leftSide.paverPositions,
+            ...copingCalc.rightSide.paverPositions,
+          ].map((paver, index) => (
+            <Rect
+              key={`coping-${index}`}
+              x={paver.x * scale}
+              y={paver.y * scale}
+              width={paver.width * scale}
+              height={paver.height * scale}
+              fill="#9CA3AF"
+              stroke="#6B7280"
+              strokeWidth={0.5}
+              dash={paver.isPartial ? [2, 2] : undefined}
+              opacity={paver.isPartial ? 0.8 : 1}
+            />
+          ))}
+        </Group>
+      )}
+
       {/* Pool outline - filled */}
       <Line
         points={points}

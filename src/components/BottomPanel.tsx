@@ -10,6 +10,7 @@ import { Component, Project } from '@/types';
 import { useDesignStore } from '@/store/designStore';
 import { fillAreaWithPavers, calculateStatistics } from '@/utils/pavingFill';
 import { calculateMeasurements } from '@/utils/measurements';
+import { POOL_LIBRARY } from '@/constants/pools';
 import { toast } from 'sonner';
 
 interface BottomPanelProps {
@@ -661,12 +662,32 @@ const MaterialsSummary = ({
             <CardTitle className="text-sm">Pools ({summary.pools.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-1">
-              {summary.pools.map((pool, i) => (
-                <li key={pool.id} className="text-sm text-muted-foreground">
-                  • {pool.properties.poolId || 'Pool'} at ({Math.round(pool.position.x)}, {Math.round(pool.position.y)})
-                </li>
-              ))}
+            <ul className="space-y-3">
+              {summary.pools.map((pool, i) => {
+                const poolData = POOL_LIBRARY.find(p => p.id === pool.properties.poolId);
+                return (
+                  <li key={pool.id} className="text-sm">
+                    <div className="font-medium">• {poolData?.name || 'Pool'}</div>
+                    <div className="text-xs text-muted-foreground ml-4 mt-1">
+                      Position: ({Math.round(pool.position.x)}, {Math.round(pool.position.y)})
+                    </div>
+                    {poolData && (
+                      <div className="text-xs text-muted-foreground ml-4">
+                        Dimensions: {poolData.length}mm × {poolData.width}mm
+                      </div>
+                    )}
+                    {pool.properties.showCoping && pool.properties.copingCalculation && (
+                      <div className="text-xs text-blue-600 dark:text-blue-400 ml-4 mt-1 space-y-0.5">
+                        <div className="font-medium">Coping: {pool.properties.copingCalculation.totalPavers} pavers (400×400mm)</div>
+                        <div>
+                          {pool.properties.copingCalculation.totalFullPavers} full + {pool.properties.copingCalculation.totalPartialPavers} partial
+                        </div>
+                        <div>Total area: {pool.properties.copingCalculation.totalArea.toFixed(2)} m²</div>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </CardContent>
         </Card>

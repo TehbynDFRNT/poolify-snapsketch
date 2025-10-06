@@ -4,11 +4,13 @@ import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { formatLength, formatArea } from '@/utils/measurements';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { POOL_LIBRARY } from '@/constants/pools';
 import { RotateCw, Copy, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { calculatePoolCoping } from '@/utils/copingCalculation';
 
 export const PropertiesPanel = () => {
   const { selectedComponentId, components, getMeasurements, updateComponent, deleteComponent, duplicateComponent } = useDesignStore();
@@ -445,6 +447,77 @@ export const PropertiesPanel = () => {
                         <p className="text-xs text-muted-foreground">
                           ({poolData.length / 1000}m × {poolData.width / 1000}m)
                         </p>
+                      </div>
+                    )}
+
+                    {/* Pool Coping Section */}
+                    {poolData && (
+                      <div className="space-y-2 pt-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Pool Coping</Label>
+                          <Switch
+                            checked={selectedComponent.properties.showCoping ?? false}
+                            onCheckedChange={(checked) => {
+                              const copingCalculation = checked ? calculatePoolCoping(poolData) : undefined;
+                              updateComponent(selectedComponent.id, {
+                                properties: {
+                                  ...selectedComponent.properties,
+                                  showCoping: checked,
+                                  copingCalculation,
+                                },
+                              });
+                            }}
+                          />
+                        </div>
+                        
+                        {selectedComponent.properties.showCoping && selectedComponent.properties.copingCalculation && (
+                          <div className="text-xs space-y-1 bg-muted p-3 rounded-lg">
+                            <div className="font-medium mb-2">Coping Details (400×400mm pavers):</div>
+                            <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
+                              <div>Deep End (2 rows):</div>
+                              <div className="text-right font-mono">
+                                {selectedComponent.properties.copingCalculation.deepEnd.fullPavers} full
+                                {selectedComponent.properties.copingCalculation.deepEnd.partialPaver && 
+                                  ` + 2×${selectedComponent.properties.copingCalculation.deepEnd.partialPaver}mm`
+                                }
+                              </div>
+                              
+                              <div>Shallow End:</div>
+                              <div className="text-right font-mono">
+                                {selectedComponent.properties.copingCalculation.shallowEnd.fullPavers} full
+                                {selectedComponent.properties.copingCalculation.shallowEnd.partialPaver && 
+                                  ` + ${selectedComponent.properties.copingCalculation.shallowEnd.partialPaver}mm`
+                                }
+                              </div>
+                              
+                              <div>Left Side:</div>
+                              <div className="text-right font-mono">
+                                {selectedComponent.properties.copingCalculation.leftSide.fullPavers} full
+                                {selectedComponent.properties.copingCalculation.leftSide.partialPaver && 
+                                  ` + ${selectedComponent.properties.copingCalculation.leftSide.partialPaver}mm`
+                                }
+                              </div>
+                              
+                              <div>Right Side:</div>
+                              <div className="text-right font-mono">
+                                {selectedComponent.properties.copingCalculation.rightSide.fullPavers} full
+                                {selectedComponent.properties.copingCalculation.rightSide.partialPaver && 
+                                  ` + ${selectedComponent.properties.copingCalculation.rightSide.partialPaver}mm`
+                                }
+                              </div>
+                              
+                              <div className="font-semibold pt-2 border-t mt-1">Total:</div>
+                              <div className="text-right font-mono font-semibold pt-2 border-t mt-1">
+                                {selectedComponent.properties.copingCalculation.totalPavers} pavers
+                              </div>
+                              
+                              <div className="text-muted-foreground">({selectedComponent.properties.copingCalculation.totalFullPavers} full + {selectedComponent.properties.copingCalculation.totalPartialPavers} partial)</div>
+                              <div className="text-right font-mono col-start-2">
+                                {selectedComponent.properties.copingCalculation.totalArea.toFixed(2)} m²
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                 
