@@ -74,16 +74,15 @@ export function fillAreaWithPavers(
         y: y + paverHeight / 2,
       };
       
-      // Check if paver overlaps any exclude zone (e.g., pool)
-      // Skip entirely if any part overlaps the pool
+      // Check overlap with exclude zones (e.g., pool)
+      // Skip only if paver is fully inside a pool; otherwise allow partials and mark as edge
+      let cornersInPool = 0;
+      let centerInPool = false;
       if (excludeZones) {
-        const paverCornersAndCenter = [...corners, paverCenter];
-        const overlapsExcludeZone = paverCornersAndCenter.some(point => 
-          isInsideExcludeZone(point, excludeZones)
-        );
-        
-        if (overlapsExcludeZone) {
-          continue; // Skip this paver - no partial pavers at pool edge
+        cornersInPool = corners.filter(corner => isInsideExcludeZone(corner, excludeZones)).length;
+        centerInPool = isInsideExcludeZone(paverCenter, excludeZones);
+        if (cornersInPool === 4 && centerInPool) {
+          continue; // Entire paver is inside a pool - skip it
         }
       }
       
@@ -93,9 +92,9 @@ export function fillAreaWithPavers(
       
       // Include paver if center is inside boundary OR at least one corner is inside boundary
       if (centerInside || cornersInside.length > 0) {
-        // Only mark as edge paver if at boundary edge (not pool edge)
+        // Mark as edge paver if it touches boundary OR pool
         const cornersOutsideBoundary = corners.length - cornersInside.length;
-        const isEdge = cornersOutsideBoundary > 0;
+        const isEdge = cornersOutsideBoundary > 0 || cornersInPool > 0 || centerInPool;
         
         // Only add if showing edge pavers OR it's a full paver
         if (showEdgePavers || !isEdge) {
@@ -105,7 +104,7 @@ export function fillAreaWithPavers(
             width: paverWidth,
             height: paverHeight,
             isEdgePaver: isEdge,
-            cutPercentage: isEdge ? Math.round((cornersOutsideBoundary / 4) * 100) : 0,
+            cutPercentage: isEdge ? Math.round((Math.max(cornersOutsideBoundary, cornersInPool) / 4) * 100) : 0,
             mmWidth: paverWidthMm,
             mmHeight: paverHeightMm,
           });
