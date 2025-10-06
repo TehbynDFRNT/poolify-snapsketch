@@ -24,6 +24,8 @@ interface BottomPanelProps {
   onZoomOut: () => void;
   onFitView: () => void;
   onToggleZoomLock: () => void;
+  isDrawing?: boolean;
+  drawingPointsCount?: number;
 }
 
 type TabType = 'properties' | 'materials' | 'notes';
@@ -39,6 +41,8 @@ export const BottomPanel = ({
   onZoomOut,
   onFitView,
   onToggleZoomLock,
+  isDrawing = false,
+  drawingPointsCount = 0,
 }: BottomPanelProps) => {
   const [activeTab, setActiveTab] = useState<TabType>('properties');
   const [isResizing, setIsResizing] = useState(false);
@@ -170,53 +174,71 @@ export const BottomPanel = ({
       ) : (
         <>
           {/* Tabs */}
-          <div className="flex border-b">
-            <button
-              onClick={() => setActiveTab('properties')}
-              className={`
-                px-4 py-2 font-medium text-sm transition-colors
-                ${activeTab === 'properties'
-                  ? 'border-b-2 border-primary text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-                }
-              `}
-            >
-              Properties
-              {selectedComponent && (
-                <span className="ml-2 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                  {selectedComponent.type}
-                </span>
-              )}
-            </button>
+          <div className="flex border-b items-center">
+            <div className="flex">
+              <button
+                onClick={() => setActiveTab('properties')}
+                className={`
+                  px-4 py-2 font-medium text-sm transition-colors
+                  ${activeTab === 'properties'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                  }
+                `}
+              >
+                Properties
+                {selectedComponent && (
+                  <span className="ml-2 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                    {selectedComponent.type}
+                  </span>
+                )}
+              </button>
 
-            <button
-              onClick={() => setActiveTab('materials')}
-              className={`
-                px-4 py-2 font-medium text-sm transition-colors
-                ${activeTab === 'materials'
-                  ? 'border-b-2 border-primary text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-                }
-              `}
-            >
-              Materials Summary
-            </button>
+              <button
+                onClick={() => setActiveTab('materials')}
+                className={`
+                  px-4 py-2 font-medium text-sm transition-colors
+                  ${activeTab === 'materials'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                  }
+                `}
+              >
+                Materials Summary
+              </button>
 
-            <button
-              onClick={() => setActiveTab('notes')}
-              className={`
-                px-4 py-2 font-medium text-sm transition-colors
-                ${activeTab === 'notes'
-                  ? 'border-b-2 border-primary text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-                }
-              `}
-            >
-              Notes
-              {hasUnsavedNotes && (
-                <span className="ml-2 w-2 h-2 bg-orange-500 rounded-full inline-block" />
-              )}
-            </button>
+              <button
+                onClick={() => setActiveTab('notes')}
+                className={`
+                  px-4 py-2 font-medium text-sm transition-colors
+                  ${activeTab === 'notes'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                  }
+                `}
+              >
+                Notes
+                {hasUnsavedNotes && (
+                  <span className="ml-2 w-2 h-2 bg-orange-500 rounded-full inline-block" />
+                )}
+              </button>
+            </div>
+
+            {/* Drawing Status Message - Centered */}
+            {isDrawing && (
+              <div className="flex-1 flex justify-center items-center px-4">
+                <div className="bg-card border border-border rounded-lg px-3 py-1.5 shadow-md">
+                  <p className="text-xs text-foreground">
+                    ℹ️ {drawingPointsCount >= 3 
+                      ? 'Click first point to close or press Enter to finish' 
+                      : 'Click points to draw'}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    Press Escape to cancel • Z to undo last point
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Zoom Controls */}
             <div className="ml-auto flex gap-1 items-center border-r pr-2 mr-2">

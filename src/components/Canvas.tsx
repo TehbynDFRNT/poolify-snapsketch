@@ -26,6 +26,7 @@ export const Canvas = ({
   activeTool = 'select',
   onZoomChange,
   onZoomLockedChange,
+  onDrawingStateChange,
 }: { 
   activeTool?: string;
   onZoomChange?: (zoom: number, locked: boolean, handlers: {
@@ -35,6 +36,7 @@ export const Canvas = ({
     toggleLock: () => void;
   }) => void;
   onZoomLockedChange?: (locked: boolean) => void;
+  onDrawingStateChange?: (isDrawing: boolean, pointsCount: number) => void;
 }) => {
   const stageRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -131,6 +133,13 @@ export const Canvas = ({
       });
     }
   }, [zoom, zoomLocked, handleZoomIn, handleZoomOut, handleFitView, toggleZoomLock, onZoomChange]);
+
+  // Notify parent about drawing state
+  useEffect(() => {
+    if (onDrawingStateChange) {
+      onDrawingStateChange(isDrawing, drawingPoints.length);
+    }
+  }, [isDrawing, drawingPoints.length, onDrawingStateChange]);
 
   // Handle mouse move for drawing tools
   const handleMouseMove = (e: any) => {
@@ -1090,9 +1099,6 @@ export const Canvas = ({
           })}
         </Layer>
       </Stage>
-
-      {/* Status message for drawing */}
-      {renderStatusMessage()}
 
       {/* Pool Selector Modal */}
       {showPoolSelector && (
