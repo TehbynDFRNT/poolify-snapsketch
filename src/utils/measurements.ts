@@ -42,22 +42,21 @@ export const calculateMeasurements = (components: Component[]): Summary => {
         const boundary = component.properties.boundary || [];
         const paverSize = component.properties.paverSize || '400x400';
         const paverOrientation = component.properties.paverOrientation || 'vertical';
-        const showEdgePavers = component.properties.showEdgePavers !== false;
 
         if (boundary.length >= 3) {
-          // Recalculate with exclude zones to get accurate count
-          const filteredPavers = fillAreaWithPavers(
+          // Always count ALL pavers (full + edge) for materials - pass true for showEdgePavers
+          const allPavers = fillAreaWithPavers(
             boundary,
             paverSize,
             paverOrientation,
-            showEdgePavers,
+            true, // Always include edge pavers in materials count
             excludeZones
           );
 
           const paverDim = PAVER_SIZES[paverSize];
-          const totalCount = filteredPavers.length;
-          const fullCount = filteredPavers.filter(p => !p.isEdgePaver).length;
-          const edgeCount = filteredPavers.filter(p => p.isEdgePaver).length;
+          const totalCount = allPavers.length;
+          const fullCount = allPavers.filter(p => !p.isEdgePaver).length;
+          const edgeCount = allPavers.filter(p => p.isEdgePaver).length;
           const area = (totalCount * paverDim.width * paverDim.height) / 1000000;
 
           const existing = summary.paving.find(p => p.size === paverDim.label);
