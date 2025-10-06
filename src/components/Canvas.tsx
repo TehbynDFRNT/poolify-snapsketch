@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { Stage, Layer, Line, Circle, Text, Label, Tag } from 'react-konva';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
@@ -74,6 +74,22 @@ export const Canvas = ({
     deleteComponent,
   } = useDesignStore();
 
+  // Zoom handlers - memoized to prevent infinite loops
+  const handleZoomIn = useCallback(() => {
+    const newZoom = Math.min(zoom * 1.2, 4);
+    setZoom(newZoom);
+  }, [zoom, setZoom]);
+
+  const handleZoomOut = useCallback(() => {
+    const newZoom = Math.max(zoom / 1.2, 0.25);
+    setZoom(newZoom);
+  }, [zoom, setZoom]);
+
+  const handleFitView = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, [setZoom, setPan]);
+
   useEffect(() => {
     const updateDimensions = () => {
       if (containerRef.current) {
@@ -114,7 +130,7 @@ export const Canvas = ({
         toggleLock: toggleZoomLock,
       });
     }
-  }, [zoom, zoomLocked, onZoomChange]);
+  }, [zoom, zoomLocked, handleZoomIn, handleZoomOut, handleFitView, toggleZoomLock, onZoomChange]);
 
   // Handle mouse move for drawing tools
   const handleMouseMove = (e: any) => {
@@ -570,21 +586,6 @@ export const Canvas = ({
     };
 
     setPan(newPos);
-  };
-
-  const handleZoomIn = () => {
-    const newZoom = Math.min(zoom * 1.2, 4);
-    setZoom(newZoom);
-  };
-
-  const handleZoomOut = () => {
-    const newZoom = Math.max(zoom / 1.2, 0.25);
-    setZoom(newZoom);
-  };
-
-  const handleFitView = () => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
   };
 
   const renderGrid = () => {
