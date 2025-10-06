@@ -1,4 +1,5 @@
 import { GRID_CONFIG } from '@/constants/grid';
+import { ExcludeZone, isInsideExcludeZone } from './geometry';
 
 interface Point {
   x: number;
@@ -35,7 +36,8 @@ export function fillAreaWithPavers(
   boundary: Point[],
   paverSize: '400x400' | '400x600',
   paverOrientation: 'vertical' | 'horizontal',
-  showEdgePavers: boolean
+  showEdgePavers: boolean,
+  excludeZones?: ExcludeZone[]
 ): Paver[] {
   const pavers: Paver[] = [];
   
@@ -71,6 +73,11 @@ export function fillAreaWithPavers(
         x: x + paverWidth / 2,
         y: y + paverHeight / 2,
       };
+      
+      // Check if paver center is inside any exclude zone (e.g., pool)
+      if (excludeZones && isInsideExcludeZone(paverCenter, excludeZones)) {
+        continue; // Skip this paver position
+      }
       
       // Count how many corners are inside
       const cornersInside = corners.filter(corner => isPointInPolygon(corner, boundary));
