@@ -6,7 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Component, Project } from '@/types';
+import { Component, Project, Summary } from '@/types';
 import { useDesignStore } from '@/store/designStore';
 import { fillAreaWithPavers, calculateStatistics } from '@/utils/pavingFill';
 import { calculateMeasurements } from '@/utils/measurements';
@@ -90,14 +90,8 @@ export const BottomPanel = ({
     onHeightChange(isCollapsed ? 350 : 40);
   };
 
-  // Calculate materials summary
-  const materialsSummary = {
-    pools: components.filter(c => c.type === 'pool'),
-    pavers: components.filter(c => c.type === 'paver'),
-    drainage: components.filter(c => c.type === 'drainage'),
-    fences: components.filter(c => c.type === 'fence'),
-    walls: components.filter(c => c.type === 'wall'),
-  };
+  // Calculate materials summary using proper measurement calculations
+  const materialsSummary = calculateMeasurements(components);
 
   return (
     <div
@@ -649,13 +643,7 @@ const PropertiesContent = ({
 const MaterialsSummary = ({
   summary,
 }: {
-  summary: {
-    pools: Component[];
-    pavers: Component[];
-    drainage: Component[];
-    fences: Component[];
-    walls: Component[];
-  };
+  summary: Summary;
 }) => {
   return (
     <div className="space-y-4">
@@ -668,46 +656,44 @@ const MaterialsSummary = ({
           </CardHeader>
           <CardContent>
             <ul className="space-y-3">
-              {summary.pools.map((pool, i) => {
-                const poolData = POOL_LIBRARY.find(p => p.id === pool.properties.poolId);
-                return (
-                  <li key={pool.id} className="text-sm">
-                    <div className="font-medium">• {poolData?.name || 'Pool'}</div>
-                    <div className="text-xs text-muted-foreground ml-4 mt-1">
-                      Position: ({Math.round(pool.position.x)}, {Math.round(pool.position.y)})
+              {summary.pools.map((pool, i) => (
+                <li key={i} className="text-sm">
+                  <div className="font-medium">• {pool.type}</div>
+                  <div className="text-xs text-muted-foreground ml-4 mt-1">
+                    Dimensions: {pool.dimensions}
+                  </div>
+                  {pool.coping && (
+                    <div className="text-xs text-blue-600 dark:text-blue-400 ml-4 mt-1 space-y-0.5">
+                      <div className="font-medium">Coping: {pool.coping.totalPavers} pavers (400×400mm)</div>
+                      <div>
+                        {pool.coping.fullPavers} full + {pool.coping.partialPavers} partial
+                      </div>
+                      <div>Total area: {pool.coping.area.toFixed(2)} m²</div>
                     </div>
-                    {poolData && (
-                      <div className="text-xs text-muted-foreground ml-4">
-                        Dimensions: {poolData.length}mm × {poolData.width}mm
-                      </div>
-                    )}
-                    {pool.properties.showCoping && pool.properties.copingCalculation && (
-                      <div className="text-xs text-blue-600 dark:text-blue-400 ml-4 mt-1 space-y-0.5">
-                        <div className="font-medium">Coping: {pool.properties.copingCalculation.totalPavers} pavers (400×400mm)</div>
-                        <div>
-                          {pool.properties.copingCalculation.totalFullPavers} full + {pool.properties.copingCalculation.totalPartialPavers} partial
-                        </div>
-                        <div>Total area: {pool.properties.copingCalculation.totalArea.toFixed(2)} m²</div>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
+                  )}
+                </li>
+              ))}
             </ul>
           </CardContent>
         </Card>
       )}
 
-      {summary.pavers.length > 0 && (
+      {summary.paving.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Paving Areas ({summary.pavers.length})</CardTitle>
+            <CardTitle className="text-sm">Paving ({summary.paving.length} type{summary.paving.length > 1 ? 's' : ''})</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-1">
-              {summary.pavers.map((paver, i) => (
-                <li key={paver.id} className="text-sm text-muted-foreground">
-                  • {paver.properties.paverSize || 'Paver'} - {Math.round(paver.dimensions.width * paver.dimensions.height / 10000)} m²
+            <ul className="space-y-2">
+              {summary.paving.map((paving, i) => (
+                <li key={i} className="text-sm">
+                  <div className="font-medium">• {paving.size} pavers</div>
+                  <div className="text-xs text-muted-foreground ml-4 mt-1">
+                    Quantity: {paving.count} pavers
+                  </div>
+                  <div className="text-xs text-muted-foreground ml-4">
+                    Total area: {paving.area.toFixed(2)} m²
+                  </div>
                 </li>
               ))}
             </ul>
@@ -723,8 +709,8 @@ const MaterialsSummary = ({
           <CardContent>
             <ul className="space-y-1">
               {summary.drainage.map((drain, i) => (
-                <li key={drain.id} className="text-sm text-muted-foreground">
-                  • {drain.properties.drainageType || 'Drainage'} - {Math.round(drain.properties.length || 0)}mm
+                <li key={i} className="text-sm text-muted-foreground">
+                  • {drain.type} - {Math.round(drain.length)}mm
                 </li>
               ))}
             </ul>
@@ -732,16 +718,17 @@ const MaterialsSummary = ({
         </Card>
       )}
 
-      {summary.fences.length > 0 && (
+      {summary.fencing.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Fencing ({summary.fences.length})</CardTitle>
+            <CardTitle className="text-sm">Fencing ({summary.fencing.length})</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="space-y-1">
-              {summary.fences.map((fence, i) => (
-                <li key={fence.id} className="text-sm text-muted-foreground">
-                  • {fence.properties.fenceType || 'Fence'} - {Math.round(fence.dimensions.width)}mm
+              {summary.fencing.map((fence, i) => (
+                <li key={i} className="text-sm text-muted-foreground">
+                  • {fence.type} - {Math.round(fence.length)}mm
+                  {fence.gates > 0 && ` (${fence.gates} gate${fence.gates > 1 ? 's' : ''})`}
                 </li>
               ))}
             </ul>
@@ -757,8 +744,9 @@ const MaterialsSummary = ({
           <CardContent>
             <ul className="space-y-1">
               {summary.walls.map((wall, i) => (
-                <li key={wall.id} className="text-sm text-muted-foreground">
-                  • {wall.properties.wallMaterial || 'Wall'} - {Math.round(wall.dimensions.width)}mm × {wall.properties.wallHeight || 0}mm high
+                <li key={i} className="text-sm text-muted-foreground">
+                  • {wall.material} - {Math.round(wall.length)}mm × {wall.height}mm high
+                  {wall.status && ` (${wall.status})`}
                 </li>
               ))}
             </ul>
