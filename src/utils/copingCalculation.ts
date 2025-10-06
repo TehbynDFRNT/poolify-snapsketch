@@ -54,7 +54,7 @@ const generatePaverPositions = (
   for (let row = 0; row < rows; row++) {
     for (let i = 0; i < fullPavers; i++) {
       positions.push({
-        x: startX + (isHorizontal ? i * PAVER_SIZE : 0),
+        x: startX + (isHorizontal ? i * PAVER_SIZE : row * PAVER_SIZE),
         y: startY + (isHorizontal ? row * PAVER_SIZE : i * PAVER_SIZE),
         width: PAVER_SIZE,
         height: PAVER_SIZE,
@@ -65,7 +65,7 @@ const generatePaverPositions = (
     // Add partial paver if exists
     if (partialPaver) {
       positions.push({
-        x: startX + (isHorizontal ? fullPavers * PAVER_SIZE : 0),
+        x: startX + (isHorizontal ? fullPavers * PAVER_SIZE : row * PAVER_SIZE),
         y: startY + (isHorizontal ? row * PAVER_SIZE : fullPavers * PAVER_SIZE),
         width: isHorizontal ? partialPaver : PAVER_SIZE,
         height: isHorizontal ? PAVER_SIZE : partialPaver,
@@ -78,77 +78,78 @@ const generatePaverPositions = (
 };
 
 export const calculatePoolCoping = (pool: Pool): CopingCalculation => {
-  // Deep End (2 rows, extends left and right 400mm for corners)
-  const deLength = pool.length + 800; // Add both corners
-  const deCalc = calculatePavers(deLength);
+  // Deep End (RIGHT side - 2 rows, extends top and bottom 400mm for corners)
+  const deWidth = pool.width + 800; // Add both corners (top and bottom)
+  const deCalc = calculatePavers(deWidth);
   const deepEnd: CopingSide = {
     rows: 2,
     width: 800,
-    length: deLength,
+    length: deWidth,
     fullPavers: deCalc.fullPavers * 2, // 2 rows
     partialPaver: deCalc.partialPaver,
     paverPositions: generatePaverPositions(
-      -400, // Start 400mm left of pool
-      -800, // Start 800mm above pool (2 rows)
-      deLength,
+      pool.length, // Start at right edge of pool
+      -400, // Start 400mm above pool (corner extension)
+      deWidth,
       800,
-      true, // horizontal
-      2 // 2 rows
+      false, // vertical (running up/down on right side)
+      2 // 2 rows extending to the right
     ),
   };
 
-  // Shallow End (1 row, extends left and right 400mm)
-  const seLength = pool.length + 800;
-  const seCalc = calculatePavers(seLength);
+  // Shallow End (LEFT side - 1 row, extends top and bottom 400mm)
+  const seWidth = pool.width + 800;
+  const seCalc = calculatePavers(seWidth);
   const shallowEnd: CopingSide = {
     rows: 1,
     width: 400,
-    length: seLength,
+    length: seWidth,
     fullPavers: seCalc.fullPavers,
     partialPaver: seCalc.partialPaver,
     paverPositions: generatePaverPositions(
-      -400,
-      pool.width, // Below pool
-      seLength,
+      -400, // Left of pool
+      -400, // Start 400mm above pool (corner extension)
+      seWidth,
       400,
-      true,
+      false, // vertical (running up/down on left side)
       1
     ),
   };
 
-  // Left Side (1 row, no corner extension)
-  const sideLength = pool.width;
-  const leftCalc = calculatePavers(sideLength);
+  // Top Side (1 row, between SE and DE - no corner extension)
+  const topLength = pool.length;
+  const topCalc = calculatePavers(topLength);
   const leftSide: CopingSide = {
     rows: 1,
     width: 400,
-    length: sideLength,
-    fullPavers: leftCalc.fullPavers,
-    partialPaver: leftCalc.partialPaver,
+    length: topLength,
+    fullPavers: topCalc.fullPavers,
+    partialPaver: topCalc.partialPaver,
     paverPositions: generatePaverPositions(
-      -400, // Left of pool
-      0,
-      sideLength,
+      0, // Start at left edge of pool
+      -400, // Above pool
+      topLength,
       400,
-      false, // vertical
+      true, // horizontal (running left/right on top)
       1
     ),
   };
 
-  // Right Side (1 row, no corner extension)
-  const rightCalc = calculatePavers(sideLength);
+  // Bottom Side (1 row, between SE and DE - no corner extension)
+  const bottomLength = pool.length;
+  const bottomCalc = calculatePavers(bottomLength);
   const rightSide: CopingSide = {
     rows: 1,
     width: 400,
-    length: sideLength,
-    fullPavers: rightCalc.fullPavers,
-    partialPaver: rightCalc.partialPaver,
+    length: bottomLength,
+    fullPavers: bottomCalc.fullPavers,
+    partialPaver: bottomCalc.partialPaver,
     paverPositions: generatePaverPositions(
-      pool.length, // Right of pool
-      0,
-      sideLength,
+      0, // Start at left edge of pool
+      pool.width, // Below pool
+      bottomLength,
       400,
-      false,
+      true, // horizontal (running left/right on bottom)
       1
     ),
   };
@@ -161,17 +162,18 @@ export const calculatePoolCoping = (pool: Pool): CopingCalculation => {
     rightSide.fullPavers;
   
   const totalPartialPavers = 
-    (deepEnd.partialPaver ? 2 : 0) + // 2 rows
-    (shallowEnd.partialPaver ? 1 : 0) +
-    (leftSide.partialPaver ? 1 : 0) +
-    (rightSide.partialPaver ? 1 : 0);
+    (deepEnd.partialPaver ? 2 : 0) + // 2 rows at DE
+    (shallowEnd.partialPaver ? 1 : 0) + // 1 row at SE
+    (leftSide.partialPaver ? 1 : 0) + // 1 row at top
+    (rightSide.partialPaver ? 1 : 0); // 1 row at bottom
   
   const totalPavers = totalFullPavers + totalPartialPavers;
   
   const totalArea = (
-    (deLength * 800) +
-    (seLength * 400) +
-    (sideLength * 400 * 2)
+    (deWidth * 800) + // Deep End: 2 rows
+    (seWidth * 400) + // Shallow End: 1 row
+    (topLength * 400) + // Top: 1 row
+    (bottomLength * 400) // Bottom: 1 row
   ) / 1000000; // mm² to m²
 
   return {
