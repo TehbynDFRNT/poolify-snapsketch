@@ -110,7 +110,7 @@ export const BottomPanel = ({
       />
 
       {isCollapsed ? (
-        // Collapsed state - just show current info and expand button
+        // Collapsed state - show info, zoom controls, and expand button
         <div className="flex items-center justify-between px-4 h-10">
           <span className="text-sm text-muted-foreground">
             {activeTab === 'properties' && selectedComponent
@@ -119,6 +119,50 @@ export const BottomPanel = ({
               ? 'Materials Summary'
               : 'Project Notes'}
           </span>
+          
+          {/* Zoom Controls - Always visible */}
+          <div className="ml-auto flex gap-1 items-center border-r pr-2 mr-2">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={onToggleZoomLock} 
+              title={zoomLocked ? "Unlock Zoom" : "Lock Zoom"}
+              className={`min-w-[44px] min-h-[44px] ${zoomLocked ? "text-primary" : ""}`}
+            >
+              {zoomLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={onZoomOut} 
+              title="Zoom Out" 
+              disabled={zoomLocked}
+              className="min-w-[44px] min-h-[44px]"
+            >
+              <ZoomOut className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={onFitView} 
+              title="Fit to View"
+              className="min-h-[44px]"
+            >
+              <Maximize className="h-4 w-4 mr-1" />
+              {Math.round(zoom * 100)}%
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={onZoomIn} 
+              title="Zoom In" 
+              disabled={zoomLocked}
+              className="min-w-[44px] min-h-[44px]"
+            >
+              <ZoomIn className="h-4 w-4" />
+            </Button>
+          </div>
+          
           <Button
             variant="ghost"
             size="icon"
