@@ -68,15 +68,23 @@ export function fillAreaWithPavers(
         { x, y: y + paverHeight },
       ];
       
-      // Check center point too
+      // Check center point
       const paverCenter = {
         x: x + paverWidth / 2,
         y: y + paverHeight / 2,
       };
       
-      // Check if paver center is inside any exclude zone (e.g., pool)
-      if (excludeZones && isInsideExcludeZone(paverCenter, excludeZones)) {
-        continue; // Skip this paver position
+      // Check if paver overlaps any exclude zone (e.g., pool)
+      // Exclude if center OR any corner is inside the pool
+      if (excludeZones) {
+        const paverCornersAndCenter = [...corners, paverCenter];
+        const overlapsExcludeZone = paverCornersAndCenter.some(point => 
+          isInsideExcludeZone(point, excludeZones)
+        );
+        
+        if (overlapsExcludeZone) {
+          continue; // Skip this paver position
+        }
       }
       
       // Count how many corners are inside
