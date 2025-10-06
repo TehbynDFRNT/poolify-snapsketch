@@ -48,9 +48,9 @@ export function fillAreaWithPavers(
   // Get bounding box (canvas pixels)
   const bbox = getBoundingBox(boundary);
   
-  // Calculate grid counts using pixel sizes
-  const cols = Math.ceil(bbox.width / paverWidth);
-  const rows = Math.ceil(bbox.height / paverHeight);
+  // Calculate grid counts using pixel sizes - add extra row/col to catch edge pavers
+  const cols = Math.ceil(bbox.width / paverWidth) + 1;
+  const rows = Math.ceil(bbox.height / paverHeight) + 1;
   
   // Create grid
   for (let row = 0; row < rows; row++) {
@@ -58,23 +58,28 @@ export function fillAreaWithPavers(
       const x = bbox.minX + (col * paverWidth);
       const y = bbox.minY + (row * paverHeight);
       
-      // Check if paver center is inside boundary
+      // Check corners to determine if paver overlaps boundary
+      const corners = [
+        { x, y },
+        { x: x + paverWidth, y },
+        { x: x + paverWidth, y: y + paverHeight },
+        { x, y: y + paverHeight },
+      ];
+      
+      // Check center point too
       const paverCenter = {
         x: x + paverWidth / 2,
         y: y + paverHeight / 2,
       };
       
-      if (isPointInPolygon(paverCenter, boundary)) {
-        // Check corners to determine if it's an edge paver
-        const corners = [
-          { x, y },
-          { x: x + paverWidth, y },
-          { x: x + paverWidth, y: y + paverHeight },
-          { x, y: y + paverHeight },
-        ];
-        
-        const cornersOutside = corners.filter(corner => !isPointInPolygon(corner, boundary));
-        const isEdge = cornersOutside.length > 0;
+      // Count how many corners are inside
+      const cornersInside = corners.filter(corner => isPointInPolygon(corner, boundary));
+      const centerInside = isPointInPolygon(paverCenter, boundary);
+      
+      // Include paver if center is inside OR at least one corner is inside
+      if (centerInside || cornersInside.length > 0) {
+        const cornersOutside = corners.length - cornersInside.length;
+        const isEdge = cornersOutside > 0;
         
         // Only add if showing edge pavers OR it's a full paver
         if (showEdgePavers || !isEdge) {
@@ -84,7 +89,7 @@ export function fillAreaWithPavers(
             width: paverWidth,
             height: paverHeight,
             isEdgePaver: isEdge,
-            cutPercentage: isEdge ? Math.round((cornersOutside.length / 4) * 100) : 0,
+            cutPercentage: isEdge ? Math.round((cornersOutside / 4) * 100) : 0,
             mmWidth: paverWidthMm,
             mmHeight: paverHeightMm,
           });
