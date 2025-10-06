@@ -15,7 +15,7 @@ import { ReferenceLineComponent } from './canvas/ReferenceLineComponent';
 import { PavingAreaComponent } from './canvas/PavingAreaComponent';
 import { PavingAreaDialog, PavingConfig } from './PavingAreaDialog';
 import { fillAreaWithPavers, calculateStatistics, validateBoundary } from '@/utils/pavingFill';
-import { snapToGrid, smartSnap, snapToPaverGrid } from '@/utils/snap';
+import { snapToGrid, smartSnap, snapToPaverEdges } from '@/utils/snap';
 import { toast } from 'sonner';
 import { PAVER_SIZES } from '@/constants/components';
 import { PoolSelector } from './PoolSelector';
@@ -491,9 +491,10 @@ export const Canvas = ({
       const pavingArea = components.find(c => c.type === 'paving_area');
       let snappedPosition = pendingPoolPosition;
       
-      if (pavingArea?.properties?.paverSize && pavingArea?.properties?.paverOrientation) {
-        snappedPosition = snapToPaverGrid(
+      if (pavingArea?.properties?.boundary && pavingArea?.properties?.paverSize && pavingArea?.properties?.paverOrientation) {
+        snappedPosition = snapToPaverEdges(
           pendingPoolPosition,
+          pavingArea.properties.boundary as Array<{ x: number; y: number }>,
           pavingArea.properties.paverSize as '400x400' | '400x600',
           pavingArea.properties.paverOrientation as 'vertical' | 'horizontal'
         );
@@ -910,9 +911,10 @@ export const Canvas = ({
                       const pavingArea = components.find(c => c.type === 'paving_area');
                       let snapped = { x: snapToGrid(pos.x), y: snapToGrid(pos.y) };
                       
-                      if (pavingArea?.properties?.paverSize && pavingArea?.properties?.paverOrientation) {
-                        snapped = snapToPaverGrid(
+                      if (pavingArea?.properties?.boundary && pavingArea?.properties?.paverSize && pavingArea?.properties?.paverOrientation) {
+                        snapped = snapToPaverEdges(
                           pos,
+                          pavingArea.properties.boundary as Array<{ x: number; y: number }>,
                           pavingArea.properties.paverSize as '400x400' | '400x600',
                           pavingArea.properties.paverOrientation as 'vertical' | 'horizontal'
                         );

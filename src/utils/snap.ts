@@ -62,34 +62,48 @@ export const smartSnap = (
   };
 };
 
-// Snap pool to paver grid to minimize cut pavers
-export const snapToPaverGrid = (
+// Snap pool to actual paver edges in a paving area
+export const snapToPaverEdges = (
   point: { x: number; y: number },
+  pavingAreaBoundary: Array<{ x: number; y: number }>,
   paverSize: '400x400' | '400x600',
-  orientation: 'vertical' | 'horizontal'
+  orientation: 'vertical' | 'horizontal',
+  tolerance: number = 20
 ): { x: number; y: number } => {
   // Calculate paver dimensions in canvas pixels
-  // 1mm = 0.1px on canvas (GRID_CONFIG.spacing / 100)
   const pxPerMm = 0.1;
   
   let paverWidthPx: number;
   let paverHeightPx: number;
   
   if (paverSize === '400x400') {
-    paverWidthPx = paverHeightPx = 400 * pxPerMm; // 40px
+    paverWidthPx = paverHeightPx = 400 * pxPerMm;
   } else {
     if (orientation === 'vertical') {
-      paverWidthPx = 400 * pxPerMm;  // 40px
-      paverHeightPx = 600 * pxPerMm; // 60px
+      paverWidthPx = 400 * pxPerMm;
+      paverHeightPx = 600 * pxPerMm;
     } else {
-      paverWidthPx = 600 * pxPerMm;  // 60px
-      paverHeightPx = 400 * pxPerMm; // 40px
+      paverWidthPx = 600 * pxPerMm;
+      paverHeightPx = 400 * pxPerMm;
     }
   }
   
-  // Snap to paver grid
+  // Get bounding box of paving area
+  const xs = pavingAreaBoundary.map(p => p.x);
+  const ys = pavingAreaBoundary.map(p => p.y);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  
+  // Find the nearest paver edge by calculating which paver grid lines are closest
+  const nearestX = Math.round((point.x - minX) / paverWidthPx) * paverWidthPx + minX;
+  const nearestY = Math.round((point.y - minY) / paverHeightPx) * paverHeightPx + minY;
+  
+  // Check if we're within tolerance to snap
+  const distX = Math.abs(point.x - nearestX);
+  const distY = Math.abs(point.y - nearestY);
+  
   return {
-    x: Math.round(point.x / paverWidthPx) * paverWidthPx,
-    y: Math.round(point.y / paverHeightPx) * paverHeightPx,
+    x: distX <= tolerance ? nearestX : point.x,
+    y: distY <= tolerance ? nearestY : point.y,
   };
 };
