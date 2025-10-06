@@ -15,7 +15,7 @@ import { ReferenceLineComponent } from './canvas/ReferenceLineComponent';
 import { PavingAreaComponent } from './canvas/PavingAreaComponent';
 import { PavingAreaDialog, PavingConfig } from './PavingAreaDialog';
 import { fillAreaWithPavers, calculateStatistics, validateBoundary } from '@/utils/pavingFill';
-import { snapToGrid } from '@/utils/snap';
+import { snapToGrid, smartSnap } from '@/utils/snap';
 import { toast } from 'sonner';
 import { PAVER_SIZES } from '@/constants/components';
 import { PoolSelector } from './PoolSelector';
@@ -122,11 +122,13 @@ export const Canvas = ({
       const pos = e.target.getStage().getPointerPosition();
       const canvasX = (pos.x - pan.x) / zoom;
       const canvasY = (pos.y - pan.y) / zoom;
-      const snapped = {
-        x: snapToGrid(canvasX),
-        y: snapToGrid(canvasY),
-      };
-      setGhostPoint(snapped);
+      
+      // Use smart snap for paving areas to align with boundaries
+      const snapped = activeTool === 'paving_area' 
+        ? smartSnap({ x: canvasX, y: canvasY }, components)
+        : { x: snapToGrid(canvasX), y: snapToGrid(canvasY), snappedTo: null };
+      
+      setGhostPoint({ x: snapped.x, y: snapped.y });
     }
     // Handle measurement tools
     else if ((activeTool === 'quick_measure' || activeTool === 'reference_line') && isMeasuring && measureStart) {
@@ -237,8 +239,15 @@ export const Canvas = ({
 
       // Handle drawing tools
       if (activeTool === 'boundary' || activeTool === 'house' || activeTool === 'paving_area') {
+        // Use smart snap for paving areas
+        const finalSnapped = activeTool === 'paving_area'
+          ? smartSnap(snapped, components)
+          : { ...snapped, snappedTo: null };
+        
+        const pointToAdd = { x: finalSnapped.x, y: finalSnapped.y };
+        
         // Check if clicking near first point to close
-        if (drawingPoints.length >= 3 && isNearFirstPoint(snapped)) {
+        if (drawingPoints.length >= 3 && isNearFirstPoint(pointToAdd)) {
           // Close the shape
           if (activeTool === 'paving_area') {
             // Show paving dialog instead of creating component directly
@@ -262,7 +271,7 @@ export const Canvas = ({
         }
         
         // Add point to drawing
-        setDrawingPoints([...drawingPoints, snapped]);
+        setDrawingPoints([...drawingPoints, pointToAdd]);
         setIsDrawing(true);
       }
       // Deselect in select mode
