@@ -313,6 +313,17 @@ export const Canvas = ({
     // Calculate statistics
     const statistics = calculateStatistics(pavers, config.wastagePercentage);
     
+    // Debug info
+    const edgePavers = pavers.filter(p => p.isEdgePaver);
+    const fullPavers = pavers.filter(p => !p.isEdgePaver);
+    console.log('Paving config:', {
+      showEdgePavers: config.showEdgePavers,
+      totalPavers: pavers.length,
+      edgePavers: edgePavers.length,
+      fullPavers: fullPavers.length,
+      boundary: pavingBoundary
+    });
+    
     // Create the paving area component
     addComponent({
       type: 'paving_area',
@@ -331,7 +342,12 @@ export const Canvas = ({
     });
     
     setPavingBoundary([]);
-    toast.success(`Paving area created with ${pavers.length} pavers`);
+    
+    if (edgePavers.length > 0) {
+      toast.success(`Paving created: ${fullPavers.length} full + ${edgePavers.length} edge pavers`);
+    } else {
+      toast.success(`Paving created: ${pavers.length} full pavers (no cuts needed)`);
+    }
   };
 
   // Finish drawing and create component
