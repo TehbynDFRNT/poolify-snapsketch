@@ -485,7 +485,7 @@ export const Canvas = ({
     }
   }, [activeTool]);
 
-  const handlePoolSelected = (pool: Pool) => {
+  const handlePoolSelected = (pool: Pool, copingOptions: { showCoping: boolean; copingCalculation?: any }) => {
     if (pendingPoolPosition) {
       addComponent({
         type: 'pool',
@@ -494,6 +494,8 @@ export const Canvas = ({
         dimensions: { width: pool.length, height: pool.width },
         properties: {
           poolId: pool.id,
+          showCoping: copingOptions.showCoping,
+          copingCalculation: copingOptions.copingCalculation,
         },
       });
       setPendingPoolPosition(null);

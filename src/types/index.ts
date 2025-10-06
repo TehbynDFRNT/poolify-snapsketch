@@ -43,9 +43,50 @@ export interface Component {
   properties: ComponentProperties;
 }
 
+export interface CopingCalculation {
+  deepEnd: {
+    rows: number;
+    width: number;
+    length: number;
+    fullPavers: number;
+    partialPaver: number | null;
+    paverPositions: Array<{ x: number; y: number; width: number; height: number; isPartial: boolean }>;
+  };
+  shallowEnd: {
+    rows: number;
+    width: number;
+    length: number;
+    fullPavers: number;
+    partialPaver: number | null;
+    paverPositions: Array<{ x: number; y: number; width: number; height: number; isPartial: boolean }>;
+  };
+  leftSide: {
+    rows: number;
+    width: number;
+    length: number;
+    fullPavers: number;
+    partialPaver: number | null;
+    paverPositions: Array<{ x: number; y: number; width: number; height: number; isPartial: boolean }>;
+  };
+  rightSide: {
+    rows: number;
+    width: number;
+    length: number;
+    fullPavers: number;
+    partialPaver: number | null;
+    paverPositions: Array<{ x: number; y: number; width: number; height: number; isPartial: boolean }>;
+  };
+  totalFullPavers: number;
+  totalPartialPavers: number;
+  totalPavers: number;
+  totalArea: number;
+}
+
 export interface ComponentProperties {
   // Pool
   poolId?: string;
+  showCoping?: boolean;
+  copingCalculation?: CopingCalculation;
   
   // Paver
   paverSize?: '400x400' | '400x600';
@@ -118,6 +159,12 @@ export interface Summary {
   pools: Array<{
     type: string;
     dimensions: string;
+    coping?: {
+      totalPavers: number;
+      fullPavers: number;
+      partialPavers: number;
+      area: number;
+    };
   }>;
   paving: Array<{
     size: string;

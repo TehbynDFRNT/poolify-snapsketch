@@ -20,6 +20,12 @@ export const calculateMeasurements = (components: Component[]): Summary => {
           summary.pools.push({
             type: pool.name,
             dimensions: `${pool.length}×${pool.width}mm`,
+            coping: component.properties.showCoping && component.properties.copingCalculation ? {
+              totalPavers: component.properties.copingCalculation.totalPavers,
+              fullPavers: component.properties.copingCalculation.totalFullPavers,
+              partialPavers: component.properties.copingCalculation.totalPartialPavers,
+              area: component.properties.copingCalculation.totalArea,
+            } : undefined,
           });
         }
         break;
