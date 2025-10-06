@@ -61,3 +61,35 @@ export const smartSnap = (
     snappedTo: null,
   };
 };
+
+// Snap pool to paver grid to minimize cut pavers
+export const snapToPaverGrid = (
+  point: { x: number; y: number },
+  paverSize: '400x400' | '400x600',
+  orientation: 'vertical' | 'horizontal'
+): { x: number; y: number } => {
+  // Calculate paver dimensions in canvas pixels
+  // 1mm = 0.1px on canvas (GRID_CONFIG.spacing / 100)
+  const pxPerMm = 0.1;
+  
+  let paverWidthPx: number;
+  let paverHeightPx: number;
+  
+  if (paverSize === '400x400') {
+    paverWidthPx = paverHeightPx = 400 * pxPerMm; // 40px
+  } else {
+    if (orientation === 'vertical') {
+      paverWidthPx = 400 * pxPerMm;  // 40px
+      paverHeightPx = 600 * pxPerMm; // 60px
+    } else {
+      paverWidthPx = 600 * pxPerMm;  // 60px
+      paverHeightPx = 400 * pxPerMm; // 40px
+    }
+  }
+  
+  // Snap to paver grid
+  return {
+    x: Math.round(point.x / paverWidthPx) * paverWidthPx,
+    y: Math.round(point.y / paverHeightPx) * paverHeightPx,
+  };
+};
