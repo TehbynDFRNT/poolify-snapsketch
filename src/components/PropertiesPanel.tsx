@@ -4,15 +4,11 @@ import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { formatLength, formatArea } from '@/utils/measurements';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { POOL_LIBRARY } from '@/constants/pools';
 import { RotateCw, Copy, Trash2 } from 'lucide-react';
-import { useState, useMemo } from 'react';
-import { calculatePoolCoping } from '@/utils/copingCalculation';
-import { getPoolExcludeZone } from '@/utils/poolExcludeZone';
-import { fillAreaWithPavers } from '@/utils/pavingFill';
+import { useState } from 'react';
 
 export const PropertiesPanel = () => {
   const { selectedComponentId, components, getMeasurements, updateComponent, deleteComponent, duplicateComponent } = useDesignStore();
@@ -451,126 +447,6 @@ export const PropertiesPanel = () => {
                         </p>
                       </div>
                     )}
-
-                    {/* Pool Coping Section */}
-                    {poolData && (
-                      <div className="space-y-2 pt-2">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Pool Coping</Label>
-                          <Switch
-                            checked={selectedComponent.properties.showCoping ?? false}
-                            onCheckedChange={(checked) => {
-                              const copingCalculation = checked ? calculatePoolCoping(poolData) : undefined;
-                              updateComponent(selectedComponent.id, {
-                                properties: {
-                                  ...selectedComponent.properties,
-                                  showCoping: checked,
-                                  copingCalculation,
-                                },
-                              });
-                            }}
-                          />
-                        </div>
-                        
-                        {selectedComponent.properties.showCoping && selectedComponent.properties.copingCalculation && (
-                          <div className="text-xs space-y-1 bg-muted p-3 rounded-lg">
-                            <div className="font-medium mb-2">Coping Details (400×400mm pavers):</div>
-                            <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
-                              <div>Deep End (2 rows):</div>
-                              <div className="text-right font-mono">
-                                {selectedComponent.properties.copingCalculation.deepEnd.fullPavers} full
-                                {selectedComponent.properties.copingCalculation.deepEnd.partialPaver && 
-                                  ` + 2×${selectedComponent.properties.copingCalculation.deepEnd.partialPaver}mm`
-                                }
-                              </div>
-                              
-                              <div>Shallow End:</div>
-                              <div className="text-right font-mono">
-                                {selectedComponent.properties.copingCalculation.shallowEnd.fullPavers} full
-                                {selectedComponent.properties.copingCalculation.shallowEnd.partialPaver && 
-                                  ` + ${selectedComponent.properties.copingCalculation.shallowEnd.partialPaver}mm`
-                                }
-                              </div>
-                              
-                              <div>Left Side:</div>
-                              <div className="text-right font-mono">
-                                {selectedComponent.properties.copingCalculation.leftSide.fullPavers} full
-                                {selectedComponent.properties.copingCalculation.leftSide.partialPaver && 
-                                  ` + ${selectedComponent.properties.copingCalculation.leftSide.partialPaver}mm`
-                                }
-                              </div>
-                              
-                              <div>Right Side:</div>
-                              <div className="text-right font-mono">
-                                {selectedComponent.properties.copingCalculation.rightSide.fullPavers} full
-                                {selectedComponent.properties.copingCalculation.rightSide.partialPaver && 
-                                  ` + ${selectedComponent.properties.copingCalculation.rightSide.partialPaver}mm`
-                                }
-                              </div>
-                              
-                              <div className="font-semibold pt-2 border-t mt-1">Total:</div>
-                              <div className="text-right font-mono font-semibold pt-2 border-t mt-1">
-                                {selectedComponent.properties.copingCalculation.totalPavers} pavers
-                              </div>
-                              
-                              <div className="text-muted-foreground">({selectedComponent.properties.copingCalculation.totalFullPavers} full + {selectedComponent.properties.copingCalculation.totalPartialPavers} partial)</div>
-                              <div className="text-right font-mono col-start-2">
-                                {selectedComponent.properties.copingCalculation.totalArea.toFixed(2)} m²
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                
-                {/* Paving Area Pool Exclusion Info */}
-                {selectedComponent.type === 'paving_area' && (() => {
-                  const overlappingPools = components.filter(c => c.type === 'pool' && c.id !== selectedComponent.id);
-                  
-                  if (overlappingPools.length === 0) return null;
-                  
-                  const excludeZones = overlappingPools
-                    .map(pool => getPoolExcludeZone(pool))
-                    .filter((zone): zone is NonNullable<typeof zone> => zone !== null);
-                  
-                  if (excludeZones.length === 0) return null;
-
-                  const originalPavers = selectedComponent.properties.pavers?.length || 0;
-                  const filteredPavers = fillAreaWithPavers(
-                    selectedComponent.properties.boundary || [],
-                    selectedComponent.properties.paverSize || '400x400',
-                    selectedComponent.properties.paverOrientation || 'vertical',
-                    selectedComponent.properties.showEdgePavers !== false,
-                    excludeZones
-                  );
-                  const excludedCount = originalPavers - filteredPavers.length;
-                  
-                  if (excludedCount <= 0) return null;
-                  
-                  return (
-                    <div className="space-y-2 pt-2">
-                      <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
-                        <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
-                          ⚠️ Pool Overlap Detected
-                        </h4>
-                        <div className="space-y-1 text-xs text-blue-800 dark:text-blue-200">
-                          <div className="flex justify-between">
-                            <span>Original pavers:</span>
-                            <span className="font-mono">{originalPavers}</span>
-                          </div>
-                          <div className="flex justify-between text-red-600 dark:text-red-400">
-                            <span>Excluded (under {excludeZones.length} pool{excludeZones.length > 1 ? 's' : ''}):</span>
-                            <span className="font-mono">-{excludedCount}</span>
-                          </div>
-                          <div className="flex justify-between font-semibold border-t border-blue-300 dark:border-blue-700 pt-1 mt-1">
-                            <span>Net pavers to order:</span>
-                            <span className="font-mono">{filteredPavers.length}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
                 
                 <div>
                   <p className="text-sm font-medium mb-1">Position</p>

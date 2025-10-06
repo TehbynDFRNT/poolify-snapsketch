@@ -26,7 +26,6 @@ export const Canvas = ({
   activeTool = 'select',
   onZoomChange,
   onZoomLockedChange,
-  onDrawingStateChange,
 }: { 
   activeTool?: string;
   onZoomChange?: (zoom: number, locked: boolean, handlers: {
@@ -36,7 +35,6 @@ export const Canvas = ({
     toggleLock: () => void;
   }) => void;
   onZoomLockedChange?: (locked: boolean) => void;
-  onDrawingStateChange?: (isDrawing: boolean, pointsCount: number) => void;
 }) => {
   const stageRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -133,13 +131,6 @@ export const Canvas = ({
       });
     }
   }, [zoom, zoomLocked, handleZoomIn, handleZoomOut, handleFitView, toggleZoomLock, onZoomChange]);
-
-  // Notify parent about drawing state
-  useEffect(() => {
-    if (onDrawingStateChange) {
-      onDrawingStateChange(isDrawing, drawingPoints.length);
-    }
-  }, [isDrawing, drawingPoints.length, onDrawingStateChange]);
 
   // Handle mouse move for drawing tools
   const handleMouseMove = (e: any) => {
@@ -320,13 +311,12 @@ export const Canvas = ({
   const handlePavingConfig = (config: PavingConfig) => {
     if (pavingBoundary.length < 3) return;
     
-    // Fill the area with pavers (initially no exclude zones)
+    // Fill the area with pavers
     const pavers = fillAreaWithPavers(
       pavingBoundary,
       config.paverSize,
       config.paverOrientation,
-      config.showEdgePavers,
-      [] // No exclude zones on initial creation - will be calculated by PavingAreaComponent
+      config.showEdgePavers
     );
     
     // Warn if no pavers were generated
@@ -495,7 +485,7 @@ export const Canvas = ({
     }
   }, [activeTool]);
 
-  const handlePoolSelected = (pool: Pool, copingOptions: { showCoping: boolean; copingCalculation?: any }) => {
+  const handlePoolSelected = (pool: Pool) => {
     if (pendingPoolPosition) {
       addComponent({
         type: 'pool',
@@ -504,8 +494,6 @@ export const Canvas = ({
         dimensions: { width: pool.length, height: pool.width },
         properties: {
           poolId: pool.id,
-          showCoping: copingOptions.showCoping,
-          copingCalculation: copingOptions.copingCalculation,
         },
       });
       setPendingPoolPosition(null);
@@ -799,7 +787,7 @@ export const Canvas = ({
       }
 
       return (
-        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 bg-card border border-border rounded-lg p-3 shadow-lg">
+        <div className="absolute top-4 left-4 bg-card border border-border rounded-lg p-3 shadow-lg">
           <p className="text-sm text-foreground">ℹ️ {message}</p>
           <p className="text-xs text-muted-foreground mt-1">Press Escape to cancel • Z to undo last point</p>
         </div>
@@ -1099,6 +1087,9 @@ export const Canvas = ({
           })}
         </Layer>
       </Stage>
+
+      {/* Status message for drawing */}
+      {renderStatusMessage()}
 
       {/* Pool Selector Modal */}
       {showPoolSelector && (

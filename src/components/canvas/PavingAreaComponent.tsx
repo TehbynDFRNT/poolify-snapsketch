@@ -1,9 +1,5 @@
 import { Group, Line, Rect, Text } from 'react-konva';
-import { useMemo } from 'react';
 import { Component } from '@/types';
-import { useDesignStore } from '@/store/designStore';
-import { getPoolExcludeZone } from '@/utils/poolExcludeZone';
-import { fillAreaWithPavers } from '@/utils/pavingFill';
 
 interface PavingAreaComponentProps {
   component: Component;
@@ -12,36 +8,9 @@ interface PavingAreaComponentProps {
 }
 
 export const PavingAreaComponent = ({ component, isSelected, onSelect }: PavingAreaComponentProps) => {
-  const components = useDesignStore(state => state.components);
   const boundary = component.properties.boundary || [];
-  const showEdgePavers = component.properties.showEdgePavers !== false;
-
-  // Find all pools that might overlap this paving area
-  const overlappingPools = useMemo(() => {
-    return components.filter(c => c.type === 'pool' && c.id !== component.id);
-  }, [components, component.id]);
-
-  // Create exclude zones from overlapping pools
-  const excludeZones = useMemo(() => {
-    return overlappingPools
-      .map(pool => getPoolExcludeZone(pool))
-      .filter((zone): zone is NonNullable<typeof zone> => zone !== null);
-  }, [overlappingPools]);
-
-  // Regenerate pavers with exclude zones
-  const filteredPavers = useMemo(() => {
-    if (!component.properties.paverSize || !component.properties.paverOrientation) {
-      return [];
-    }
-    
-    return fillAreaWithPavers(
-      boundary,
-      component.properties.paverSize,
-      component.properties.paverOrientation,
-      showEdgePavers,
-      excludeZones
-    );
-  }, [boundary, component.properties.paverSize, component.properties.paverOrientation, showEdgePavers, excludeZones]);
+  const pavers = component.properties.pavers || [];
+  const showEdgePavers = component.properties.showEdgePavers !== false; // Default to true
 
   return (
     <Group onClick={onSelect}>
@@ -60,7 +29,7 @@ export const PavingAreaComponent = ({ component, isSelected, onSelect }: PavingA
           ctx.closePath();
         }}
       >
-        {filteredPavers.map(paver => {
+        {pavers.map(paver => {
           // Only render if showEdgePavers is true OR paver is not an edge paver
           if (!showEdgePavers && paver.isEdgePaver) {
             return null;

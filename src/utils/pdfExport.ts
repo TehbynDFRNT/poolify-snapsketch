@@ -104,7 +104,6 @@ const addLegend = (pdf: jsPDF, x: number, y: number, width: number) => {
   
   const legendItems = [
     { color: [59, 130, 246], label: 'Pool' },
-    { color: [156, 163, 175], label: 'Pool Coping' },
     { color: [243, 235, 217], label: 'Paving' },
     { color: [152, 156, 164], label: 'Drainage' },
     { color: [93, 165, 218], label: 'Fencing' },
@@ -169,16 +168,6 @@ const addSummary = (pdf: jsPDF, project: Project, x: number, y: number, width: n
     summary.pools.forEach(pool => {
       pdf.text(`  • ${pool.type} (${pool.dimensions})`, x, leftY);
       leftY += lineHeight;
-      
-      // Add coping info if present
-      if (pool.coping) {
-        pdf.setFont('helvetica', 'italic');
-        pdf.text(`    Coping: ${pool.coping.totalPavers} pavers (400×400mm)`, x, leftY);
-        leftY += lineHeight;
-        pdf.text(`    (${pool.coping.fullPavers} full + ${pool.coping.partialPavers} partial) = ${formatArea(pool.coping.area)}`, x, leftY);
-        leftY += lineHeight;
-        pdf.setFont('helvetica', 'normal');
-      }
     });
     leftY += 2;
   }

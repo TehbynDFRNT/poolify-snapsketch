@@ -1,8 +1,6 @@
 import { Component, Summary } from '@/types';
 import { PAVER_SIZES, DRAINAGE_TYPES, FENCE_TYPES, WALL_MATERIALS } from '@/constants/components';
 import { POOL_LIBRARY } from '@/constants/pools';
-import { getPoolExcludeZone } from './poolExcludeZone';
-import { fillAreaWithPavers } from './pavingFill';
 
 export const calculateMeasurements = (components: Component[]): Summary => {
   const summary: Summary = {
@@ -13,12 +11,6 @@ export const calculateMeasurements = (components: Component[]): Summary => {
     walls: [],
   };
 
-  // Get all pools for exclude zones
-  const pools = components.filter(c => c.type === 'pool');
-  const excludeZones = pools
-    .map(pool => getPoolExcludeZone(pool))
-    .filter((zone): zone is NonNullable<typeof zone> => zone !== null);
-
   components.forEach(component => {
     switch (component.type) {
       case 'pool':
@@ -28,51 +20,9 @@ export const calculateMeasurements = (components: Component[]): Summary => {
           summary.pools.push({
             type: pool.name,
             dimensions: `${pool.length}×${pool.width}mm`,
-            coping: component.properties.showCoping && component.properties.copingCalculation ? {
-              totalPavers: component.properties.copingCalculation.totalPavers,
-              fullPavers: component.properties.copingCalculation.totalFullPavers,
-              partialPavers: component.properties.copingCalculation.totalPartialPavers,
-              area: component.properties.copingCalculation.totalArea,
-            } : undefined,
           });
         }
         break;
-
-      case 'paving_area': {
-        const boundary = component.properties.boundary || [];
-        const paverSize = component.properties.paverSize || '400x400';
-        const paverOrientation = component.properties.paverOrientation || 'vertical';
-
-        if (boundary.length >= 3) {
-          // Always count ALL pavers (full + edge) for materials - pass true for showEdgePavers
-          const allPavers = fillAreaWithPavers(
-            boundary,
-            paverSize,
-            paverOrientation,
-            true, // Always include edge pavers in materials count
-            excludeZones
-          );
-
-          const paverDim = PAVER_SIZES[paverSize];
-          const totalCount = allPavers.length;
-          const fullCount = allPavers.filter(p => !p.isEdgePaver).length;
-          const edgeCount = allPavers.filter(p => p.isEdgePaver).length;
-          const area = (totalCount * paverDim.width * paverDim.height) / 1000000;
-
-          const existing = summary.paving.find(p => p.size === paverDim.label);
-          if (existing) {
-            existing.count += totalCount;
-            existing.area += area;
-          } else {
-            summary.paving.push({ 
-              size: paverDim.label, 
-              count: totalCount, 
-              area
-            });
-          }
-        }
-        break;
-      }
 
       case 'paver': {
         const size = component.properties.paverSize || '400x400';

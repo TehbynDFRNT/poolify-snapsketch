@@ -46,10 +46,6 @@ export const DesignCanvas = () => {
       toggleLock: () => {},
     }
   });
-  const [drawingState, setDrawingState] = useState({
-    isDrawing: false,
-    pointsCount: 0,
-  });
   
   useKeyboardShortcuts(); // Enable keyboard shortcuts
   
@@ -301,9 +297,6 @@ export const DesignCanvas = () => {
           onZoomChange={(zoom, zoomLocked, handlers) => {
             setZoomState({ zoom, zoomLocked, handlers });
           }}
-          onDrawingStateChange={(isDrawing, pointsCount) => {
-            setDrawingState({ isDrawing, pointsCount });
-          }}
         />
       </main>
 
@@ -319,8 +312,6 @@ export const DesignCanvas = () => {
         onZoomOut={zoomState.handlers.zoomOut}
         onFitView={zoomState.handlers.fitView}
         onToggleZoomLock={zoomState.handlers.toggleLock}
-        isDrawing={drawingState.isDrawing}
-        drawingPointsCount={drawingState.pointsCount}
       />
     </div>
   );

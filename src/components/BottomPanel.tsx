@@ -6,11 +6,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Component, Project, Summary } from '@/types';
+import { Component, Project } from '@/types';
 import { useDesignStore } from '@/store/designStore';
 import { fillAreaWithPavers, calculateStatistics } from '@/utils/pavingFill';
 import { calculateMeasurements } from '@/utils/measurements';
-import { POOL_LIBRARY } from '@/constants/pools';
 import { toast } from 'sonner';
 
 interface BottomPanelProps {
@@ -24,8 +23,6 @@ interface BottomPanelProps {
   onZoomOut: () => void;
   onFitView: () => void;
   onToggleZoomLock: () => void;
-  isDrawing?: boolean;
-  drawingPointsCount?: number;
 }
 
 type TabType = 'properties' | 'materials' | 'notes';
@@ -41,8 +38,6 @@ export const BottomPanel = ({
   onZoomOut,
   onFitView,
   onToggleZoomLock,
-  isDrawing = false,
-  drawingPointsCount = 0,
 }: BottomPanelProps) => {
   const [activeTab, setActiveTab] = useState<TabType>('properties');
   const [isResizing, setIsResizing] = useState(false);
@@ -94,8 +89,14 @@ export const BottomPanel = ({
     onHeightChange(isCollapsed ? 350 : 40);
   };
 
-  // Calculate materials summary using proper measurement calculations
-  const materialsSummary = calculateMeasurements(components);
+  // Calculate materials summary
+  const materialsSummary = {
+    pools: components.filter(c => c.type === 'pool'),
+    pavers: components.filter(c => c.type === 'paver'),
+    drainage: components.filter(c => c.type === 'drainage'),
+    fences: components.filter(c => c.type === 'fence'),
+    walls: components.filter(c => c.type === 'wall'),
+  };
 
   return (
     <div
@@ -174,71 +175,53 @@ export const BottomPanel = ({
       ) : (
         <>
           {/* Tabs */}
-          <div className="flex border-b items-center">
-            <div className="flex">
-              <button
-                onClick={() => setActiveTab('properties')}
-                className={`
-                  px-4 py-2 font-medium text-sm transition-colors
-                  ${activeTab === 'properties'
-                    ? 'border-b-2 border-primary text-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                  }
-                `}
-              >
-                Properties
-                {selectedComponent && (
-                  <span className="ml-2 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                    {selectedComponent.type}
-                  </span>
-                )}
-              </button>
+          <div className="flex border-b">
+            <button
+              onClick={() => setActiveTab('properties')}
+              className={`
+                px-4 py-2 font-medium text-sm transition-colors
+                ${activeTab === 'properties'
+                  ? 'border-b-2 border-primary text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+                }
+              `}
+            >
+              Properties
+              {selectedComponent && (
+                <span className="ml-2 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                  {selectedComponent.type}
+                </span>
+              )}
+            </button>
 
-              <button
-                onClick={() => setActiveTab('materials')}
-                className={`
-                  px-4 py-2 font-medium text-sm transition-colors
-                  ${activeTab === 'materials'
-                    ? 'border-b-2 border-primary text-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                  }
-                `}
-              >
-                Materials Summary
-              </button>
+            <button
+              onClick={() => setActiveTab('materials')}
+              className={`
+                px-4 py-2 font-medium text-sm transition-colors
+                ${activeTab === 'materials'
+                  ? 'border-b-2 border-primary text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+                }
+              `}
+            >
+              Materials Summary
+            </button>
 
-              <button
-                onClick={() => setActiveTab('notes')}
-                className={`
-                  px-4 py-2 font-medium text-sm transition-colors
-                  ${activeTab === 'notes'
-                    ? 'border-b-2 border-primary text-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                  }
-                `}
-              >
-                Notes
-                {hasUnsavedNotes && (
-                  <span className="ml-2 w-2 h-2 bg-orange-500 rounded-full inline-block" />
-                )}
-              </button>
-            </div>
-
-            {/* Drawing Status Message - Centered */}
-            {isDrawing && (
-              <div className="flex-1 flex justify-center items-center px-4">
-                <div className="bg-card border border-border rounded-lg px-3 py-1.5 shadow-md">
-                  <p className="text-xs text-foreground">
-                    ℹ️ {drawingPointsCount >= 3 
-                      ? 'Click first point to close or press Enter to finish' 
-                      : 'Click points to draw'}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    Press Escape to cancel • Z to undo last point
-                  </p>
-                </div>
-              </div>
-            )}
+            <button
+              onClick={() => setActiveTab('notes')}
+              className={`
+                px-4 py-2 font-medium text-sm transition-colors
+                ${activeTab === 'notes'
+                  ? 'border-b-2 border-primary text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+                }
+              `}
+            >
+              Notes
+              {hasUnsavedNotes && (
+                <span className="ml-2 w-2 h-2 bg-orange-500 rounded-full inline-block" />
+              )}
+            </button>
 
             {/* Zoom Controls */}
             <div className="ml-auto flex gap-1 items-center border-r pr-2 mr-2">
@@ -415,8 +398,7 @@ const PropertiesContent = ({
                         component.properties.boundary || [],
                         '400x400',
                         'vertical',
-                        component.properties.showEdgePavers || true,
-                        [] // exclude zones
+                        component.properties.showEdgePavers || true
                       );
                       const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
                       onUpdate(component.id, {
@@ -440,8 +422,7 @@ const PropertiesContent = ({
                         component.properties.boundary || [],
                         '400x600',
                         component.properties.paverOrientation || 'vertical',
-                        component.properties.showEdgePavers || true,
-                        [] // exclude zones
+                        component.properties.showEdgePavers || true
                       );
                       const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
                       onUpdate(component.id, {
@@ -472,8 +453,7 @@ const PropertiesContent = ({
                           component.properties.boundary || [],
                           '400x600',
                           'vertical',
-                          component.properties.showEdgePavers || true,
-                          [] // exclude zones
+                          component.properties.showEdgePavers || true
                         );
                         const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
                         onUpdate(component.id, {
@@ -497,8 +477,7 @@ const PropertiesContent = ({
                           component.properties.boundary || [],
                           '400x600',
                           'horizontal',
-                          component.properties.showEdgePavers || true,
-                          [] // exclude zones
+                          component.properties.showEdgePavers || true
                         );
                         const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
                         onUpdate(component.id, {
@@ -529,8 +508,7 @@ const PropertiesContent = ({
                         component.properties.boundary || [],
                         component.properties.paverSize || '400x400',
                         component.properties.paverOrientation || 'vertical',
-                        e.target.checked,
-                        [] // exclude zones
+                        e.target.checked
                       );
                       const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
                       onUpdate(component.id, {
@@ -665,7 +643,13 @@ const PropertiesContent = ({
 const MaterialsSummary = ({
   summary,
 }: {
-  summary: Summary;
+  summary: {
+    pools: Component[];
+    pavers: Component[];
+    drainage: Component[];
+    fences: Component[];
+    walls: Component[];
+  };
 }) => {
   return (
     <div className="space-y-4">
@@ -677,22 +661,10 @@ const MaterialsSummary = ({
             <CardTitle className="text-sm">Pools ({summary.pools.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-3">
+            <ul className="space-y-1">
               {summary.pools.map((pool, i) => (
-                <li key={i} className="text-sm">
-                  <div className="font-medium">• {pool.type}</div>
-                  <div className="text-xs text-muted-foreground ml-4 mt-1">
-                    Dimensions: {pool.dimensions}
-                  </div>
-                  {pool.coping && (
-                    <div className="text-xs text-blue-600 dark:text-blue-400 ml-4 mt-1 space-y-0.5">
-                      <div className="font-medium">Coping: {pool.coping.totalPavers} pavers (400×400mm)</div>
-                      <div>
-                        {pool.coping.fullPavers} full + {pool.coping.partialPavers} partial
-                      </div>
-                      <div>Total area: {pool.coping.area.toFixed(2)} m²</div>
-                    </div>
-                  )}
+                <li key={pool.id} className="text-sm text-muted-foreground">
+                  • {pool.properties.poolId || 'Pool'} at ({Math.round(pool.position.x)}, {Math.round(pool.position.y)})
                 </li>
               ))}
             </ul>
@@ -700,22 +672,16 @@ const MaterialsSummary = ({
         </Card>
       )}
 
-      {summary.paving.length > 0 && (
+      {summary.pavers.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Paving ({summary.paving.length} type{summary.paving.length > 1 ? 's' : ''})</CardTitle>
+            <CardTitle className="text-sm">Paving Areas ({summary.pavers.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2">
-              {summary.paving.map((paving, i) => (
-                <li key={i} className="text-sm">
-                  <div className="font-medium">• {paving.size} pavers</div>
-                  <div className="text-xs text-muted-foreground ml-4 mt-1">
-                    Quantity: {paving.count} pavers
-                  </div>
-                  <div className="text-xs text-muted-foreground ml-4">
-                    Total area: {paving.area.toFixed(2)} m²
-                  </div>
+            <ul className="space-y-1">
+              {summary.pavers.map((paver, i) => (
+                <li key={paver.id} className="text-sm text-muted-foreground">
+                  • {paver.properties.paverSize || 'Paver'} - {Math.round(paver.dimensions.width * paver.dimensions.height / 10000)} m²
                 </li>
               ))}
             </ul>
@@ -731,8 +697,8 @@ const MaterialsSummary = ({
           <CardContent>
             <ul className="space-y-1">
               {summary.drainage.map((drain, i) => (
-                <li key={i} className="text-sm text-muted-foreground">
-                  • {drain.type} - {Math.round(drain.length)}mm
+                <li key={drain.id} className="text-sm text-muted-foreground">
+                  • {drain.properties.drainageType || 'Drainage'} - {Math.round(drain.properties.length || 0)}mm
                 </li>
               ))}
             </ul>
@@ -740,17 +706,16 @@ const MaterialsSummary = ({
         </Card>
       )}
 
-      {summary.fencing.length > 0 && (
+      {summary.fences.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Fencing ({summary.fencing.length})</CardTitle>
+            <CardTitle className="text-sm">Fencing ({summary.fences.length})</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="space-y-1">
-              {summary.fencing.map((fence, i) => (
-                <li key={i} className="text-sm text-muted-foreground">
-                  • {fence.type} - {Math.round(fence.length)}mm
-                  {fence.gates > 0 && ` (${fence.gates} gate${fence.gates > 1 ? 's' : ''})`}
+              {summary.fences.map((fence, i) => (
+                <li key={fence.id} className="text-sm text-muted-foreground">
+                  • {fence.properties.fenceType || 'Fence'} - {Math.round(fence.dimensions.width)}mm
                 </li>
               ))}
             </ul>
@@ -766,9 +731,8 @@ const MaterialsSummary = ({
           <CardContent>
             <ul className="space-y-1">
               {summary.walls.map((wall, i) => (
-                <li key={i} className="text-sm text-muted-foreground">
-                  • {wall.material} - {Math.round(wall.length)}mm × {wall.height}mm high
-                  {wall.status && ` (${wall.status})`}
+                <li key={wall.id} className="text-sm text-muted-foreground">
+                  • {wall.properties.wallMaterial || 'Wall'} - {Math.round(wall.dimensions.width)}mm × {wall.properties.wallHeight || 0}mm high
                 </li>
               ))}
             </ul>
