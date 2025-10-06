@@ -36,6 +36,16 @@ export const DesignCanvas = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [permission, setPermission] = useState<'view' | 'edit' | 'admin' | 'owner'>('owner');
   const [loading, setLoading] = useState(true);
+  const [zoomState, setZoomState] = useState({
+    zoom: 1,
+    zoomLocked: false,
+    handlers: {
+      zoomIn: () => {},
+      zoomOut: () => {},
+      fitView: () => {},
+      toggleLock: () => {},
+    }
+  });
   
   useKeyboardShortcuts(); // Enable keyboard shortcuts
   
@@ -282,7 +292,12 @@ export const DesignCanvas = () => {
         className="flex-1 overflow-hidden relative"
         style={{ height: `calc(100vh - 60px - ${bottomPanelHeight}px)` }}
       >
-        <Canvas activeTool={activeTool} />
+        <Canvas 
+          activeTool={activeTool}
+          onZoomChange={(zoom, zoomLocked, handlers) => {
+            setZoomState({ zoom, zoomLocked, handlers });
+          }}
+        />
       </main>
 
       {/* Bottom Panel */}
@@ -291,6 +306,12 @@ export const DesignCanvas = () => {
         onHeightChange={setBottomPanelHeight}
         selectedComponent={selectedComponent}
         project={currentProject}
+        zoom={zoomState.zoom}
+        zoomLocked={zoomState.zoomLocked}
+        onZoomIn={zoomState.handlers.zoomIn}
+        onZoomOut={zoomState.handlers.zoomOut}
+        onFitView={zoomState.handlers.fitView}
+        onToggleZoomLock={zoomState.handlers.toggleLock}
       />
     </div>
   );

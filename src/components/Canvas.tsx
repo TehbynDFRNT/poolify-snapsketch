@@ -22,7 +22,20 @@ import { PoolSelector } from './PoolSelector';
 import { Pool } from '@/constants/pools';
 import { lockToAxis, detectAxisLock, calculateDistance } from '@/utils/canvas';
 
-export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
+export const Canvas = ({ 
+  activeTool = 'select',
+  onZoomChange,
+  onZoomLockedChange,
+}: { 
+  activeTool?: string;
+  onZoomChange?: (zoom: number, locked: boolean, handlers: {
+    zoomIn: () => void;
+    zoomOut: () => void;
+    fitView: () => void;
+    toggleLock: () => void;
+  }) => void;
+  onZoomLockedChange?: (locked: boolean) => void;
+}) => {
   const stageRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -90,6 +103,18 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
       resizeObserver.disconnect();
     };
   }, []);
+
+  // Notify parent about zoom state and handlers
+  useEffect(() => {
+    if (onZoomChange) {
+      onZoomChange(zoom, zoomLocked, {
+        zoomIn: handleZoomIn,
+        zoomOut: handleZoomOut,
+        fitView: handleFitView,
+        toggleLock: toggleZoomLock,
+      });
+    }
+  }, [zoom, zoomLocked, onZoomChange]);
 
   // Handle mouse move for drawing tools
   const handleMouseMove = (e: any) => {
@@ -1039,29 +1064,6 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
 
       {/* Status message for drawing */}
       {renderStatusMessage()}
-
-      {/* Zoom Controls */}
-      <div className="absolute bottom-4 right-4 flex gap-2 bg-card border border-border rounded-lg p-2 shadow-lg">
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          onClick={toggleZoomLock} 
-          title={zoomLocked ? "Unlock Zoom" : "Lock Zoom"}
-          className={zoomLocked ? "text-primary" : ""}
-        >
-          {zoomLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
-        </Button>
-        <Button variant="ghost" size="icon" onClick={handleZoomOut} title="Zoom Out" disabled={zoomLocked}>
-          <ZoomOut className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="sm" onClick={handleFitView} title="Fit to View">
-          <Maximize className="h-4 w-4 mr-2" />
-          {Math.round(zoom * 100)}%
-        </Button>
-        <Button variant="ghost" size="icon" onClick={handleZoomIn} title="Zoom In" disabled={zoomLocked}>
-          <ZoomIn className="h-4 w-4" />
-        </Button>
-      </div>
 
       {/* Pool Selector Modal */}
       {showPoolSelector && (
