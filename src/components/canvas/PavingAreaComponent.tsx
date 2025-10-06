@@ -14,44 +14,59 @@ export const PavingAreaComponent = ({ component, isSelected, onSelect }: PavingA
 
   return (
     <Group onClick={onSelect}>
-      {/* Pavers - render first so boundary is on top */}
-      {pavers.map(paver => {
-        // Only render if showEdgePavers is true OR paver is not an edge paver
-        if (!showEdgePavers && paver.isEdgePaver) {
-          return null;
-        }
-        
-        return (
-          <Group key={paver.id}>
-            <Rect
-              x={paver.position.x}
-              y={paver.position.y}
-              width={paver.width}
-              height={paver.height}
-              // More distinct colors: full pavers are cream, edge pavers are light yellow/orange
-              fill={paver.isEdgePaver ? '#FEF3C7' : '#F5F1E8'}
-              // Visible stroke for all pavers
-              stroke={paver.isEdgePaver ? '#F59E0B' : '#A8A29E'}
-              strokeWidth={2}
-              dash={paver.isEdgePaver ? [8, 4] : []}
-              opacity={paver.isEdgePaver ? 0.8 : 1}
-              listening={false}
-            />
-
-            {/* Cut indicator for edge pavers */}
-            {paver.isEdgePaver && (paver.cutPercentage || 0) >= 50 && (
-              <Text
-                x={paver.position.x + paver.width / 4}
-                y={paver.position.y + paver.height / 2 - 6}
-                text="✂"
-                fontSize={14}
-                fill="#DC2626"
+      {/* Pavers with clipping - render first */}
+      <Group
+        clipFunc={(ctx) => {
+          // Create clipping path from boundary
+          ctx.beginPath();
+          boundary.forEach((point, i) => {
+            if (i === 0) {
+              ctx.moveTo(point.x, point.y);
+            } else {
+              ctx.lineTo(point.x, point.y);
+            }
+          });
+          ctx.closePath();
+        }}
+      >
+        {pavers.map(paver => {
+          // Only render if showEdgePavers is true OR paver is not an edge paver
+          if (!showEdgePavers && paver.isEdgePaver) {
+            return null;
+          }
+          
+          return (
+            <Group key={paver.id}>
+              <Rect
+                x={paver.position.x}
+                y={paver.position.y}
+                width={paver.width}
+                height={paver.height}
+                // More distinct colors: full pavers are cream, edge pavers are light yellow/orange
+                fill={paver.isEdgePaver ? '#FEF3C7' : '#F5F1E8'}
+                // Visible stroke for all pavers
+                stroke={paver.isEdgePaver ? '#F59E0B' : '#A8A29E'}
+                strokeWidth={2}
+                dash={paver.isEdgePaver ? [8, 4] : []}
+                opacity={paver.isEdgePaver ? 0.8 : 1}
                 listening={false}
               />
-            )}
-          </Group>
-        );
-      })}
+
+              {/* Cut indicator for edge pavers */}
+              {paver.isEdgePaver && (paver.cutPercentage || 0) >= 50 && (
+                <Text
+                  x={paver.position.x + paver.width / 4}
+                  y={paver.position.y + paver.height / 2 - 6}
+                  text="✂"
+                  fontSize={14}
+                  fill="#DC2626"
+                  listening={false}
+                />
+              )}
+            </Group>
+          );
+        })}
+      </Group>
 
       {/* Boundary outline - render last so it's on top */}
       <Line
