@@ -311,12 +311,13 @@ export const Canvas = ({
   const handlePavingConfig = (config: PavingConfig) => {
     if (pavingBoundary.length < 3) return;
     
-    // Fill the area with pavers
+    // Fill the area with pavers (initially no exclude zones)
     const pavers = fillAreaWithPavers(
       pavingBoundary,
       config.paverSize,
       config.paverOrientation,
-      config.showEdgePavers
+      config.showEdgePavers,
+      [] // No exclude zones on initial creation - will be calculated by PavingAreaComponent
     );
     
     // Warn if no pavers were generated

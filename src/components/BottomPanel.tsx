@@ -399,7 +399,8 @@ const PropertiesContent = ({
                         component.properties.boundary || [],
                         '400x400',
                         'vertical',
-                        component.properties.showEdgePavers || true
+                        component.properties.showEdgePavers || true,
+                        [] // exclude zones
                       );
                       const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
                       onUpdate(component.id, {
@@ -423,7 +424,8 @@ const PropertiesContent = ({
                         component.properties.boundary || [],
                         '400x600',
                         component.properties.paverOrientation || 'vertical',
-                        component.properties.showEdgePavers || true
+                        component.properties.showEdgePavers || true,
+                        [] // exclude zones
                       );
                       const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
                       onUpdate(component.id, {
@@ -454,7 +456,8 @@ const PropertiesContent = ({
                           component.properties.boundary || [],
                           '400x600',
                           'vertical',
-                          component.properties.showEdgePavers || true
+                          component.properties.showEdgePavers || true,
+                          [] // exclude zones
                         );
                         const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
                         onUpdate(component.id, {
@@ -478,7 +481,8 @@ const PropertiesContent = ({
                           component.properties.boundary || [],
                           '400x600',
                           'horizontal',
-                          component.properties.showEdgePavers || true
+                          component.properties.showEdgePavers || true,
+                          [] // exclude zones
                         );
                         const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
                         onUpdate(component.id, {
@@ -509,7 +513,8 @@ const PropertiesContent = ({
                         component.properties.boundary || [],
                         component.properties.paverSize || '400x400',
                         component.properties.paverOrientation || 'vertical',
-                        e.target.checked
+                        e.target.checked,
+                        [] // exclude zones
                       );
                       const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
                       onUpdate(component.id, {

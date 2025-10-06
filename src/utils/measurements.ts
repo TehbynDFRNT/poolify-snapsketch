@@ -1,6 +1,8 @@
 import { Component, Summary } from '@/types';
 import { PAVER_SIZES, DRAINAGE_TYPES, FENCE_TYPES, WALL_MATERIALS } from '@/constants/components';
 import { POOL_LIBRARY } from '@/constants/pools';
+import { getPoolExcludeZone } from './poolExcludeZone';
+import { fillAreaWithPavers } from './pavingFill';
 
 export const calculateMeasurements = (components: Component[]): Summary => {
   const summary: Summary = {
@@ -10,6 +12,12 @@ export const calculateMeasurements = (components: Component[]): Summary => {
     fencing: [],
     walls: [],
   };
+
+  // Get all pools for exclude zones
+  const pools = components.filter(c => c.type === 'pool');
+  const excludeZones = pools
+    .map(pool => getPoolExcludeZone(pool))
+    .filter((zone): zone is NonNullable<typeof zone> => zone !== null);
 
   components.forEach(component => {
     switch (component.type) {
@@ -29,6 +37,43 @@ export const calculateMeasurements = (components: Component[]): Summary => {
           });
         }
         break;
+
+      case 'paving_area': {
+        const boundary = component.properties.boundary || [];
+        const paverSize = component.properties.paverSize || '400x400';
+        const paverOrientation = component.properties.paverOrientation || 'vertical';
+        const showEdgePavers = component.properties.showEdgePavers !== false;
+
+        if (boundary.length >= 3) {
+          // Recalculate with exclude zones to get accurate count
+          const filteredPavers = fillAreaWithPavers(
+            boundary,
+            paverSize,
+            paverOrientation,
+            showEdgePavers,
+            excludeZones
+          );
+
+          const paverDim = PAVER_SIZES[paverSize];
+          const totalCount = filteredPavers.length;
+          const fullCount = filteredPavers.filter(p => !p.isEdgePaver).length;
+          const edgeCount = filteredPavers.filter(p => p.isEdgePaver).length;
+          const area = (totalCount * paverDim.width * paverDim.height) / 1000000;
+
+          const existing = summary.paving.find(p => p.size === paverDim.label);
+          if (existing) {
+            existing.count += totalCount;
+            existing.area += area;
+          } else {
+            summary.paving.push({ 
+              size: paverDim.label, 
+              count: totalCount, 
+              area
+            });
+          }
+        }
+        break;
+      }
 
       case 'paver': {
         const size = component.properties.paverSize || '400x400';

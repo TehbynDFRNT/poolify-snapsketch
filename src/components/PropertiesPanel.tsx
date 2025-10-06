@@ -9,8 +9,10 @@ import { formatLength, formatArea } from '@/utils/measurements';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { POOL_LIBRARY } from '@/constants/pools';
 import { RotateCw, Copy, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { calculatePoolCoping } from '@/utils/copingCalculation';
+import { getPoolExcludeZone } from '@/utils/poolExcludeZone';
+import { fillAreaWithPavers } from '@/utils/pavingFill';
 
 export const PropertiesPanel = () => {
   const { selectedComponentId, components, getMeasurements, updateComponent, deleteComponent, duplicateComponent } = useDesignStore();
@@ -520,6 +522,55 @@ export const PropertiesPanel = () => {
                         )}
                       </div>
                     )}
+                
+                {/* Paving Area Pool Exclusion Info */}
+                {selectedComponent.type === 'paving_area' && (() => {
+                  const overlappingPools = components.filter(c => c.type === 'pool' && c.id !== selectedComponent.id);
+                  
+                  if (overlappingPools.length === 0) return null;
+                  
+                  const excludeZones = overlappingPools
+                    .map(pool => getPoolExcludeZone(pool))
+                    .filter((zone): zone is NonNullable<typeof zone> => zone !== null);
+                  
+                  if (excludeZones.length === 0) return null;
+
+                  const originalPavers = selectedComponent.properties.pavers?.length || 0;
+                  const filteredPavers = fillAreaWithPavers(
+                    selectedComponent.properties.boundary || [],
+                    selectedComponent.properties.paverSize || '400x400',
+                    selectedComponent.properties.paverOrientation || 'vertical',
+                    selectedComponent.properties.showEdgePavers !== false,
+                    excludeZones
+                  );
+                  const excludedCount = originalPavers - filteredPavers.length;
+                  
+                  if (excludedCount <= 0) return null;
+                  
+                  return (
+                    <div className="space-y-2 pt-2">
+                      <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                          ⚠️ Pool Overlap Detected
+                        </h4>
+                        <div className="space-y-1 text-xs text-blue-800 dark:text-blue-200">
+                          <div className="flex justify-between">
+                            <span>Original pavers:</span>
+                            <span className="font-mono">{originalPavers}</span>
+                          </div>
+                          <div className="flex justify-between text-red-600 dark:text-red-400">
+                            <span>Excluded (under {excludeZones.length} pool{excludeZones.length > 1 ? 's' : ''}):</span>
+                            <span className="font-mono">-{excludedCount}</span>
+                          </div>
+                          <div className="flex justify-between font-semibold border-t border-blue-300 dark:border-blue-700 pt-1 mt-1">
+                            <span>Net pavers to order:</span>
+                            <span className="font-mono">{filteredPavers.length}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
                 
                 <div>
                   <p className="text-sm font-medium mb-1">Position</p>
