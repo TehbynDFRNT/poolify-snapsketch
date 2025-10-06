@@ -74,27 +74,32 @@ export function fillAreaWithPavers(
         y: y + paverHeight / 2,
       };
       
-      // Check if paver overlaps any exclude zone (e.g., pool)
-      // Exclude if center OR any corner is inside the pool
-      if (excludeZones) {
-        const paverCornersAndCenter = [...corners, paverCenter];
-        const overlapsExcludeZone = paverCornersAndCenter.some(point => 
-          isInsideExcludeZone(point, excludeZones)
-        );
-        
-        if (overlapsExcludeZone) {
-          continue; // Skip this paver position
-        }
-      }
-      
-      // Count how many corners are inside
+      // Count how many corners are inside the paving boundary
       const cornersInside = corners.filter(corner => isPointInPolygon(corner, boundary));
       const centerInside = isPointInPolygon(paverCenter, boundary);
       
-      // Include paver if center is inside OR at least one corner is inside
+      // Check if paver overlaps any exclude zone (e.g., pool)
+      let cornersInPool = 0;
+      let centerInPool = false;
+      
+      if (excludeZones) {
+        cornersInPool = corners.filter(corner => isInsideExcludeZone(corner, excludeZones)).length;
+        centerInPool = isInsideExcludeZone(paverCenter, excludeZones);
+        
+        // Skip paver if completely inside pool (all corners + center)
+        if (cornersInPool === 4 && centerInPool) {
+          continue;
+        }
+      }
+      
+      // Include paver if center is inside boundary OR at least one corner is inside boundary
       if (centerInside || cornersInside.length > 0) {
-        const cornersOutside = corners.length - cornersInside.length;
-        const isEdge = cornersOutside > 0;
+        // Calculate edge status considering both boundary and pool
+        const cornersOutsideBoundary = corners.length - cornersInside.length;
+        const isEdge = cornersOutsideBoundary > 0 || cornersInPool > 0;
+        
+        // Calculate cut percentage based on corners outside boundary OR inside pool
+        const effectiveCutCorners = Math.max(cornersOutsideBoundary, cornersInPool);
         
         // Only add if showing edge pavers OR it's a full paver
         if (showEdgePavers || !isEdge) {
@@ -104,7 +109,7 @@ export function fillAreaWithPavers(
             width: paverWidth,
             height: paverHeight,
             isEdgePaver: isEdge,
-            cutPercentage: isEdge ? Math.round((cornersOutside / 4) * 100) : 0,
+            cutPercentage: isEdge ? Math.round((effectiveCutCorners / 4) * 100) : 0,
             mmWidth: paverWidthMm,
             mmHeight: paverHeightMm,
           });
