@@ -666,8 +666,8 @@ export const Canvas = ({
           listening={false}
         />
         
-        {/* Measurement label for boundary */}
-        {activeTool === 'boundary' && distance > 10 && (
+        {/* Measurement label for boundary and house */}
+        {(activeTool === 'boundary' || activeTool === 'house') && distance > 10 && (
           <Label x={midPoint.x} y={midPoint.y - 20}>
             <Tag
               fill="white"
@@ -736,8 +736,8 @@ export const Canvas = ({
           listening={false}
         />
         
-        {/* Segment measurements for boundary */}
-        {activeTool === 'boundary' && drawingPoints.map((point, index) => {
+        {/* Segment measurements for boundary and house */}
+        {(activeTool === 'boundary' || activeTool === 'house') && drawingPoints.map((point, index) => {
           if (index === 0) return null;
           const prevPoint = drawingPoints[index - 1];
           const dx = point.x - prevPoint.x;
