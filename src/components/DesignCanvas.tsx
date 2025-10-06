@@ -46,6 +46,14 @@ export const DesignCanvas = () => {
       toggleLock: () => {},
     }
   });
+  const [drawingState, setDrawingState] = useState({
+    isDrawing: false,
+    pointsCount: 0,
+    isMeasuring: false,
+    shiftPressed: false,
+    measureStart: null as { x: number; y: number } | null,
+    measureEnd: null as { x: number; y: number } | null,
+  });
   
   useKeyboardShortcuts(); // Enable keyboard shortcuts
   
@@ -297,6 +305,9 @@ export const DesignCanvas = () => {
           onZoomChange={(zoom, zoomLocked, handlers) => {
             setZoomState({ zoom, zoomLocked, handlers });
           }}
+          onDrawingStateChange={(isDrawing, pointsCount, isMeasuring, shiftPressed, measureStart, measureEnd) => {
+            setDrawingState({ isDrawing, pointsCount, isMeasuring, shiftPressed, measureStart, measureEnd });
+          }}
         />
       </main>
 
@@ -312,6 +323,12 @@ export const DesignCanvas = () => {
         onZoomOut={zoomState.handlers.zoomOut}
         onFitView={zoomState.handlers.fitView}
         onToggleZoomLock={zoomState.handlers.toggleLock}
+        isDrawing={drawingState.isDrawing}
+        drawingPointsCount={drawingState.pointsCount}
+        isMeasuring={drawingState.isMeasuring}
+        shiftPressed={drawingState.shiftPressed}
+        measureStart={drawingState.measureStart}
+        measureEnd={drawingState.measureEnd}
       />
     </div>
   );

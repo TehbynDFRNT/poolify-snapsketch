@@ -26,6 +26,7 @@ export const Canvas = ({
   activeTool = 'select',
   onZoomChange,
   onZoomLockedChange,
+  onDrawingStateChange,
 }: { 
   activeTool?: string;
   onZoomChange?: (zoom: number, locked: boolean, handlers: {
@@ -35,6 +36,7 @@ export const Canvas = ({
     toggleLock: () => void;
   }) => void;
   onZoomLockedChange?: (locked: boolean) => void;
+  onDrawingStateChange?: (isDrawing: boolean, pointsCount: number, isMeasuring: boolean, shiftPressed: boolean, measureStart: any, measureEnd: any) => void;
 }) => {
   const stageRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -131,6 +133,13 @@ export const Canvas = ({
       });
     }
   }, [zoom, zoomLocked, handleZoomIn, handleZoomOut, handleFitView, toggleZoomLock, onZoomChange]);
+
+  // Notify parent about drawing state
+  useEffect(() => {
+    if (onDrawingStateChange) {
+      onDrawingStateChange(isDrawing, drawingPoints.length, isMeasuring, shiftPressed, measureStart, measureEnd);
+    }
+  }, [isDrawing, drawingPoints.length, isMeasuring, shiftPressed, measureStart, measureEnd, onDrawingStateChange]);
 
   // Handle mouse move for drawing tools
   const handleMouseMove = (e: any) => {
@@ -780,39 +789,6 @@ export const Canvas = ({
     );
   };
 
-  // Render status message
-  const renderStatusMessage = () => {
-    if (isDrawing) {
-      let message = 'Click points to draw';
-      if (drawingPoints.length >= 3) {
-        message = 'Click first point to close or press Enter to finish';
-      }
-
-      return (
-        <div className="absolute top-4 left-4 bg-card border border-border rounded-lg p-3 shadow-lg">
-          <p className="text-sm text-foreground">ℹ️ {message}</p>
-          <p className="text-xs text-muted-foreground mt-1">Press Escape to cancel • Z to undo last point</p>
-        </div>
-      );
-    }
-    
-    if (isMeasuring && measureStart && measureEnd) {
-      const distance = calculateDistance(measureStart, measureEnd);
-      const measurementMeters = (distance / 100).toFixed(1);
-      
-      return (
-        <div className="absolute top-4 left-4 bg-card border border-border rounded-lg p-3 shadow-lg">
-          <p className="text-sm text-foreground">📏 {measurementMeters}m</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            {shiftPressed ? '🔒 Axis locked • ' : 'Hold Shift to lock axis • '}
-            Click to finish • Escape to cancel
-          </p>
-        </div>
-      );
-    }
-    
-    return null;
-  };
   
   // Render measurement preview line
   const renderMeasurementPreview = () => {
@@ -1089,9 +1065,6 @@ export const Canvas = ({
           })}
         </Layer>
       </Stage>
-
-      {/* Status message for drawing */}
-      {renderStatusMessage()}
 
       {/* Pool Selector Modal */}
       {showPoolSelector && (
