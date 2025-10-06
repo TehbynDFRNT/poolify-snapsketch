@@ -790,7 +790,7 @@ export const Canvas = ({
       }
 
       return (
-        <div className="absolute top-4 left-4 bg-card border border-border rounded-lg p-3 shadow-lg">
+        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 bg-card border border-border rounded-lg p-3 shadow-lg">
           <p className="text-sm text-foreground">ℹ️ {message}</p>
           <p className="text-xs text-muted-foreground mt-1">Press Escape to cancel • Z to undo last point</p>
         </div>
