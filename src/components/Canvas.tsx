@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { Stage, Layer, Line, Circle, Text } from 'react-konva';
+import { Stage, Layer, Line, Circle, Text, Label, Tag } from 'react-konva';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
 import { Button } from '@/components/ui/button';
@@ -579,7 +579,18 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
     if (!isDrawing || !ghostPoint || drawingPoints.length === 0) return null;
 
     const lastPoint = drawingPoints[drawingPoints.length - 1];
-    const color = activeTool === 'boundary' ? '#EAB308' : '#92400E';
+    const color = activeTool === 'boundary' ? 'hsl(220, 80%, 30%)' : '#92400E'; // Navy blue for boundary
+
+    // Calculate distance for measurement
+    const dx = ghostPoint.x - lastPoint.x;
+    const dy = ghostPoint.y - lastPoint.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const measurementMeters = (distance / 100).toFixed(1);
+    
+    const midPoint = {
+      x: (lastPoint.x + ghostPoint.x) / 2,
+      y: (lastPoint.y + ghostPoint.y) / 2,
+    };
 
     return (
       <>
@@ -587,11 +598,34 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
         <Line
           points={[lastPoint.x, lastPoint.y, ghostPoint.x, ghostPoint.y]}
           stroke={color}
-          strokeWidth={2}
+          strokeWidth={activeTool === 'boundary' ? 4 : 2}
           opacity={0.5}
           dash={[5, 5]}
           listening={false}
         />
+        
+        {/* Measurement label for boundary */}
+        {activeTool === 'boundary' && distance > 10 && (
+          <Label x={midPoint.x} y={midPoint.y - 20}>
+            <Tag
+              fill="white"
+              stroke={color}
+              strokeWidth={1}
+              cornerRadius={3}
+              pointerDirection="down"
+              pointerWidth={6}
+              pointerHeight={6}
+            />
+            <Text
+              text={`${measurementMeters}m`}
+              fontSize={14}
+              fontStyle="bold"
+              fill={color}
+              padding={4}
+              align="center"
+            />
+          </Label>
+        )}
         
         {/* Snap indicator */}
         <Circle
@@ -623,7 +657,7 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
   const renderDrawingPoints = () => {
     if (!isDrawing || drawingPoints.length === 0) return null;
 
-    const color = activeTool === 'boundary' ? '#EAB308' : '#92400E';
+    const color = activeTool === 'boundary' ? 'hsl(220, 80%, 30%)' : '#92400E'; // Navy blue for boundary
     const flatPoints: number[] = [];
     drawingPoints.forEach(p => {
       flatPoints.push(p.x, p.y);
@@ -635,10 +669,46 @@ export const Canvas = ({ activeTool = 'select' }: { activeTool?: string }) => {
         <Line
           points={flatPoints}
           stroke={color}
-          strokeWidth={activeTool === 'boundary' ? 3 : 2}
+          strokeWidth={activeTool === 'boundary' ? 4 : 2}
           dash={activeTool === 'boundary' ? [10, 5] : undefined}
           listening={false}
         />
+        
+        {/* Segment measurements for boundary */}
+        {activeTool === 'boundary' && drawingPoints.map((point, index) => {
+          if (index === 0) return null;
+          const prevPoint = drawingPoints[index - 1];
+          const dx = point.x - prevPoint.x;
+          const dy = point.y - prevPoint.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const measurementMeters = (distance / 100).toFixed(1);
+          const midPoint = {
+            x: (prevPoint.x + point.x) / 2,
+            y: (prevPoint.y + point.y) / 2,
+          };
+          
+          return (
+            <Label key={`measurement-${index}`} x={midPoint.x} y={midPoint.y - 20}>
+              <Tag
+                fill="white"
+                stroke={color}
+                strokeWidth={1}
+                cornerRadius={3}
+                pointerDirection="down"
+                pointerWidth={6}
+                pointerHeight={6}
+              />
+              <Text
+                text={`${measurementMeters}m`}
+                fontSize={14}
+                fontStyle="bold"
+                fill={color}
+                padding={4}
+                align="center"
+              />
+            </Label>
+          );
+        })}
         
         {/* Points */}
         {drawingPoints.map((point, index) => (
