@@ -67,8 +67,7 @@ export const snapToPaverEdges = (
   point: { x: number; y: number },
   pavingAreaBoundary: Array<{ x: number; y: number }>,
   paverSize: '400x400' | '400x600',
-  orientation: 'vertical' | 'horizontal',
-  tolerance: number = 20
+  orientation: 'vertical' | 'horizontal'
 ): { x: number; y: number } => {
   // Calculate paver dimensions in canvas pixels
   const pxPerMm = 0.1;
@@ -88,22 +87,19 @@ export const snapToPaverEdges = (
     }
   }
   
-  // Get bounding box of paving area
+  // Get bounding box of paving area to determine grid origin
   const xs = pavingAreaBoundary.map(p => p.x);
   const ys = pavingAreaBoundary.map(p => p.y);
   const minX = Math.min(...xs);
   const minY = Math.min(...ys);
   
-  // Find the nearest paver edge by calculating which paver grid lines are closest
-  const nearestX = Math.round((point.x - minX) / paverWidthPx) * paverWidthPx + minX;
-  const nearestY = Math.round((point.y - minY) / paverHeightPx) * paverHeightPx + minY;
-  
-  // Check if we're within tolerance to snap
-  const distX = Math.abs(point.x - nearestX);
-  const distY = Math.abs(point.y - nearestY);
+  // Always snap to paver grid lines to ensure pool edges align with paver boundaries
+  // This minimizes wastage by ensuring full pavers on pool edges
+  const snappedX = Math.round((point.x - minX) / paverWidthPx) * paverWidthPx + minX;
+  const snappedY = Math.round((point.y - minY) / paverHeightPx) * paverHeightPx + minY;
   
   return {
-    x: distX <= tolerance ? nearestX : point.x,
-    y: distY <= tolerance ? nearestY : point.y,
+    x: snappedX,
+    y: snappedY,
   };
 };
