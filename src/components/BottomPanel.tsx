@@ -417,6 +417,87 @@ const PropertiesContent = ({
             </div>
           )}
 
+          {component.type === 'wall' && (
+            <>
+              <div>
+                <Label className="text-xs">Material Type</Label>
+                <select
+                  value={component.properties.wallMaterial || 'timber'}
+                  onChange={(e) => onUpdate(component.id, {
+                    properties: {
+                      ...component.properties,
+                      wallMaterial: e.target.value as 'timber' | 'concrete' | 'concrete_sleeper' | 'sandstone'
+                    }
+                  })}
+                  className="w-full px-3 py-2 border rounded-md bg-background text-sm h-8"
+                >
+                  <option value="timber">Timber</option>
+                  <option value="concrete">Concrete</option>
+                  <option value="concrete_sleeper">Concrete Sleeper</option>
+                  <option value="sandstone">Sandstone</option>
+                </select>
+              </div>
+
+              <div>
+                <Label htmlFor="wall-height" className="text-xs">Height (meters)</Label>
+                <Input
+                  id="wall-height"
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  value={((component.properties.wallHeight || 1200) / 1000).toFixed(1)}
+                  onChange={(e) => {
+                    const heightInMeters = parseFloat(e.target.value);
+                    if (!isNaN(heightInMeters) && heightInMeters > 0) {
+                      onUpdate(component.id, {
+                        properties: {
+                          ...component.properties,
+                          wallHeight: heightInMeters * 1000
+                        }
+                      });
+                    }
+                  }}
+                  className="h-8"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {component.properties.wallHeight || 1200}mm
+                </p>
+              </div>
+
+              <div>
+                <Label className="text-xs">Status</Label>
+                <div className="flex gap-2 mt-1">
+                  <Button
+                    variant={component.properties.wallStatus !== 'existing' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => onUpdate(component.id, {
+                      properties: {
+                        ...component.properties,
+                        wallStatus: 'proposed'
+                      }
+                    })}
+                    className="flex-1"
+                  >
+                    Proposed
+                  </Button>
+                  <Button
+                    variant={component.properties.wallStatus === 'existing' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => onUpdate(component.id, {
+                      properties: {
+                        ...component.properties,
+                        wallStatus: 'existing'
+                      }
+                    })}
+                    className="flex-1"
+                  >
+                    Existing
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+
           {component.type === 'paver' && (
             <div>
               <Label className="text-xs">Paver Size</Label>
