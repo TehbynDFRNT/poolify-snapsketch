@@ -132,6 +132,16 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
           dash={[10, 5]}
         />
       )}
+
+      {/* Snap anchor indicator - green dot at origin (snap point) */}
+      <Circle
+        x={0}
+        y={0}
+        radius={6}
+        fill="#22c55e"
+        stroke="#166534"
+        strokeWidth={2}
+      />
     </Group>
   );
 };
