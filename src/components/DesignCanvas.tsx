@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   AlertDialog,
@@ -234,6 +234,22 @@ export const DesignCanvas = () => {
     toast.success('Canvas cleared');
   };
 
+  const handleZoomChange = useCallback((zoom: number, zoomLocked: boolean, handlers: any) => {
+    setZoomState({ zoom, zoomLocked, handlers });
+  }, []);
+
+  const handleDrawingStateChange = useCallback((
+    isDrawing: boolean,
+    pointsCount: number,
+    isMeasuring: boolean,
+    shiftPressed: boolean,
+    measureStart: { x: number; y: number } | null,
+    measureEnd: { x: number; y: number } | null,
+    ghostDistance: number | null
+  ) => {
+    setDrawingState({ isDrawing, pointsCount, isMeasuring, shiftPressed, measureStart, measureEnd, ghostDistance });
+  }, []);
+
   const selectedComponent = selectedComponentId 
     ? components.find(c => c.id === selectedComponentId) || null
     : null;
@@ -316,12 +332,8 @@ export const DesignCanvas = () => {
       >
         <Canvas 
           activeTool={activeTool}
-          onZoomChange={(zoom, zoomLocked, handlers) => {
-            setZoomState({ zoom, zoomLocked, handlers });
-          }}
-          onDrawingStateChange={(isDrawing, pointsCount, isMeasuring, shiftPressed, measureStart, measureEnd, ghostDistance) => {
-            setDrawingState({ isDrawing, pointsCount, isMeasuring, shiftPressed, measureStart, measureEnd, ghostDistance });
-          }}
+          onZoomChange={handleZoomChange}
+          onDrawingStateChange={handleDrawingStateChange}
         />
       </main>
 
