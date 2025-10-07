@@ -34,15 +34,16 @@ export const calculateMeasurements = (components: Component[]): Summary => {
         const size = component.properties.paverSize || '400x400';
         const count = component.properties.paverCount || { rows: 1, cols: 1 };
         const totalCount = count.rows * count.cols;
-        const paverDim = PAVER_SIZES[size];
-        const area = (totalCount * paverDim.width * paverDim.height) / 1000000; // Convert to m²
+        const paverDim = PAVER_SIZES[size] || PAVER_SIZES['400x400'];
+        const label = paverDim.label;
+        const area = (totalCount * paverDim.width * paverDim.height) / 1000000; // m²
 
-        const existing = summary.paving.find(p => p.size === PAVER_SIZES[size].label);
+        const existing = summary.paving.find(p => p.size === label);
         if (existing) {
           existing.count += totalCount;
           existing.area += area;
         } else {
-          summary.paving.push({ size: PAVER_SIZES[size].label, count: totalCount, area });
+          summary.paving.push({ size: label, count: totalCount, area });
         }
         break;
       }
@@ -51,11 +52,15 @@ export const calculateMeasurements = (components: Component[]): Summary => {
         const size = component.properties.paverSize || '400x400';
         const label = PAVER_SIZES[size].label;
         const stats = component.properties.statistics;
-        // Fallback: derive from pavers array if statistics missing
+        const boundary = component.properties.boundary as Array<{ x: number; y: number }> | undefined;
+        // Fallback: derive counts from pavers array if statistics missing
         const full = stats?.fullPavers ?? (component.properties.pavers?.filter(p => !p.isEdgePaver).length || 0);
-        const edge = (component.properties.showEdgePavers === false) ? 0 : (stats?.edgePavers ?? (component.properties.pavers?.filter(p => p.isEdgePaver).length || 0));
+        const edge = (component.properties.showEdgePavers === false)
+          ? 0
+          : (stats?.edgePavers ?? (component.properties.pavers?.filter(p => p.isEdgePaver).length || 0));
         const totalCount = full + edge;
-        const area = stats?.totalArea ?? 0;
+        // Fallback area: compute from boundary polygon if stats missing
+        const area = stats?.totalArea ?? (boundary && boundary.length >= 3 ? calculatePolygonArea(boundary) : 0);
 
         const existing = summary.paving.find(p => p.size === label);
         if (existing) {
@@ -70,13 +75,14 @@ export const calculateMeasurements = (components: Component[]): Summary => {
       case 'drainage': {
         const type = component.properties.drainageType || 'rock';
         const length = component.properties.length || component.dimensions.width;
+        const label = DRAINAGE_TYPES[type]?.label || type;
         
-        const existing = summary.drainage.find(d => d.type === type);
+        const existing = summary.drainage.find(d => d.type === label);
         if (existing) {
           existing.length += length;
         } else {
           summary.drainage.push({
-            type: DRAINAGE_TYPES[type].label,
+            type: label,
             length,
           });
         }
