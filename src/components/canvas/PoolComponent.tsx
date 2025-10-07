@@ -3,6 +3,8 @@ import { Group, Line, Text, Circle, Rect } from 'react-konva';
 import { Component } from '@/types';
 import { POOL_LIBRARY } from '@/constants/pools';
 import { calculatePoolCoping } from '@/utils/copingCalculation';
+import { useDesignStore } from '@/store/designStore';
+import { snapPoolToPaverGrid } from '@/utils/snap';
 
 interface PoolComponentProps {
   component: Component;
@@ -13,6 +15,7 @@ interface PoolComponentProps {
 
 export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: PoolComponentProps) => {
   const groupRef = useRef<any>(null);
+  const allComponents = useDesignStore(state => state.components);
 
   // Find the pool from the library
   const poolData = POOL_LIBRARY.find(p => p.id === component.properties.poolId) || POOL_LIBRARY[0];
@@ -26,6 +29,23 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   const showCoping = component.properties.showCoping ?? false;
   const copingCalc = showCoping && poolData ? calculatePoolCoping(poolData) : null;
 
+  const handleDragEnd = (e: any) => {
+    const newPos = { x: e.target.x(), y: e.target.y() };
+    
+    // Snap to paver grid if inside a paving area
+    const snappedPos = snapPoolToPaverGrid(
+      newPos,
+      { length: poolData.length, width: poolData.width },
+      allComponents
+    );
+    
+    // Update the position on the Konva node for immediate visual feedback
+    e.target.x(snappedPos.x);
+    e.target.y(snappedPos.y);
+    
+    onDragEnd(snappedPos);
+  };
+
   return (
     <Group
       ref={groupRef}
@@ -35,9 +55,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       draggable
       onClick={onSelect}
       onTap={onSelect}
-      onDragEnd={(e) => {
-        onDragEnd({ x: e.target.x(), y: e.target.y() });
-      }}
+      onDragEnd={handleDragEnd}
     >
       {/* Render coping FIRST (so it's behind the pool) */}
       {showCoping && copingCalc && (
