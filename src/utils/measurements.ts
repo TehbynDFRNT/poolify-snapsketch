@@ -86,8 +86,8 @@ export const calculateMeasurements = (components: Component[]): Summary => {
       case 'fence': {
         const type = component.properties.fenceType || 'glass';
         const fenceLabel = FENCE_TYPES[type]?.label || 'Glass Pool Fence';
-        // Use dimensions.width (the actual fence length)
-        const length = component.dimensions.width || 0;
+        // Use dimensions.width (in pixels) and convert to mm (1 pixel = 10mm)
+        const length = (component.dimensions.width || 0) * 10;
         const gates = component.properties.gates?.length || 0;
         
         // Only add fences with valid lengths (ignore zero-length fences)
