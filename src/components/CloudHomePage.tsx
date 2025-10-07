@@ -131,7 +131,7 @@ export function CloudHomePage() {
         .from('projects')
         .select(`
           *,
-          profiles!owner_id(full_name),
+          profiles!projects_owner_id_fkey(full_name),
           project_shares!inner(permission)
         `)
         .eq('project_shares.user_id', user.id)
