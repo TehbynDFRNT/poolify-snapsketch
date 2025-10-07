@@ -36,7 +36,7 @@ export const Canvas = ({
     toggleLock: () => void;
   }) => void;
   onZoomLockedChange?: (locked: boolean) => void;
-  onDrawingStateChange?: (isDrawing: boolean, pointsCount: number, isMeasuring: boolean, shiftPressed: boolean, measureStart: any, measureEnd: any) => void;
+  onDrawingStateChange?: (isDrawing: boolean, pointsCount: number, isMeasuring: boolean, shiftPressed: boolean, measureStart: any, measureEnd: any, ghostDistance: number | null) => void;
 }) => {
   const stageRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -137,40 +137,55 @@ export const Canvas = ({
   // Notify parent about drawing state
   useEffect(() => {
     if (onDrawingStateChange) {
-      onDrawingStateChange(isDrawing, drawingPoints.length, isMeasuring, shiftPressed, measureStart, measureEnd);
+      // Calculate ghost line distance for drawing tools
+      let ghostDistance = null;
+      if (isDrawing && drawingPoints.length > 0 && ghostPoint) {
+        const lastPoint = drawingPoints[drawingPoints.length - 1];
+        ghostDistance = calculateDistance(lastPoint, ghostPoint);
+      }
+      
+      onDrawingStateChange(isDrawing, drawingPoints.length, isMeasuring, shiftPressed, measureStart, measureEnd, ghostDistance);
     }
-  }, [isDrawing, drawingPoints.length, isMeasuring, shiftPressed, measureStart, measureEnd, onDrawingStateChange]);
+  }, [isDrawing, drawingPoints.length, isMeasuring, shiftPressed, measureStart, measureEnd, ghostPoint, onDrawingStateChange]);
 
-  // Handle mouse move for drawing tools
   const handleMouseMove = (e: any) => {
     if (activeTool === 'boundary' || activeTool === 'house' || activeTool === 'paving_area') {
       const pos = e.target.getStage().getPointerPosition();
       const canvasX = (pos.x - pan.x) / zoom;
       const canvasY = (pos.y - pan.y) / zoom;
       
-      // Use smart snap for paving areas to align with boundaries
-      const snapped = activeTool === 'paving_area' 
-        ? smartSnap({ x: canvasX, y: canvasY }, components)
-        : { x: snapToGrid(canvasX), y: snapToGrid(canvasY), snappedTo: null };
-      
-      setGhostPoint({ x: snapped.x, y: snapped.y });
+      if (drawingPoints.length > 0) {
+        const lastPoint = drawingPoints[drawingPoints.length - 1];
+        let snappedPoint = smartSnap(
+          { x: canvasX, y: canvasY },
+          components
+        );
+
+        // Apply shift key axis locking if pressed
+        if (shiftPressed && drawingPoints.length > 0) {
+          snappedPoint = { ...lockToAxis(lastPoint, { x: snappedPoint.x, y: snappedPoint.y }), snappedTo: null };
+        }
+
+        setGhostPoint(snappedPoint);
+      } else {
+        setGhostPoint({ x: canvasX, y: canvasY });
+      }
     }
-    // Handle measurement tools
-    else if ((activeTool === 'quick_measure' || activeTool === 'reference_line') && isMeasuring && measureStart) {
+    
+    // Update measurement end point for measuring tools
+    if ((activeTool === 'quick_measure' || activeTool === 'reference_line') && measureStart) {
       const pos = e.target.getStage().getPointerPosition();
       const canvasX = (pos.x - pan.x) / zoom;
       const canvasY = (pos.y - pan.y) / zoom;
-      let snapped = {
-        x: snapToGrid(canvasX),
-        y: snapToGrid(canvasY),
-      };
       
-      // Apply axis lock if Shift is pressed
+      let endPoint = { x: canvasX, y: canvasY };
+      
+      // Apply shift key axis locking
       if (shiftPressed) {
-        snapped = lockToAxis(measureStart, snapped);
+        endPoint = lockToAxis(measureStart, endPoint);
       }
       
-      setMeasureEnd(snapped);
+      setMeasureEnd(endPoint);
     }
   };
 

@@ -53,6 +53,7 @@ export const DesignCanvas = () => {
     shiftPressed: false,
     measureStart: null as { x: number; y: number } | null,
     measureEnd: null as { x: number; y: number } | null,
+    ghostDistance: null as number | null,
   });
   
   useKeyboardShortcuts(); // Enable keyboard shortcuts
@@ -305,8 +306,8 @@ export const DesignCanvas = () => {
           onZoomChange={(zoom, zoomLocked, handlers) => {
             setZoomState({ zoom, zoomLocked, handlers });
           }}
-          onDrawingStateChange={(isDrawing, pointsCount, isMeasuring, shiftPressed, measureStart, measureEnd) => {
-            setDrawingState({ isDrawing, pointsCount, isMeasuring, shiftPressed, measureStart, measureEnd });
+          onDrawingStateChange={(isDrawing, pointsCount, isMeasuring, shiftPressed, measureStart, measureEnd, ghostDistance) => {
+            setDrawingState({ isDrawing, pointsCount, isMeasuring, shiftPressed, measureStart, measureEnd, ghostDistance });
           }}
         />
       </main>
@@ -329,6 +330,7 @@ export const DesignCanvas = () => {
         shiftPressed={drawingState.shiftPressed}
         measureStart={drawingState.measureStart}
         measureEnd={drawingState.measureEnd}
+        ghostDistance={drawingState.ghostDistance}
       />
     </div>
   );

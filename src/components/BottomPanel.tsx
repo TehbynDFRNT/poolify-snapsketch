@@ -31,6 +31,7 @@ interface BottomPanelProps {
   shiftPressed: boolean;
   measureStart: { x: number; y: number } | null;
   measureEnd: { x: number; y: number } | null;
+  ghostDistance: number | null;
 }
 
 type TabType = 'properties' | 'materials' | 'notes';
@@ -52,6 +53,7 @@ export const BottomPanel = ({
   shiftPressed,
   measureStart,
   measureEnd,
+  ghostDistance,
 }: BottomPanelProps) => {
   const [activeTab, setActiveTab] = useState<TabType>('properties');
   const [isResizing, setIsResizing] = useState(false);
@@ -245,11 +247,13 @@ export const BottomPanel = ({
                   {isDrawing && (
                     <>
                       <p className="text-xs text-foreground">
+                        {ghostDistance !== null && `📏 ${(ghostDistance / 100).toFixed(1)}m • `}
                         ℹ️ {drawingPointsCount >= 3
                           ? 'Click first point to close or press Enter to finish'
                           : 'Click points to draw'}
                       </p>
                       <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {shiftPressed && '🔒 Axis locked • '}
                         Press Escape to cancel • Z to undo last point
                       </p>
                     </>
