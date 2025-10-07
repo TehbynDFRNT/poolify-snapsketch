@@ -935,11 +935,11 @@ const MaterialsSummary = ({
             ).map(([type, group]) => (
               <div key={type} className="mb-3">
                 <div className="text-sm font-medium">• {type}</div>
-                <div className="text-xs text-muted-foreground ml-4">Total: {formatLength(group.total)}</div>
+                <div className="text-xs text-muted-foreground ml-4">Total: {(group.total / 1000).toFixed(2)}m</div>
                 <ul className="text-xs text-muted-foreground ml-4 mt-1 space-y-1">
                   {(group.items as any).map((f: any, i: number) => (
                     <li key={i}>
-                      Section {i + 1}: {formatLength(f.length)}{f.gates > 0 ? ` • Gates: ${f.gates}` : ''}
+                      Section {i + 1}: {(f.length / 1000).toFixed(2)}m{f.gates > 0 ? ` • Gates: ${f.gates}` : ''}
                     </li>
                   ))}
                 </ul>
