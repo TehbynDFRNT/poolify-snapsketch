@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   AlertDialog,
@@ -29,6 +29,8 @@ export const DesignCanvas = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const initializedRef = useRef(false);
   const [activeTool, setActiveTool] = useState<ToolType>('select');
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
@@ -157,6 +159,8 @@ export const DesignCanvas = () => {
       });
 
       setLastSaved(new Date(project.updated_at));
+      setIsDirty(false);
+      initializedRef.current = true;
       setLoading(false);
     } catch (error: any) {
       toast.error(error.message);
@@ -174,19 +178,31 @@ export const DesignCanvas = () => {
     return () => clearInterval(interval);
   }, [currentProject, components, user, id, permission]);
 
+  // Track unsaved changes across project fields and components
+  useEffect(() => {
+    if (!initializedRef.current) return;
+    setIsDirty(true);
+  }, [components, currentProject?.customerName, currentProject?.address, currentProject?.notes]);
+
   const handleSave = async () => {
     if (!currentProject || !user || !id || permission === 'view') return;
     try {
-      await supabase.from('projects').update({
-        customer_name: currentProject.customerName,
-        address: currentProject.address,
-        notes: currentProject.notes,
-        components: components as any,
-        updated_at: new Date().toISOString(),
-      }).eq('id', id);
+      const { error } = await supabase
+        .from('projects')
+        .update({
+          customer_name: currentProject.customerName,
+          address: currentProject.address,
+          notes: currentProject.notes,
+          components: components as any,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+      if (error) throw error;
       setLastSaved(new Date());
+      setIsDirty(false);
       toast.success('Project saved');
     } catch (error: any) {
+      console.error('Save failed:', error);
       toast.error('Save failed');
     }
   };
@@ -196,18 +212,21 @@ export const DesignCanvas = () => {
     navigate('/projects');
   };
 
-  // Save before page unload
+  // Warn before page unload only if there are unsaved changes
   useEffect(() => {
-    const handleBeforeUnload = async (e: BeforeUnloadEvent) => {
-      if (currentProject && user && id && permission !== 'view') {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
         e.preventDefault();
-        await handleSave();
+        e.returnValue = '';
       }
     };
-    
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [currentProject, user, id, permission]);
+
+    if (isDirty) {
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }
+    return;
+  }, [isDirty]);
 
   const handleExport = async (options: ExportOptions) => {
     if (!currentProject) return;
