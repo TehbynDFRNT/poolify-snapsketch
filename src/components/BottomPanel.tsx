@@ -105,14 +105,8 @@ export const BottomPanel = ({
     onHeightChange(isCollapsed ? 350 : 40);
   };
 
-  // Calculate materials summary
-  const materialsSummary = {
-    pools: components.filter(c => c.type === 'pool'),
-    pavers: components.filter(c => c.type === 'paver' || c.type === 'paving_area'),
-    drainage: components.filter(c => c.type === 'drainage'),
-    fences: components.filter(c => c.type === 'fence'),
-    walls: components.filter(c => c.type === 'wall'),
-  };
+  // Calculate materials summary using aggregated measurements
+  const materialsSummary = calculateMeasurements(components);
   return (
     <div
       className="border-t bg-background flex flex-col flex-shrink-0"
@@ -711,14 +705,15 @@ const PropertiesContent = ({
 const MaterialsSummary = ({
   summary,
 }: {
-  summary: {
-    pools: Component[];
-    pavers: Component[];
-    drainage: Component[];
-    fences: Component[];
-    walls: Component[];
-  };
+  summary: ReturnType<typeof calculateMeasurements>;
 }) => {
+  const formatLength = (mm: number): string => {
+    if (mm >= 1000) {
+      return `${(mm / 1000).toFixed(1)}m`;
+    }
+    return `${mm}mm`;
+  };
+
   return (
     <div className="space-y-4">
       <h3 className="font-semibold text-foreground">Project Materials</h3>
@@ -730,61 +725,46 @@ const MaterialsSummary = ({
           </CardHeader>
           <CardContent>
             <ul className="space-y-3">
-              {summary.pools.map((pool, i) => {
-                const poolData = POOL_LIBRARY.find(p => p.id === pool.properties.poolId);
-                return (
-                  <li key={pool.id} className="text-sm">
-                    <div className="font-medium">• {poolData?.name || 'Pool'}</div>
-                    <div className="text-xs text-muted-foreground ml-4 mt-1">
-                      Position: ({Math.round(pool.position.x)}, {Math.round(pool.position.y)})
+              {summary.pools.map((pool, i) => (
+                <li key={i} className="text-sm">
+                  <div className="font-medium">• {pool.type}</div>
+                  <div className="text-xs text-muted-foreground ml-4 mt-1">
+                    Dimensions: {pool.dimensions}
+                  </div>
+                  {pool.coping && (
+                    <div className="text-xs text-blue-600 dark:text-blue-400 ml-4 mt-1 space-y-0.5">
+                      <div className="font-medium">Coping: {pool.coping.totalPavers} pavers (400×400mm)</div>
+                      <div>
+                        {pool.coping.fullPavers} full + {pool.coping.partialPavers} partial
+                      </div>
+                      <div>Total area: {pool.coping.area.toFixed(2)} m²</div>
                     </div>
-                    {poolData && (
-                      <div className="text-xs text-muted-foreground ml-4">
-                        Dimensions: {poolData.length}mm × {poolData.width}mm
-                      </div>
-                    )}
-                    {pool.properties.showCoping && pool.properties.copingCalculation && (
-                      <div className="text-xs text-blue-600 dark:text-blue-400 ml-4 mt-1 space-y-0.5">
-                        <div className="font-medium">Coping: {pool.properties.copingCalculation.totalPavers} pavers (400×400mm)</div>
-                        <div>
-                          {pool.properties.copingCalculation.totalFullPavers} full + {pool.properties.copingCalculation.totalPartialPavers} partial
-                        </div>
-                        <div>Total area: {pool.properties.copingCalculation.totalArea.toFixed(2)} m²</div>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
+                  )}
+                </li>
+              ))}
             </ul>
           </CardContent>
         </Card>
       )}
 
-      {summary.pavers.length > 0 && (
+      {summary.paving.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Paving Areas ({summary.pavers.length})</CardTitle>
+            <CardTitle className="text-sm">Paving</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-1">
-              {summary.pavers.map((item) => {
-                if (item.type === 'paving_area') {
-                  const stats = item.properties.statistics || calculateStatistics(item.properties.pavers || [], item.properties.wastagePercentage || 0);
-                  const sizeLabel = item.properties.paverSize === '400x600' ? '400×600mm' : '400×400mm';
-                  const edgeCount = item.properties.showEdgePavers === false ? 0 : stats.edgePavers;
-                  return (
-                    <li key={item.id} className="text-sm text-muted-foreground">
-                      • {sizeLabel} — {stats.fullPavers} full{edgeCount ? ` + ${edgeCount} edge` : ''} • {stats.totalArea.toFixed(2)} m²
-                    </li>
-                  );
-                }
-                // Legacy single paver component fallback
-                return (
-                  <li key={item.id} className="text-sm text-muted-foreground">
-                    • {item.properties.paverSize || 'Paver'} — {Math.round((item.dimensions.width * item.dimensions.height) / 10000)} m²
-                  </li>
-                );
-              })}
+            <ul className="space-y-2">
+              {summary.paving.map((paving, i) => (
+                <li key={i} className="text-sm">
+                  <div className="font-medium">• {paving.size}</div>
+                  <div className="text-xs text-muted-foreground ml-4 mt-1">
+                    Count: {paving.count} pavers
+                  </div>
+                  <div className="text-xs text-muted-foreground ml-4">
+                    Total area: {paving.area.toFixed(2)} m²
+                  </div>
+                </li>
+              ))}
             </ul>
           </CardContent>
         </Card>
@@ -793,13 +773,16 @@ const MaterialsSummary = ({
       {summary.drainage.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Drainage ({summary.drainage.length})</CardTitle>
+            <CardTitle className="text-sm">Drainage</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-1">
+            <ul className="space-y-2">
               {summary.drainage.map((drain, i) => (
-                <li key={drain.id} className="text-sm text-muted-foreground">
-                  • {drain.properties.drainageType || 'Drainage'} - {Math.round(drain.properties.length || 0)}mm
+                <li key={i} className="text-sm">
+                  <div className="font-medium">• {drain.type}</div>
+                  <div className="text-xs text-muted-foreground ml-4 mt-1">
+                    Length: {formatLength(drain.length)}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -807,16 +790,24 @@ const MaterialsSummary = ({
         </Card>
       )}
 
-      {summary.fences.length > 0 && (
+      {summary.fencing.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Fencing ({summary.fences.length})</CardTitle>
+            <CardTitle className="text-sm">Fencing</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-1">
-              {summary.fences.map((fence, i) => (
-                <li key={fence.id} className="text-sm text-muted-foreground">
-                  • {fence.properties.fenceType || 'Fence'} - {Math.round(fence.dimensions.width)}mm
+            <ul className="space-y-2">
+              {summary.fencing.map((fence, i) => (
+                <li key={i} className="text-sm">
+                  <div className="font-medium">• {fence.type}</div>
+                  <div className="text-xs text-muted-foreground ml-4 mt-1">
+                    Length: {formatLength(fence.length)}
+                  </div>
+                  {fence.gates > 0 && (
+                    <div className="text-xs text-muted-foreground ml-4">
+                      Gates: {fence.gates}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
@@ -830,10 +821,19 @@ const MaterialsSummary = ({
             <CardTitle className="text-sm">Walls ({summary.walls.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-1">
+            <ul className="space-y-2">
               {summary.walls.map((wall, i) => (
-                <li key={wall.id} className="text-sm text-muted-foreground">
-                  • {wall.properties.wallMaterial || 'Wall'} - {Math.round(wall.dimensions.width)}mm × {wall.properties.wallHeight || 0}mm high
+                <li key={i} className="text-sm">
+                  <div className="font-medium">• {wall.material}</div>
+                  <div className="text-xs text-muted-foreground ml-4 mt-1">
+                    Length: {formatLength(wall.length)}
+                  </div>
+                  <div className="text-xs text-muted-foreground ml-4">
+                    Height: {formatLength(wall.height)}
+                  </div>
+                  <div className="text-xs text-muted-foreground ml-4">
+                    Status: {wall.status}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -841,7 +841,7 @@ const MaterialsSummary = ({
         </Card>
       )}
 
-      {Object.values(summary).every(arr => arr.length === 0) && (
+      {summary.pools.length === 0 && summary.paving.length === 0 && summary.drainage.length === 0 && summary.fencing.length === 0 && summary.walls.length === 0 && (
         <div className="text-center text-muted-foreground py-8">
           <p>No components added yet</p>
         </div>
