@@ -127,13 +127,31 @@ export const BottomPanel = ({
       {isCollapsed ? (
         // Collapsed state - show info, zoom controls, and expand button
         <div className="flex items-center justify-between px-4 h-10">
-          <span className="text-sm text-muted-foreground">
-            {activeTab === 'properties' && selectedComponent
-              ? `${selectedComponent.type} selected`
-              : activeTab === 'materials'
-              ? 'Materials Summary'
-              : 'Project Notes'}
-          </span>
+          {/* Show measurement info when drawing or measuring */}
+          {(isDrawing && ghostDistance !== null) || (isMeasuring && measureStart && measureEnd) ? (
+            <div className="bg-card border border-border rounded-lg px-3 py-1 shadow-sm">
+              {isDrawing && ghostDistance !== null && (
+                <span className="text-sm text-foreground">
+                  📏 {(ghostDistance / 100).toFixed(1)}m
+                  {shiftPressed && ' 🔒'}
+                </span>
+              )}
+              {isMeasuring && measureStart && measureEnd && (
+                <span className="text-sm text-foreground">
+                  📏 {(calculateDistance(measureStart, measureEnd) / 100).toFixed(1)}m
+                  {shiftPressed && ' 🔒'}
+                </span>
+              )}
+            </div>
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              {activeTab === 'properties' && selectedComponent
+                ? `${selectedComponent.type} selected`
+                : activeTab === 'materials'
+                ? 'Materials Summary'
+                : 'Project Notes'}
+            </span>
+          )}
           
           {/* Zoom Controls - Always visible */}
           <div className="ml-auto flex gap-1 items-center border-r pr-2 mr-2">
