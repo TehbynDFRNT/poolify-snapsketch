@@ -106,12 +106,11 @@ export const BottomPanel = ({
   // Calculate materials summary
   const materialsSummary = {
     pools: components.filter(c => c.type === 'pool'),
-    pavers: components.filter(c => c.type === 'paver'),
+    pavers: components.filter(c => c.type === 'paver' || c.type === 'paving_area'),
     drainage: components.filter(c => c.type === 'drainage'),
     fences: components.filter(c => c.type === 'fence'),
     walls: components.filter(c => c.type === 'wall'),
   };
-
   return (
     <div
       className="border-t bg-background flex flex-col flex-shrink-0"
@@ -746,11 +745,24 @@ const MaterialsSummary = ({
           </CardHeader>
           <CardContent>
             <ul className="space-y-1">
-              {summary.pavers.map((paver, i) => (
-                <li key={paver.id} className="text-sm text-muted-foreground">
-                  • {paver.properties.paverSize || 'Paver'} - {Math.round(paver.dimensions.width * paver.dimensions.height / 10000)} m²
-                </li>
-              ))}
+              {summary.pavers.map((item) => {
+                if (item.type === 'paving_area') {
+                  const stats = item.properties.statistics || calculateStatistics(item.properties.pavers || [], item.properties.wastagePercentage || 0);
+                  const sizeLabel = item.properties.paverSize === '400x600' ? '400×600mm' : '400×400mm';
+                  const edgeCount = item.properties.showEdgePavers === false ? 0 : stats.edgePavers;
+                  return (
+                    <li key={item.id} className="text-sm text-muted-foreground">
+                      • {sizeLabel} — {stats.fullPavers} full{edgeCount ? ` + ${edgeCount} edge` : ''} • {stats.totalArea.toFixed(2)} m²
+                    </li>
+                  );
+                }
+                // Legacy single paver component fallback
+                return (
+                  <li key={item.id} className="text-sm text-muted-foreground">
+                    • {item.properties.paverSize || 'Paver'} — {Math.round((item.dimensions.width * item.dimensions.height) / 10000)} m²
+                  </li>
+                );
+              })}
             </ul>
           </CardContent>
         </Card>

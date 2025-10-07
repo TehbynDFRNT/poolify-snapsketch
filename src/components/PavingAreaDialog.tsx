@@ -6,7 +6,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { validateBoundary } from '@/utils/pavingFill';
+import { validateBoundary, fillAreaWithPavers, calculateStatistics } from '@/utils/pavingFill';
 
 interface Point {
   x: number;
@@ -198,37 +198,25 @@ function calculatePreviewStats(
   showEdgePavers: boolean,
   wastagePercentage: number
 ) {
-  // Get paver dimensions
-  const { width: paverWidth, height: paverHeight } = getPaverDimensions(paverSize, orientation);
+  // Use the same logic as the canvas to avoid discrepancies
+  const pavers = fillAreaWithPavers(boundary, paverSize, orientation, showEdgePavers);
+  const stats = calculateStatistics(pavers, wastagePercentage);
 
-  // Get bounding box
-  const bbox = getBoundingBox(boundary);
-
-  // Calculate approximate counts (simplified for preview)
-  const cols = Math.ceil(bbox.width / paverWidth);
-  const rows = Math.ceil(bbox.height / paverHeight);
-  const totalPavers = cols * rows;
-
-  // Estimate edge pavers (approximately 20-30% of total)
-  const edgePavers = Math.round(totalPavers * 0.25);
-  const fullPavers = totalPavers - edgePavers;
-
-  // Calculate area
-  const paverAreaM2 = (paverWidth * paverHeight) / 1000000;
-  const totalArea = (showEdgePavers ? totalPavers : fullPavers) * paverAreaM2;
-  const fullArea = fullPavers * paverAreaM2;
-
-  // Calculate order quantity
-  const subtotal = showEdgePavers ? totalPavers : fullPavers;
-  const wastageAmount = Math.ceil(subtotal * (wastagePercentage / 100));
-  const orderQuantity = subtotal + wastageAmount;
+  // Derive full area from the first paver size if available
+  let fullArea = 0;
+  if (pavers.length > 0) {
+    const mmW = (pavers[0] as any).mmWidth ?? 400;
+    const mmH = (pavers[0] as any).mmHeight ?? 400;
+    const areaPerPaver = (mmW * mmH) / 1_000_000; // m²
+    fullArea = stats.fullPavers * areaPerPaver;
+  }
 
   return {
-    fullPavers,
-    edgePavers: showEdgePavers ? edgePavers : 0,
-    totalArea: totalArea.toFixed(2),
+    fullPavers: stats.fullPavers,
+    edgePavers: showEdgePavers ? stats.edgePavers : 0,
+    totalArea: stats.totalArea.toFixed(2),
     fullArea: fullArea.toFixed(2),
-    orderQuantity,
+    orderQuantity: stats.orderQuantity,
   };
 }
 

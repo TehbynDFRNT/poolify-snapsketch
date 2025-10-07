@@ -47,6 +47,26 @@ export const calculateMeasurements = (components: Component[]): Summary => {
         break;
       }
 
+      case 'paving_area': {
+        const size = component.properties.paverSize || '400x400';
+        const label = PAVER_SIZES[size].label;
+        const stats = component.properties.statistics;
+        // Fallback: derive from pavers array if statistics missing
+        const full = stats?.fullPavers ?? (component.properties.pavers?.filter(p => !p.isEdgePaver).length || 0);
+        const edge = (component.properties.showEdgePavers === false) ? 0 : (stats?.edgePavers ?? (component.properties.pavers?.filter(p => p.isEdgePaver).length || 0));
+        const totalCount = full + edge;
+        const area = stats?.totalArea ?? 0;
+
+        const existing = summary.paving.find(p => p.size === label);
+        if (existing) {
+          existing.count += totalCount;
+          existing.area += area;
+        } else {
+          summary.paving.push({ size: label, count: totalCount, area });
+        }
+        break;
+      }
+
       case 'drainage': {
         const type = component.properties.drainageType || 'rock';
         const length = component.properties.length || component.dimensions.width;
