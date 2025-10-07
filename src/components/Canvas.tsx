@@ -320,12 +320,13 @@ export const Canvas = ({
   const handlePavingConfig = (config: PavingConfig) => {
     if (pavingBoundary.length < 3) return;
     
-    // Fill the area with pavers
+    // Fill the area with pavers (initial calculation without pool exclusions)
     const pavers = fillAreaWithPavers(
       pavingBoundary,
       config.paverSize,
       config.paverOrientation,
-      config.showEdgePavers
+      config.showEdgePavers,
+      [] // No pool exclusions at creation time
     );
     
     // Warn if no pavers were generated
@@ -350,6 +351,7 @@ export const Canvas = ({
     });
     
     // Create the paving area component
+    // Note: pavers will be recalculated dynamically in PavingAreaComponent based on pool positions
     addComponent({
       type: 'paving_area',
       position: { x: 0, y: 0 },
@@ -359,10 +361,9 @@ export const Canvas = ({
         boundary: pavingBoundary,
         paverSize: config.paverSize,
         paverOrientation: config.paverOrientation,
-        pavers,
         showEdgePavers: config.showEdgePavers,
         wastagePercentage: config.wastagePercentage,
-        statistics,
+        statistics, // Initial statistics, will be updated when pools change
       },
     });
     

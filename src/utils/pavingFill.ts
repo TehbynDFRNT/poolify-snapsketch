@@ -5,6 +5,11 @@ interface Point {
   y: number;
 }
 
+export interface PoolExcludeZone {
+  outline: Array<{x: number, y: number}>;
+  componentId: string;
+}
+
 interface Paver {
   id: string;
   position: Point;
@@ -35,7 +40,8 @@ export function fillAreaWithPavers(
   boundary: Point[],
   paverSize: '400x400' | '400x600',
   paverOrientation: 'vertical' | 'horizontal',
-  showEdgePavers: boolean
+  showEdgePavers: boolean,
+  poolExcludeZones: PoolExcludeZone[] = []
 ): Paver[] {
   const pavers: Paver[] = [];
   
@@ -72,33 +78,110 @@ export function fillAreaWithPavers(
         y: y + paverHeight / 2,
       };
       
-      // Count how many corners are inside
+      // Check paver against OUTER boundary first
       const cornersInside = corners.filter(corner => isPointInPolygon(corner, boundary));
       const centerInside = isPointInPolygon(paverCenter, boundary);
       
-      // Include paver if center is inside OR at least one corner is inside
-      if (centerInside || cornersInside.length > 0) {
-        const cornersOutside = corners.length - cornersInside.length;
-        const isEdge = cornersOutside > 0;
-        
-        // Only add if showing edge pavers OR it's a full paver
-        if (showEdgePavers || !isEdge) {
-          pavers.push({
-            id: `paver-${row}-${col}`,
-            position: { x, y },
-            width: paverWidth,
-            height: paverHeight,
-            isEdgePaver: isEdge,
-            cutPercentage: isEdge ? Math.round((cornersOutside / 4) * 100) : 0,
-            mmWidth: paverWidthMm,
-            mmHeight: paverHeightMm,
-          });
+      // Skip if completely outside boundary
+      if (!centerInside && cornersInside.length === 0) {
+        continue;
+      }
+
+      // Check paver against POOL exclude zones
+      const poolOverlap = checkPaverPoolOverlap(corners, paverCenter, poolExcludeZones);
+
+      if (poolOverlap.completelyInside) {
+        continue; // Paver entirely inside pool - skip it
+      }
+
+      // Determine if this is an edge paver
+      const cornersOutside = corners.length - cornersInside.length;
+      const boundaryIsEdge = cornersOutside > 0;
+      let isEdge = boundaryIsEdge || poolOverlap.isEdge;
+      let cutPercentage = 0;
+
+      if (isEdge) {
+        if (poolOverlap.isEdge) {
+          // Paver partially overlaps pool - use exposed percentage
+          cutPercentage = Math.round(100 - poolOverlap.exposedPercentage);
+        } else if (boundaryIsEdge) {
+          // Paver on outer boundary edge
+          cutPercentage = Math.round((cornersOutside / 4) * 100);
         }
+      }
+      
+      // Only add if showing edge pavers OR it's a full paver
+      if (showEdgePavers || !isEdge) {
+        pavers.push({
+          id: `paver-${row}-${col}`,
+          position: { x, y },
+          width: paverWidth,
+          height: paverHeight,
+          isEdgePaver: isEdge,
+          cutPercentage,
+          mmWidth: paverWidthMm,
+          mmHeight: paverHeightMm,
+        });
       }
     }
   }
   
   return pavers;
+}
+
+/**
+ * Check if paver overlaps with pool exclude zones
+ */
+function checkPaverPoolOverlap(
+  corners: Point[],
+  center: Point,
+  poolZones: PoolExcludeZone[]
+): {
+  completelyInside: boolean;
+  isEdge: boolean;
+  exposedPercentage: number;
+} {
+  if (poolZones.length === 0) {
+    return { completelyInside: false, isEdge: false, exposedPercentage: 100 };
+  }
+
+  // Check against each pool zone
+  for (const zone of poolZones) {
+    const cornersInsidePool = corners.filter(c => 
+      isPointInPolygon(c, zone.outline)
+    ).length;
+
+    const centerInsidePool = isPointInPolygon(center, zone.outline);
+
+    if (cornersInsidePool === 4 && centerInsidePool) {
+      // Paver completely inside pool - should be excluded
+      return { completelyInside: true, isEdge: false, exposedPercentage: 0 };
+    }
+
+    if (cornersInsidePool > 0 || centerInsidePool) {
+      // Paver partially overlaps pool - this is an edge paver
+      // Calculate what % is OUTSIDE the pool (exposed)
+      const percentageInsidePool = centerInsidePool 
+        ? Math.min(100, (cornersInsidePool / 4) * 100 + 25) // Center adds weight
+        : (cornersInsidePool / 4) * 100;
+      
+      const exposedPercentage = Math.max(10, 100 - percentageInsidePool); // Minimum 10% to show
+
+      // Skip very small slivers
+      if (exposedPercentage < 10) {
+        return { completelyInside: true, isEdge: false, exposedPercentage: 0 };
+      }
+
+      return { 
+        completelyInside: false, 
+        isEdge: true, 
+        exposedPercentage 
+      };
+    }
+  }
+
+  // No overlap with any pool
+  return { completelyInside: false, isEdge: false, exposedPercentage: 100 };
 }
 
 export function calculateStatistics(

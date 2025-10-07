@@ -199,7 +199,7 @@ function calculatePreviewStats(
   wastagePercentage: number
 ) {
   // Use the same logic as the canvas to avoid discrepancies
-  const pavers = fillAreaWithPavers(boundary, paverSize, orientation, showEdgePavers);
+  const pavers = fillAreaWithPavers(boundary, paverSize, orientation, showEdgePavers, []); // No pool exclusions in dialog
   const stats = calculateStatistics(pavers, wastagePercentage);
 
   // Derive full area from the first paver size if available
