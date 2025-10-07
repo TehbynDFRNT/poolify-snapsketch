@@ -921,24 +921,30 @@ const MaterialsSummary = ({
       {summary.fencing.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Fencing</CardTitle>
+            <CardTitle className="text-sm">Fencing ({summary.fencing.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2">
-              {summary.fencing.map((fence, i) => (
-                <li key={i} className="text-sm">
-                  <div className="font-medium">• {fence.type}</div>
-                  <div className="text-xs text-muted-foreground ml-4 mt-1">
-                    Length: {formatLength(fence.length)}
-                  </div>
-                  {fence.gates > 0 && (
-                    <div className="text-xs text-muted-foreground ml-4">
-                      Gates: {fence.gates}
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
+            {/* Group by type and show total per type with section breakdowns */}
+            {Object.entries(
+              summary.fencing.reduce((acc: Record<string, { total: number; items: typeof summary.fencing }>, f) => {
+                if (!acc[f.type]) acc[f.type] = { total: 0, items: [] as any };
+                acc[f.type].total += f.length;
+                (acc[f.type].items as any).push(f);
+                return acc;
+              }, {})
+            ).map(([type, group]) => (
+              <div key={type} className="mb-3">
+                <div className="text-sm font-medium">• {type}</div>
+                <div className="text-xs text-muted-foreground ml-4">Total: {formatLength(group.total)}</div>
+                <ul className="text-xs text-muted-foreground ml-4 mt-1 space-y-1">
+                  {(group.items as any).map((f: any, i: number) => (
+                    <li key={i}>
+                      Section {i + 1}: {formatLength(f.length)}{f.gates > 0 ? ` • Gates: ${f.gates}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}

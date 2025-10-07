@@ -92,17 +92,11 @@ export const calculateMeasurements = (components: Component[]): Summary => {
         
         // Only add fences with valid lengths (ignore zero-length fences)
         if (length > 0) {
-          const existing = summary.fencing.find(f => f.type === fenceLabel);
-          if (existing) {
-            existing.length += length;
-            existing.gates += gates;
-          } else {
-            summary.fencing.push({
-              type: fenceLabel,
-              length,
-              gates,
-            });
-          }
+          summary.fencing.push({
+            type: fenceLabel,
+            length,
+            gates,
+          });
         }
         break;
       }
