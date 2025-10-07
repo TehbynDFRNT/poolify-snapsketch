@@ -7,6 +7,7 @@ import {
   Download, 
   Menu,
   MousePointer2,
+  Hand,
   Square,
   Box,
   Droplets,
@@ -39,8 +40,9 @@ interface TopBarProps {
 
 const tools: Array<{ id: ToolType; icon: React.ReactNode; name: string; shortcut: string }> = [
   { id: 'select', icon: <MousePointer2 className="w-5 h-5" />, name: 'Select', shortcut: 'V' },
+  { id: 'hand', icon: <Hand className="w-5 h-5" />, name: 'Pan', shortcut: 'H' },
   { id: 'boundary', icon: <Square className="w-5 h-5" />, name: 'Boundary', shortcut: 'B' },
-  { id: 'house', icon: <Home className="w-5 h-5" />, name: 'House', shortcut: 'H' },
+  { id: 'house', icon: <Home className="w-5 h-5" />, name: 'House', shortcut: 'U' },
   { id: 'pool', icon: <Box className="w-5 h-5" />, name: 'Pool', shortcut: 'O' },
   { id: 'paver', icon: <Blocks className="w-5 h-5" />, name: 'Paver', shortcut: 'A' },
   { id: 'paving_area', icon: <Grid3x3 className="w-5 h-5" />, name: 'Paving Area', shortcut: 'P' },
