@@ -191,10 +191,23 @@ export const DesignCanvas = () => {
     }
   };
 
-  const handleBack = () => {
-    handleSave();
+  const handleBack = async () => {
+    await handleSave(); // Wait for save to complete
     navigate('/projects');
   };
+
+  // Save before page unload
+  useEffect(() => {
+    const handleBeforeUnload = async (e: BeforeUnloadEvent) => {
+      if (currentProject && user && id && permission !== 'view') {
+        e.preventDefault();
+        await handleSave();
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [currentProject, user, id, permission]);
 
   const handleExport = async (options: ExportOptions) => {
     if (!currentProject) return;

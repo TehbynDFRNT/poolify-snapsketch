@@ -37,6 +37,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Skip caching for Supabase API requests to always get fresh data
+  if (event.request.url.includes('supabase.co')) {
+    return;
+  }
+
   event.respondWith(
     caches.open(RUNTIME_CACHE).then(cache => {
       return fetch(event.request)
