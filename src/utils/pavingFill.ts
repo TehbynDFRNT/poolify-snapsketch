@@ -145,6 +145,8 @@ function checkPaverPoolOverlap(
     return { completelyInside: false, isEdge: false, exposedPercentage: 100 };
   }
 
+  const BOUNDARY_TOLERANCE = 2; // 2 pixels tolerance for boundary alignment
+
   // Check against each pool zone
   for (const zone of poolZones) {
     const cornersInsidePool = corners.filter(c => 
@@ -159,7 +161,20 @@ function checkPaverPoolOverlap(
     }
 
     if (cornersInsidePool > 0 || centerInsidePool) {
-      // Paver partially overlaps pool - this is an edge paver
+      // Check if corners are just touching the boundary (aligned pavers)
+      // These should be treated as full pavers, not edge pavers
+      const cornersNearBoundary = corners.filter(corner => {
+        const distanceToNearestEdge = getDistanceToPolygonEdge(corner, zone.outline);
+        return distanceToNearestEdge <= BOUNDARY_TOLERANCE;
+      }).length;
+
+      // If corners are on/very close to boundary AND paver is mostly outside, treat as full paver
+      if (cornersNearBoundary > 0 && !centerInsidePool && cornersInsidePool <= 2) {
+        // This is a boundary-aligned paver, not an edge paver
+        return { completelyInside: false, isEdge: false, exposedPercentage: 100 };
+      }
+
+      // Paver genuinely crosses into pool - this is an edge paver
       // Calculate what % is OUTSIDE the pool (exposed)
       const percentageInsidePool = centerInsidePool 
         ? Math.min(100, (cornersInsidePool / 4) * 100 + 25) // Center adds weight
@@ -182,6 +197,55 @@ function checkPaverPoolOverlap(
 
   // No overlap with any pool
   return { completelyInside: false, isEdge: false, exposedPercentage: 100 };
+}
+
+/**
+ * Calculate minimum distance from a point to any edge of a polygon
+ */
+function getDistanceToPolygonEdge(point: Point, polygon: Point[]): number {
+  let minDistance = Infinity;
+
+  for (let i = 0; i < polygon.length; i++) {
+    const p1 = polygon[i];
+    const p2 = polygon[(i + 1) % polygon.length];
+    
+    const distance = getDistanceToLineSegment(point, p1, p2);
+    minDistance = Math.min(minDistance, distance);
+  }
+
+  return minDistance;
+}
+
+/**
+ * Calculate distance from a point to a line segment
+ */
+function getDistanceToLineSegment(point: Point, lineStart: Point, lineEnd: Point): number {
+  const dx = lineEnd.x - lineStart.x;
+  const dy = lineEnd.y - lineStart.y;
+  
+  // Calculate the length squared of the line segment
+  const lengthSquared = dx * dx + dy * dy;
+  
+  if (lengthSquared === 0) {
+    // Line segment is a point
+    const pdx = point.x - lineStart.x;
+    const pdy = point.y - lineStart.y;
+    return Math.sqrt(pdx * pdx + pdy * pdy);
+  }
+  
+  // Calculate projection of point onto line (clamped to segment)
+  const t = Math.max(0, Math.min(1, 
+    ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / lengthSquared
+  ));
+  
+  // Find closest point on line segment
+  const closestX = lineStart.x + t * dx;
+  const closestY = lineStart.y + t * dy;
+  
+  // Calculate distance
+  const pdx = point.x - closestX;
+  const pdy = point.y - closestY;
+  return Math.sqrt(pdx * pdx + pdy * pdy);
 }
 
 export function calculateStatistics(
