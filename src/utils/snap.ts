@@ -34,13 +34,22 @@ export const snapPoolToPaverGrid = (
     const boundary = area.properties.boundary;
     if (!boundary || boundary.length < 3) continue;
     
-    // Check if pool center is roughly inside this paving area
+    // Check if pool overlaps this paving area (center OR any corner inside)
     const poolCenter = {
       x: poolPosition.x + poolLengthPx / 2,
       y: poolPosition.y + poolWidthPx / 2
     };
-    
-    if (!isPointInPolygon(poolCenter, boundary)) continue;
+    const poolCorners = [
+      { x: poolPosition.x, y: poolPosition.y },
+      { x: poolPosition.x + poolLengthPx, y: poolPosition.y },
+      { x: poolPosition.x, y: poolPosition.y + poolWidthPx },
+      { x: poolPosition.x + poolLengthPx, y: poolPosition.y + poolWidthPx },
+    ];
+
+    const overlapsArea = isPointInPolygon(poolCenter, boundary) ||
+      poolCorners.some(corner => isPointInPolygon(corner, boundary));
+
+    if (!overlapsArea) continue;
     
     // Get paver dimensions for this area
     const { width: paverWidthMm, height: paverHeightMm } = getPaverDimensions(
