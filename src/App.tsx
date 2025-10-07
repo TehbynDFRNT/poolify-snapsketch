@@ -15,6 +15,7 @@ import { ForgotPassword } from "./pages/ForgotPassword";
 import { ResetPassword } from "./pages/ResetPassword";
 import { ProfileSettings } from "./pages/ProfileSettings";
 import { TeamManagement } from "./pages/TeamManagement";
+import { LandingPage } from "./pages/LandingPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,13 +29,11 @@ const App = () => (
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
             {/* Public routes */}
+            <Route path="/" element={<LandingPage />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/login" element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
-            
-            {/* Redirect root to projects if authenticated, otherwise to login */}
-            <Route path="/" element={<Navigate to="/projects" replace />} />
             
             {/* Protected routes */}
             <Route path="/projects" element={
