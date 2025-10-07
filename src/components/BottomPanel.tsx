@@ -498,6 +498,53 @@ const PropertiesContent = ({
             </>
           )}
 
+          {component.type === 'fence' && (
+            <div>
+              <Label className="text-xs">Fence Type</Label>
+              <div className="flex gap-2 mt-1">
+                <Button
+                  variant={component.properties.fenceType !== 'metal' && component.properties.fenceType !== 'boundary' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => onUpdate(component.id, {
+                    properties: {
+                      ...component.properties,
+                      fenceType: 'glass'
+                    }
+                  })}
+                  className="flex-1"
+                >
+                  Glass
+                </Button>
+                <Button
+                  variant={component.properties.fenceType === 'metal' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => onUpdate(component.id, {
+                    properties: {
+                      ...component.properties,
+                      fenceType: 'metal'
+                    }
+                  })}
+                  className="flex-1"
+                >
+                  Metal
+                </Button>
+                <Button
+                  variant={component.properties.fenceType === 'boundary' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => onUpdate(component.id, {
+                    properties: {
+                      ...component.properties,
+                      fenceType: 'boundary'
+                    }
+                  })}
+                  className="flex-1"
+                >
+                  Boundary
+                </Button>
+              </div>
+            </div>
+          )}
+
           {component.type === 'paver' && (
             <div>
               <Label className="text-xs">Paver Size</Label>

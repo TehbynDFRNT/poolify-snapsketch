@@ -85,20 +85,24 @@ export const calculateMeasurements = (components: Component[]): Summary => {
 
       case 'fence': {
         const type = component.properties.fenceType || 'glass';
-        const fenceLabel = FENCE_TYPES[type].label;
-        const length = component.dimensions.width;
+        const fenceLabel = FENCE_TYPES[type]?.label || 'Glass Pool Fence';
+        // Use dimensions.width (the actual fence length)
+        const length = component.dimensions.width || 0;
         const gates = component.properties.gates?.length || 0;
         
-        const existing = summary.fencing.find(f => f.type === fenceLabel);
-        if (existing) {
-          existing.length += length;
-          existing.gates += gates;
-        } else {
-          summary.fencing.push({
-            type: fenceLabel,
-            length,
-            gates,
-          });
+        // Only add fences with valid lengths (ignore zero-length fences)
+        if (length > 0) {
+          const existing = summary.fencing.find(f => f.type === fenceLabel);
+          if (existing) {
+            existing.length += length;
+            existing.gates += gates;
+          } else {
+            summary.fencing.push({
+              type: fenceLabel,
+              length,
+              gates,
+            });
+          }
         }
         break;
       }
