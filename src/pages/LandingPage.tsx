@@ -51,8 +51,10 @@ export function LandingPage() {
             }`}>Benefits</a>
             <Button 
               onClick={() => navigate('/signup')}
-              variant={isScrolled ? "default" : "outline"}
-              className={!isScrolled ? "border-white text-white hover:bg-white hover:text-purple-600" : ""}
+              variant="default"
+              className={isScrolled 
+                ? "bg-purple-600 text-white hover:bg-purple-700" 
+                : "bg-white text-purple-600 hover:bg-white/90"}
             >
               Get Started
             </Button>
