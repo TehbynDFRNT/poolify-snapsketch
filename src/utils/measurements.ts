@@ -85,16 +85,17 @@ export const calculateMeasurements = (components: Component[]): Summary => {
 
       case 'fence': {
         const type = component.properties.fenceType || 'glass';
+        const fenceLabel = FENCE_TYPES[type].label;
         const length = component.dimensions.width;
         const gates = component.properties.gates?.length || 0;
         
-        const existing = summary.fencing.find(f => f.type === type);
+        const existing = summary.fencing.find(f => f.type === fenceLabel);
         if (existing) {
           existing.length += length;
           existing.gates += gates;
         } else {
           summary.fencing.push({
-            type: FENCE_TYPES[type].label,
+            type: fenceLabel,
             length,
             gates,
           });
