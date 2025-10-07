@@ -737,8 +737,8 @@ export const Canvas = ({
           listening={false}
         />
         
-        {/* Segment measurements for boundary and house */}
-        {(activeTool === 'boundary' || activeTool === 'house') && drawingPoints.map((point, index) => {
+        {/* Segment measurements for boundary, house, and paving area */}
+        {(activeTool === 'boundary' || activeTool === 'house' || activeTool === 'paving_area') && drawingPoints.map((point, index) => {
           if (index === 0) return null;
           const prevPoint = drawingPoints[index - 1];
           const dx = point.x - prevPoint.x;
