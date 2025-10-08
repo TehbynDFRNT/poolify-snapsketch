@@ -21,16 +21,21 @@ const LAYOUT = {
   drawing: {
     x: 5,
     y: 26,
-    width: 200,
-    height: 165,
+    width: 287,
+    height: 145,
     padding: 2.5,
   },
-  sidebar: {
-    x: 207,
-    y: 26,
-    width: 85,
-    height: 165,
-    gap: 3,
+  legendOverlay: {
+    x: 232,
+    y: 31,
+    width: 50,
+    height: 55,
+  },
+  summary: {
+    x: 5,
+    y: 171,
+    width: 287,
+    height: 34,
   },
 };
 
@@ -73,7 +78,7 @@ export const exportToPDF = async (
   // Draw all sections
   drawHeader(pdf, project, options);
   drawCanvas(pdf, canvasElement);
-  drawLegend(pdf, options);
+  drawLegendOverlay(pdf, options);
   drawMaterialsSummary(pdf, project, options);
 
   // Add notes on second page if present
@@ -172,250 +177,164 @@ const drawCanvas = (pdf: jsPDF, canvasElement: HTMLCanvasElement) => {
   }
 };
 
-// ===== LEGEND SECTION =====
-const drawLegend = (pdf: jsPDF, options: ExportOptions) => {
+// ===== LEGEND OVERLAY SECTION =====
+const drawLegendOverlay = (pdf: jsPDF, options: ExportOptions) => {
   if (!options.includeLegend) return;
 
-  const { x, y, width } = LAYOUT.sidebar;
+  const { x, y, width, height } = LAYOUT.legendOverlay;
   const padding = 3;
-  let currentY = y;
 
-  // Calculate legend height
-  const legendItems = [
-    { color: COLORS.legend.pool, label: 'Pool' },
-    { color: COLORS.legend.coping, label: 'Pool Coping' },
-    { color: COLORS.legend.paving, label: 'Paving' },
-    { color: COLORS.legend.drainage, label: 'Drainage' },
-    { color: COLORS.legend.fencing, label: 'Fencing' },
-    { color: COLORS.legend.wall, label: 'Retaining Wall' },
-    { color: COLORS.legend.boundary, label: 'Boundary' },
-    { color: COLORS.legend.house, label: 'House' },
-  ];
+  // White background
+  pdf.setFillColor(255, 255, 255);
+  pdf.rect(x, y, width, height, 'F');
 
-  const itemHeight = 6;
-  const legendHeight = padding * 2 + 6 + legendItems.length * itemHeight;
-
-  // Draw border
-  pdf.setDrawColor(...COLORS.borders.medium);
+  // Border
+  pdf.setDrawColor(...COLORS.text.primary);
   pdf.setLineWidth(0.5);
-  pdf.rect(x, currentY, width, legendHeight);
+  pdf.rect(x, y, width, height);
 
   // Title
-  currentY += padding + 6;
-  pdf.setFontSize(11);
+  let currentY = y + 5;
+  pdf.setFontSize(9);
   pdf.setFont('helvetica', 'bold');
   pdf.setTextColor(...COLORS.text.primary);
   pdf.text('LEGEND', x + padding, currentY);
 
-  // Legend items
+  // Legend items (compact)
   currentY += 5;
-  pdf.setFontSize(9);
+  pdf.setFontSize(7);
   pdf.setFont('helvetica', 'normal');
 
+  const legendItems = [
+    { color: COLORS.legend.pool, label: 'Pool' },
+    { color: COLORS.legend.coping, label: 'Coping' },
+    { color: COLORS.legend.paving, label: 'Paving' },
+    { color: COLORS.legend.drainage, label: 'Drainage' },
+    { color: COLORS.legend.fencing, label: 'Fencing' },
+    { color: COLORS.legend.wall, label: 'Wall' },
+    { color: COLORS.legend.boundary, label: 'Boundary' },
+    { color: COLORS.legend.house, label: 'House' },
+  ];
+
   legendItems.forEach((item) => {
-    const colorBoxWidth = 8;
-    const colorBoxHeight = 5;
+    const colorBoxWidth = 6;
+    const colorBoxHeight = 4;
     const colorBoxMargin = 2;
 
     // Draw color box
     pdf.setFillColor(item.color[0], item.color[1], item.color[2]);
-    pdf.rect(x + padding, currentY - 3, colorBoxWidth, colorBoxHeight, 'F');
+    pdf.rect(x + padding, currentY - 2.5, colorBoxWidth, colorBoxHeight, 'F');
 
     // Draw label
     pdf.setTextColor(...COLORS.text.primary);
     pdf.text(item.label, x + padding + colorBoxWidth + colorBoxMargin, currentY);
 
-    currentY += itemHeight;
+    currentY += 5;
   });
-
-  return legendHeight;
 };
 
 // ===== MATERIALS SUMMARY SECTION =====
 const drawMaterialsSummary = (pdf: jsPDF, project: Project, options: ExportOptions) => {
   if (!options.includeSummary) return;
 
-  const { x, width, gap } = LAYOUT.sidebar;
+  const { x, y, width, height } = LAYOUT.summary;
   const padding = 3;
-  const lineHeight = 3.5;
 
-  // Calculate legend height to position summary below it
-  const legendItems = 8; // Number of legend items
-  const legendHeight = options.includeLegend ? padding * 2 + 6 + legendItems * 6 : 0;
-  const legendGap = options.includeLegend ? gap : 0;
+  // Background (light gray)
+  pdf.setFillColor(249, 250, 251);
+  pdf.rect(x, y, width, height, 'F');
 
-  const summaryY = LAYOUT.sidebar.y + legendHeight + legendGap;
-  const summaryHeight = LAYOUT.sidebar.height - legendHeight - legendGap;
-
-  let currentY = summaryY;
-
-  // Draw border
-  pdf.setDrawColor(...COLORS.borders.medium);
-  pdf.setLineWidth(0.5);
-  pdf.rect(x, summaryY, width, summaryHeight);
+  // Top border
+  pdf.setDrawColor(...COLORS.text.primary);
+  pdf.setLineWidth(1);
+  pdf.line(x, y, x + width, y);
 
   // Title
-  currentY += padding + 6;
-  pdf.setFontSize(11);
+  let textY = y + 6;
+  pdf.setFontSize(10);
   pdf.setFont('helvetica', 'bold');
   pdf.setTextColor(...COLORS.text.primary);
-  pdf.text('MATERIALS SUMMARY', x + padding, currentY);
+  pdf.text('MATERIALS SUMMARY', x + padding, textY);
 
-  currentY += 5;
+  textY += 5;
 
   // Calculate materials
   const summary = calculateMeasurements(project.components);
 
-  pdf.setFontSize(8);
-  const maxY = summaryY + summaryHeight - padding;
-
-  // Helper function to check if we have space
-  const hasSpace = (lines: number) => currentY + lines * lineHeight <= maxY;
+  // Build summary text (inline format with separators)
+  const summaryParts: string[] = [];
 
   // === POOLS ===
-  if (summary.pools.length > 0 && hasSpace(2)) {
-    pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(...COLORS.text.primary);
-    pdf.text('Pools:', x + padding, currentY);
-    currentY += lineHeight;
-
+  if (summary.pools.length > 0) {
     summary.pools.forEach((pool) => {
-      if (!hasSpace(1)) return;
+      summaryParts.push(`Pools: ${pool.type} (${pool.dimensions})`);
       
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`• ${pool.type} ${pool.dimensions}`, x + padding + 2, currentY);
-      currentY += lineHeight;
-
-      if (pool.coping && hasSpace(2)) {
-        pdf.setFontSize(7.5);
-        pdf.setTextColor(...COLORS.text.tertiary);
-        pdf.text(`  Coping: ${pool.coping.totalPavers} pavers (400×400mm)`, x + padding + 4, currentY);
-        currentY += lineHeight;
-        pdf.text(`  (${pool.coping.fullPavers} full + ${pool.coping.partialPavers} partial) = ${formatArea(pool.coping.area)}`, x + padding + 4, currentY);
-        currentY += lineHeight;
-        pdf.setFontSize(8);
-        pdf.setTextColor(...COLORS.text.primary);
+      if (pool.coping) {
+        summaryParts.push(
+          `Coping: ${pool.coping.totalPavers} pavers (400×400mm) - ` +
+          `${pool.coping.fullPavers} full + ${pool.coping.partialPavers} partial = ${formatArea(pool.coping.area)}`
+        );
       }
     });
-    currentY += 2;
   }
 
   // === PAVING ===
-  if (summary.paving.length > 0 && hasSpace(2)) {
-    pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(...COLORS.text.primary);
-    pdf.text('Paving:', x + padding, currentY);
-    currentY += lineHeight;
-
+  if (summary.paving.length > 0) {
     summary.paving.forEach((paver) => {
-      if (!hasSpace(5)) return;
-
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`• ${paver.size}`, x + padding + 2, currentY);
-      currentY += lineHeight;
-      pdf.text(`• Count: ${paver.count} pavers`, x + padding + 2, currentY);
-      currentY += lineHeight;
-      
-      pdf.setFontSize(7.5);
-      pdf.setTextColor(...COLORS.text.tertiary);
-      pdf.text(`  ${paver.fullPavers} full + ${paver.partialPavers} partial`, x + padding + 4, currentY);
-      currentY += lineHeight;
-      
-      pdf.setFontSize(8);
-      pdf.setTextColor(...COLORS.text.primary);
-      pdf.text(`• Total area: ${formatArea(paver.area)}`, x + padding + 2, currentY);
-      currentY += lineHeight;
-      pdf.text(`• Wastage: ${paver.wastage}%`, x + padding + 2, currentY);
-      currentY += lineHeight + 2;
+      summaryParts.push(
+        `Paving: ${paver.size} - ${paver.count} pavers ` +
+        `(${paver.fullPavers} full + ${paver.partialPavers} partial) = ` +
+        `${formatArea(paver.area)} - Wastage: ${paver.wastage}%`
+      );
     });
   }
 
   // === DRAINAGE ===
-  if (summary.drainage.length > 0 && hasSpace(2)) {
-    pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(...COLORS.text.primary);
-    pdf.text('Drainage:', x + padding, currentY);
-    currentY += lineHeight;
-
+  if (summary.drainage.length > 0) {
     summary.drainage.forEach((drain) => {
-      if (!hasSpace(3)) return;
-
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`• ${drain.type}`, x + padding + 2, currentY);
-      currentY += lineHeight;
-      pdf.setFontSize(7.5);
-      pdf.setTextColor(...COLORS.text.tertiary);
-      pdf.text(`  Length: ${formatLength(drain.length)}`, x + padding + 4, currentY);
-      currentY += lineHeight;
-      pdf.text(`  Volume: ${((drain.length / 1000) * 0.1).toFixed(2)} m³`, x + padding + 4, currentY);
-      currentY += lineHeight;
-      pdf.setFontSize(8);
-      pdf.setTextColor(...COLORS.text.primary);
+      summaryParts.push(
+        `Drainage: ${drain.type} - ${formatLength(drain.length)} ` +
+        `(${((drain.length / 1000) * 0.1).toFixed(2)} m³)`
+      );
     });
-    currentY += 2;
   }
 
   // === FENCING ===
-  if (summary.fencing.length > 0 && hasSpace(2)) {
-    pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(...COLORS.text.primary);
-    pdf.text('Fencing:', x + padding, currentY);
-    currentY += lineHeight;
-
-    let totalLength = 0;
-    summary.fencing.forEach((fence) => {
-      if (!hasSpace(2)) return;
-
-      const lengthInMeters = fence.length / 1000;
-      totalLength += lengthInMeters;
-      
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`• ${fence.type}:`, x + padding + 2, currentY);
-      currentY += lineHeight;
-      pdf.setFontSize(7.5);
-      pdf.setTextColor(...COLORS.text.tertiary);
-      pdf.text(`  - ${lengthInMeters.toFixed(1)}m (${fence.gates} gates)`, x + padding + 4, currentY);
-      currentY += lineHeight;
-      pdf.setFontSize(8);
-      pdf.setTextColor(...COLORS.text.primary);
-    });
-
-    if (hasSpace(1)) {
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`• Total: ${totalLength.toFixed(1)}m`, x + padding + 2, currentY);
-      currentY += lineHeight + 2;
-    }
+  if (summary.fencing.length > 0) {
+    const fenceParts = summary.fencing.map(f => (f.length / 1000).toFixed(1) + 'm').join(' + ');
+    const totalLength = summary.fencing.reduce((sum, f) => sum + f.length / 1000, 0);
+    const totalGates = summary.fencing.reduce((sum, f) => sum + f.gates, 0);
+    
+    summaryParts.push(
+      `Fencing: ${summary.fencing[0].type} ${fenceParts} = ${totalLength.toFixed(1)}m ` +
+      `(${totalGates} gates)`
+    );
   }
 
   // === WALLS ===
-  if (summary.walls.length > 0 && hasSpace(2)) {
-    pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(...COLORS.text.primary);
-    pdf.text('Walls:', x + padding, currentY);
-    currentY += lineHeight;
-
+  if (summary.walls.length > 0) {
     summary.walls.forEach((wall) => {
-      if (!hasSpace(3)) return;
-
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`• ${wall.material}: ${formatLength(wall.length)}`, x + padding + 2, currentY);
-      currentY += lineHeight;
-      pdf.setFontSize(7.5);
-      pdf.setTextColor(...COLORS.text.tertiary);
-      pdf.text(`  (H: ${formatLength(wall.height)})`, x + padding + 4, currentY);
-      currentY += lineHeight;
-      pdf.setFontSize(8);
-      pdf.setTextColor(...COLORS.text.primary);
+      summaryParts.push(
+        `Walls: ${wall.material} ${formatLength(wall.length)} (H: ${formatLength(wall.height)})`
+      );
     });
-    currentY += 2;
   }
 
-  // Overflow indicator if we ran out of space
-  if (currentY > maxY - 5) {
-    pdf.setFontSize(7);
-    pdf.setTextColor(...COLORS.text.tertiary);
-    pdf.text('...', x + width / 2, maxY - 2, { align: 'center' });
-  }
+  // Join with separator and wrap text
+  const summaryText = summaryParts.join(' │ ');
+  
+  // Word wrap the summary text
+  pdf.setFontSize(8);
+  pdf.setFont('helvetica', 'normal');
+  pdf.setTextColor(...COLORS.text.primary);
+  
+  const lines = pdf.splitTextToSize(summaryText, width - 6);
+  
+  lines.forEach((line: string, index: number) => {
+    if (textY + (index * 4) < y + height - 3) {
+      pdf.text(line, x + padding, textY + (index * 4));
+    }
+  });
 };
 
 // ===== NOTES PAGE (if present) =====
