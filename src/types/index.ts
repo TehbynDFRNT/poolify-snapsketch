@@ -192,6 +192,7 @@ export interface Summary {
 }
 
 export interface ExportOptions {
+  format: 'pdf' | 'png' | 'jpeg';
   scale: '1:50' | '1:100' | '1:200';
   includeGrid: boolean;
   includeMeasurements: boolean;
@@ -199,4 +200,6 @@ export interface ExportOptions {
   includeSummary: boolean;
   paperSize: 'A4' | 'A3';
   orientation: 'landscape' | 'portrait';
+  resolution?: '1080p' | '4K' | '8K';
+  backgroundColor?: 'white' | 'transparent';
 }

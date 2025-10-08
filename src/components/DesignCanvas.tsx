@@ -20,6 +20,7 @@ import { TopBar } from './TopBar';
 import { BottomPanel } from './BottomPanel';
 import { ExportDialog } from './ExportDialog';
 import { exportToPDF } from '@/utils/pdfExport';
+import { exportAsImage } from '@/utils/imageExport';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import type { ToolType, ExportOptions } from '@/types';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -239,11 +240,16 @@ export const DesignCanvas = () => {
     }
 
     try {
-      await exportToPDF(currentProject, stage, options);
-      toast.success('PDF exported successfully');
+      if (options.format === 'pdf') {
+        await exportToPDF(currentProject, stage, options);
+        toast.success('PDF exported successfully');
+      } else {
+        await exportAsImage(currentProject, stage, options);
+        toast.success(`${options.format.toUpperCase()} exported successfully`);
+      }
     } catch (error) {
       console.error('Export failed:', error);
-      toast.error('Failed to export PDF');
+      toast.error(`Failed to export ${options.format.toUpperCase()}`);
     }
   };
 
