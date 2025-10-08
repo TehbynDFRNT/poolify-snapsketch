@@ -190,23 +190,17 @@ const addSummary = (pdf: jsPDF, project: Project, x: number, y: number, width: n
     pdf.setFont('helvetica', 'normal');
     leftY += lineHeight;
     
-    // Aggregate paving by size
-    const aggregated = summary.paving.reduce((acc, paver) => {
-      const existing = acc.find(p => p.size === paver.size);
-      if (existing) {
-        existing.count += paver.count;
-        existing.area += paver.area;
-      } else {
-        acc.push({ ...paver });
-      }
-      return acc;
-    }, [] as typeof summary.paving);
-    
-    aggregated.forEach(paver => {
-      pdf.text(`  • ${paver.size}: ${paver.count} pavers`, x, leftY);
+    summary.paving.forEach(paver => {
+      pdf.text(`  • ${paver.size}`, x, leftY);
       leftY += lineHeight;
-      pdf.text(`    (${formatArea(paver.area)})`, x, leftY);
+      pdf.text(`    Count: ${paver.count} pavers`, x, leftY);
       leftY += lineHeight;
+      pdf.text(`    ${paver.fullPavers} full + ${paver.partialPavers} partial`, x, leftY);
+      leftY += lineHeight;
+      pdf.text(`    Total area: ${formatArea(paver.area)}`, x, leftY);
+      leftY += lineHeight;
+      pdf.text(`    Wastage: ${paver.wastage}%`, x, leftY);
+      leftY += lineHeight + 1;
     });
     leftY += 2;
   }
@@ -214,14 +208,21 @@ const addSummary = (pdf: jsPDF, project: Project, x: number, y: number, width: n
   // Drainage (Left column)
   if (summary.drainage.length > 0) {
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Drainage:', x, leftY);
+    pdf.text(`Drainage (${summary.drainage.length}):`, x, leftY);
     pdf.setFont('helvetica', 'normal');
     leftY += lineHeight;
     
     summary.drainage.forEach(drain => {
-      pdf.text(`  • ${drain.type}: ${formatLength(drain.length)}`, x, leftY);
+      pdf.text(`  • ${drain.type} Drainage`, x, leftY);
       leftY += lineHeight;
+      pdf.text(`    Length: ${formatLength(drain.length)}`, x, leftY);
+      leftY += lineHeight;
+      pdf.text(`    Width: 100mm`, x, leftY);
+      leftY += lineHeight;
+      pdf.text(`    Volume: ${((drain.length / 1000) * 0.1).toFixed(2)} m³`, x, leftY);
+      leftY += lineHeight + 1;
     });
+    leftY += 2;
   }
 
   // Right column
@@ -246,16 +247,19 @@ const addSummary = (pdf: jsPDF, project: Project, x: number, y: number, width: n
   // Walls (Right column)
   if (summary.walls.length > 0) {
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Retaining Walls:', column2X, rightY);
+    pdf.text(`Walls (${summary.walls.length}):`, column2X, rightY);
     pdf.setFont('helvetica', 'normal');
     rightY += lineHeight;
     
     summary.walls.forEach(wall => {
-      const status = wall.status ? ` (${wall.status})` : '';
-      pdf.text(`  • ${wall.material}${status}:`, column2X, rightY);
+      pdf.text(`  • ${wall.material} Retaining Wall`, column2X, rightY);
       rightY += lineHeight;
-      pdf.text(`    ${formatLength(wall.length)} × ${formatLength(wall.height)}`, column2X, rightY);
+      pdf.text(`    Length: ${formatLength(wall.length)}`, column2X, rightY);
       rightY += lineHeight;
+      pdf.text(`    Height: ${formatLength(wall.height)}`, column2X, rightY);
+      rightY += lineHeight;
+      pdf.text(`    Volume: ${((wall.length / 1000) * (wall.height / 1000) * 0.3).toFixed(2)} m³`, column2X, rightY);
+      rightY += lineHeight + 1;
     });
   }
 };

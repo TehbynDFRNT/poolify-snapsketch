@@ -273,8 +273,10 @@ export function calculateStatistics(
   return {
     fullPavers,
     edgePavers,
+    totalPavers,
     totalArea,
     orderQuantity,
+    wastage: wastagePercentage,
   };
 }
 

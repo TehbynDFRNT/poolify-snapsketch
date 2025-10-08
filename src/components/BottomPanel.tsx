@@ -881,15 +881,15 @@ const MaterialsSummary = ({
             <CardTitle className="text-sm">Paving</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {summary.paving.map((paving, i) => (
                 <li key={i} className="text-sm">
                   <div className="font-medium">• {paving.size}</div>
-                  <div className="text-xs text-muted-foreground ml-4 mt-1">
-                    Count: {paving.count} pavers
-                  </div>
-                  <div className="text-xs text-muted-foreground ml-4">
-                    Total area: {paving.area.toFixed(2)} m²
+                  <div className="text-xs text-muted-foreground ml-4 mt-1 space-y-0.5">
+                    <div>Count: {paving.count} pavers</div>
+                    <div className="ml-4">{paving.fullPavers} full + {paving.partialPavers} partial</div>
+                    <div>Total area: {paving.area.toFixed(2)} m²</div>
+                    <div>Wastage: {paving.wastage}%</div>
                   </div>
                 </li>
               ))}
@@ -901,15 +901,17 @@ const MaterialsSummary = ({
       {summary.drainage.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Drainage</CardTitle>
+            <CardTitle className="text-sm">Drainage ({summary.drainage.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {summary.drainage.map((drain, i) => (
                 <li key={i} className="text-sm">
-                  <div className="font-medium">• {drain.type}</div>
-                  <div className="text-xs text-muted-foreground ml-4 mt-1">
-                    Length: {formatLength(drain.length)}
+                  <div className="font-medium">• {drain.type} Drainage</div>
+                  <div className="text-xs text-muted-foreground ml-4 mt-1 space-y-0.5">
+                    <div>Length: {formatLength(drain.length)}</div>
+                    <div>Width: 100mm</div>
+                    <div>Volume: {((drain.length / 1000) * 0.1).toFixed(2)} m³</div>
                   </div>
                 </li>
               ))}
@@ -955,18 +957,14 @@ const MaterialsSummary = ({
             <CardTitle className="text-sm">Walls ({summary.walls.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {summary.walls.map((wall, i) => (
                 <li key={i} className="text-sm">
-                  <div className="font-medium">• {wall.material}</div>
-                  <div className="text-xs text-muted-foreground ml-4 mt-1">
-                    Length: {formatLength(wall.length)}
-                  </div>
-                  <div className="text-xs text-muted-foreground ml-4">
-                    Height: {formatLength(wall.height)}
-                  </div>
-                  <div className="text-xs text-muted-foreground ml-4">
-                    Status: {wall.status}
+                  <div className="font-medium">• {wall.material} Retaining Wall</div>
+                  <div className="text-xs text-muted-foreground ml-4 mt-1 space-y-0.5">
+                    <div>Length: {formatLength(wall.length)}</div>
+                    <div>Height: {formatLength(wall.height)}</div>
+                    <div>Volume: {((wall.length / 1000) * (wall.height / 1000) * 0.3).toFixed(2)} m³</div>
                   </div>
                 </li>
               ))}

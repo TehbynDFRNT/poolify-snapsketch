@@ -169,7 +169,10 @@ export interface Summary {
   paving: Array<{
     size: string;
     count: number;
+    fullPavers: number;
+    partialPavers: number;
     area: number;
+    wastage: number;
   }>;
   drainage: Array<{
     type: string;

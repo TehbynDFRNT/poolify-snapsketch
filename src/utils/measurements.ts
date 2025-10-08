@@ -37,13 +37,27 @@ export const calculateMeasurements = (components: Component[]): Summary => {
         const paverDim = PAVER_SIZES[size] || PAVER_SIZES['400x400'];
         const label = paverDim.label;
         const area = (totalCount * paverDim.width * paverDim.height) / 1000000; // m²
+        
+        // For grid pavers, all are considered full pavers
+        const fullCount = totalCount;
+        const partialCount = 0;
+        const wastage = 5;
 
         const existing = summary.paving.find(p => p.size === label);
         if (existing) {
           existing.count += totalCount;
+          existing.fullPavers += fullCount;
+          existing.partialPavers += partialCount;
           existing.area += area;
         } else {
-          summary.paving.push({ size: label, count: totalCount, area });
+          summary.paving.push({ 
+            size: label, 
+            count: totalCount, 
+            fullPavers: fullCount,
+            partialPavers: partialCount,
+            area,
+            wastage 
+          });
         }
         break;
       }
@@ -61,13 +75,23 @@ export const calculateMeasurements = (components: Component[]): Summary => {
         const totalCount = full + edge;
         // Fallback area: compute from boundary polygon if stats missing
         const area = stats?.totalArea ?? (boundary && boundary.length >= 3 ? calculatePolygonArea(boundary) : 0);
+        const wastage = component.properties.wastagePercentage ?? 5;
 
         const existing = summary.paving.find(p => p.size === label);
         if (existing) {
           existing.count += totalCount;
+          existing.fullPavers += full;
+          existing.partialPavers += edge;
           existing.area += area;
         } else {
-          summary.paving.push({ size: label, count: totalCount, area });
+          summary.paving.push({ 
+            size: label, 
+            count: totalCount, 
+            fullPavers: full,
+            partialPavers: edge,
+            area,
+            wastage 
+          });
         }
         break;
       }
