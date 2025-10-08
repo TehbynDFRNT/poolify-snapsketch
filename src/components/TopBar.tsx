@@ -83,7 +83,7 @@ export const TopBar = ({
       {/* Left: Project Info */}
       <div className="flex items-center gap-3 min-w-0">
         <Link 
-          to="/" 
+          to="/projects" 
           className="text-primary hover:text-primary/80 flex-shrink-0"
           title="Back to projects"
         >
