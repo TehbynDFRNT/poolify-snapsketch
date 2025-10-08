@@ -232,6 +232,9 @@ export const DesignCanvas = () => {
   const handleExport = async (options: ExportOptions) => {
     if (!currentProject) return;
     
+    console.log('Export options:', options);
+    console.log('Export format:', options.format);
+    
     // Get the canvas element from the Konva stage
     const stage = document.querySelector('.konvajs-content canvas') as HTMLCanvasElement;
     if (!stage) {
@@ -241,9 +244,11 @@ export const DesignCanvas = () => {
 
     try {
       if (options.format === 'pdf') {
+        console.log('Exporting as PDF');
         await exportToPDF(currentProject, stage, options);
         toast.success('PDF exported successfully');
       } else {
+        console.log('Exporting as image:', options.format);
         await exportAsImage(currentProject, stage, options);
         toast.success(`${options.format.toUpperCase()} exported successfully`);
       }
