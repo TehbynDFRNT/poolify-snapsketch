@@ -200,92 +200,95 @@ export const Canvas = ({
   };
 
   const handleStageClick = (e: any) => {
-    // If clicked on empty canvas
-    if (e.target === e.target.getStage()) {
-      const pos = e.target.getStage().getPointerPosition();
-      const canvasX = (pos.x - pan.x) / zoom;
-      const canvasY = (pos.y - pan.y) / zoom;
-      const snapped = {
-        x: snapToGrid(canvasX),
-        y: snapToGrid(canvasY),
-      };
+    const stage = e.target.getStage();
+    const pos = stage.getPointerPosition();
+    if (!pos) return;
 
-      // Handle measurement tools
-      if (activeTool === 'quick_measure' || activeTool === 'reference_line') {
-        if (!isMeasuring) {
-          // Start measuring
-          setMeasureStart(snapped);
-          setMeasureEnd(snapped);
-          setIsMeasuring(true);
-        } else {
-          // Finish measuring
-          if (measureStart && measureEnd) {
-            let finalEnd = measureEnd;
-            
-            // Apply axis lock if Shift is pressed
-            if (shiftPressed) {
-              finalEnd = lockToAxis(measureStart, measureEnd);
-            }
-            
-            const distance = calculateDistance(measureStart, finalEnd);
-            const locked = shiftPressed ? detectAxisLock(measureStart, finalEnd) : null;
-            
-            // Create the component
-            const component = {
-              type: activeTool as 'quick_measure' | 'reference_line',
-              position: { x: 0, y: 0 },
-              rotation: 0,
-              dimensions: { width: 0, height: 0 },
-              properties: {
-                points: [measureStart, finalEnd],
-                measurement: distance,
-                style: {
-                  color: activeTool === 'quick_measure' ? '#eab308' : '#dc2626',
-                  dashed: activeTool === 'reference_line',
-                  lineWidth: 2,
-                  arrowEnds: true,
-                },
-                locked,
-                showMeasurement: true,
-                exportToPDF: activeTool === 'reference_line',
-                temporary: activeTool === 'quick_measure',
-                createdAt: Date.now(),
-              },
-            };
-            
-            addComponent(component);
-            
-            // Auto-delete quick measurements after 3 seconds
-            if (activeTool === 'quick_measure') {
-              const componentId = components.length > 0 ? components[components.length - 1].id : null;
-              setTimeout(() => {
-                if (componentId) {
-                  const currentComponents = useDesignStore.getState().components;
-                  const componentStillExists = currentComponents.find(c => c.id === componentId);
-                  if (componentStillExists) {
-                    useDesignStore.getState().deleteComponent(componentId);
-                  }
-                }
-              }, 3000);
-            }
+    const canvasX = (pos.x - pan.x) / zoom;
+    const canvasY = (pos.y - pan.y) / zoom;
+    const snapped = {
+      x: snapToGrid(canvasX),
+      y: snapToGrid(canvasY),
+    };
+
+    // Always handle measurement tools regardless of click target (allow over shapes)
+    if (activeTool === 'quick_measure' || activeTool === 'reference_line') {
+      if (!isMeasuring) {
+        // Start measuring
+        setMeasureStart(snapped);
+        setMeasureEnd(snapped);
+        setIsMeasuring(true);
+      } else {
+        // Finish measuring
+        if (measureStart && measureEnd) {
+          let finalEnd = measureEnd;
+
+          // Apply axis lock if Shift is pressed
+          if (shiftPressed) {
+            finalEnd = lockToAxis(measureStart, measureEnd);
           }
-          
-          setMeasureStart(null);
-          setMeasureEnd(null);
-          setIsMeasuring(false);
-        }
-        return;
-      }
 
+          const distance = calculateDistance(measureStart, finalEnd);
+          const locked = shiftPressed ? detectAxisLock(measureStart, finalEnd) : null;
+
+          // Create the component
+          const component = {
+            type: activeTool as 'quick_measure' | 'reference_line',
+            position: { x: 0, y: 0 },
+            rotation: 0,
+            dimensions: { width: 0, height: 0 },
+            properties: {
+              points: [measureStart, finalEnd],
+              measurement: distance,
+              style: {
+                color: activeTool === 'quick_measure' ? '#eab308' : '#dc2626',
+                dashed: activeTool === 'reference_line',
+                lineWidth: 2,
+                arrowEnds: true,
+              },
+              locked,
+              showMeasurement: true,
+              exportToPDF: activeTool === 'reference_line',
+              temporary: activeTool === 'quick_measure',
+              createdAt: Date.now(),
+            },
+          };
+
+          addComponent(component);
+
+          // Auto-delete quick measurements after 3 seconds
+          if (activeTool === 'quick_measure') {
+            const componentId = components.length > 0 ? components[components.length - 1].id : null;
+            setTimeout(() => {
+              if (componentId) {
+                const currentComponents = useDesignStore.getState().components;
+                const componentStillExists = currentComponents.find(c => c.id === componentId);
+                if (componentStillExists) {
+                  useDesignStore.getState().deleteComponent(componentId);
+                }
+              }
+            }, 3000);
+          }
+        }
+
+        setMeasureStart(null);
+        setMeasureEnd(null);
+        setIsMeasuring(false);
+      }
+      return;
+    }
+
+    // For other tools, only handle clicks on empty canvas area
+    if (e.target === stage) {
       // Handle drawing tools
       if (activeTool === 'boundary' || activeTool === 'house' || activeTool === 'paving_area') {
         // Use smart snap for paving areas
         const finalSnapped = activeTool === 'paving_area'
           ? smartSnap(snapped, components)
           : { ...snapped, snappedTo: null };
-        
+
         const pointToAdd = { x: finalSnapped.x, y: finalSnapped.y };
-        
+
         // Check if clicking near first point to close
         if (drawingPoints.length >= 3 && isNearFirstPoint(pointToAdd)) {
           // Close the shape
@@ -309,7 +312,7 @@ export const Canvas = ({
           }
           return;
         }
-        
+
         // Add point to drawing
         setDrawingPoints([...drawingPoints, pointToAdd]);
         setIsDrawing(true);
@@ -330,7 +333,6 @@ export const Canvas = ({
       }
     }
   };
-
   // Handle paving area configuration
   const handlePavingConfig = (config: PavingConfig) => {
     if (pavingBoundary.length < 3) return;
