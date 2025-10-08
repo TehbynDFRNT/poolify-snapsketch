@@ -872,8 +872,6 @@ export const Canvas = ({
           {renderDrawingPoints()}
           {renderDrawingPreview()}
           
-          {/* Measurement preview */}
-          {renderMeasurementPreview()}
           
           {/* Render all components - measurement tools rendered last to appear on top */}
           {(() => {
@@ -1090,6 +1088,9 @@ export const Canvas = ({
               }
             });
           })()}
+        </Layer>
+        <Layer listening={false}>
+          {renderMeasurementPreview()}
         </Layer>
       </Stage>
 
