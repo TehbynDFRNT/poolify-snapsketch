@@ -1,265 +1,435 @@
 import jsPDF from 'jspdf';
 import { Project, ExportOptions, Component } from '@/types';
 import { calculateMeasurements, formatLength, formatArea } from './measurements';
-import { POOL_LIBRARY } from '@/constants/pools';
-import { PAVER_SIZES, DRAINAGE_TYPES, FENCE_TYPES, WALL_MATERIALS } from '@/constants/components';
+
+// PDF Layout Constants
+const LAYOUT = {
+  format: 'a4',
+  orientation: 'landscape' as const,
+  unit: 'mm',
+  pageWidth: 297,
+  pageHeight: 210,
+  margins: {
+    top: 5,
+    right: 5,
+    bottom: 5,
+    left: 5,
+  },
+  header: {
+    height: 20,
+  },
+  drawing: {
+    x: 5,
+    y: 26,
+    width: 200,
+    height: 165,
+    padding: 2.5,
+  },
+  sidebar: {
+    x: 207,
+    y: 26,
+    width: 85,
+    height: 165,
+    gap: 3,
+  },
+};
+
+// Color Constants (RGB) - Using tuples for TypeScript compatibility
+const COLORS = {
+  text: {
+    primary: [0, 0, 0] as [number, number, number],
+    secondary: [55, 65, 81] as [number, number, number],
+    tertiary: [107, 114, 128] as [number, number, number],
+  },
+  borders: {
+    light: [229, 231, 235] as [number, number, number],
+    medium: [204, 204, 204] as [number, number, number],
+    dark: [156, 163, 175] as [number, number, number],
+  },
+  legend: {
+    pool: [59, 130, 246] as [number, number, number],
+    coping: [148, 163, 184] as [number, number, number],
+    paving: [253, 230, 138] as [number, number, number],
+    drainage: [107, 114, 128] as [number, number, number],
+    fencing: [96, 165, 250] as [number, number, number],
+    wall: [146, 64, 14] as [number, number, number],
+    boundary: [30, 41, 59] as [number, number, number],
+    house: [0, 0, 0] as [number, number, number],
+  },
+};
 
 export const exportToPDF = async (
   project: Project,
   canvasElement: HTMLCanvasElement,
   options: ExportOptions
 ): Promise<void> => {
+  // Initialize PDF with landscape orientation
   const pdf = new jsPDF({
-    orientation: options.orientation,
+    orientation: 'landscape',
     unit: 'mm',
-    format: options.paperSize.toLowerCase() as 'a4' | 'a3',
+    format: 'a4',
   });
 
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 15;
-  const contentWidth = pageWidth - 2 * margin;
+  // Draw all sections
+  drawHeader(pdf, project, options);
+  drawCanvas(pdf, canvasElement);
+  drawLegend(pdf, options);
+  drawMaterialsSummary(pdf, project, options);
 
-  // Add title
-  pdf.setFontSize(18);
-  pdf.setFont('helvetica', 'bold');
-  pdf.text(project.customerName, margin, margin + 7);
-
-  // Add project details
-  pdf.setFontSize(10);
-  pdf.setFont('helvetica', 'normal');
-  pdf.text(project.address, margin, margin + 13);
-  pdf.text(`Scale: ${options.scale}`, margin, margin + 18);
-  pdf.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth - margin - 40, margin + 18);
-
-  // Add canvas image with proper aspect ratio
-  const canvasY = margin + 25;
-  const maxCanvasHeight = pageHeight * 0.55;
-  const maxCanvasWidth = contentWidth;
-  
-  // Calculate dimensions maintaining aspect ratio
-  const canvasAspectRatio = canvasElement.width / canvasElement.height;
-  let canvasWidth = maxCanvasWidth;
-  let canvasHeight = canvasWidth / canvasAspectRatio;
-  
-  // If height is too large, scale based on height instead
-  if (canvasHeight > maxCanvasHeight) {
-    canvasHeight = maxCanvasHeight;
-    canvasWidth = canvasHeight * canvasAspectRatio;
-  }
-
-  try {
-    const canvasData = canvasElement.toDataURL('image/png', 1.0);
-    
-    // Center the canvas horizontally if it's smaller than max width
-    const canvasX = margin + (maxCanvasWidth - canvasWidth) / 2;
-    
-    // Add a border around the canvas
-    pdf.setDrawColor(200, 200, 200);
-    pdf.setLineWidth(0.5);
-    pdf.rect(canvasX, canvasY, canvasWidth, canvasHeight);
-    
-    pdf.addImage(canvasData, 'PNG', canvasX, canvasY, canvasWidth, canvasHeight);
-  } catch (error) {
-    console.error('Failed to add canvas to PDF:', error);
-  }
-
-  // Add legend if requested
-  if (options.includeLegend) {
-    const legendY = canvasY + canvasHeight + 10;
-    addLegend(pdf, margin, legendY, contentWidth);
-  }
-
-  // Add summary if requested
-  if (options.includeSummary) {
-    const summaryY = canvasY + canvasHeight + (options.includeLegend ? 40 : 10);
-    addSummary(pdf, project, margin, summaryY, contentWidth);
-  }
-
-  // Add notes if any
-  if (project.notes) {
+  // Add notes on second page if present
+  if (project.notes && project.notes.trim().length > 0) {
     pdf.addPage();
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Project Notes', margin, margin + 10);
-    
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
-    const splitNotes = pdf.splitTextToSize(project.notes, contentWidth);
-    pdf.text(splitNotes, margin, margin + 18);
+    drawNotesPage(pdf, project);
   }
 
   // Save the PDF
-  const fileName = `${project.customerName.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`;
+  const fileName = `${project.customerName.replace(/\s+/g, '_')}_PoolDesign.pdf`;
   pdf.save(fileName);
 };
 
-const addLegend = (pdf: jsPDF, x: number, y: number, width: number) => {
-  pdf.setFontSize(11);
+// ===== HEADER SECTION =====
+const drawHeader = (pdf: jsPDF, project: Project, options: ExportOptions) => {
+  const { left, top } = LAYOUT.margins;
+  const pageWidth = LAYOUT.pageWidth;
+
+  // Customer name/title
+  pdf.setFontSize(14);
   pdf.setFont('helvetica', 'bold');
-  pdf.text('Legend', x, y);
+  pdf.setTextColor(...COLORS.text.primary);
+  pdf.text(`Pool Design - ${project.customerName}`, left, top + 8);
 
-  pdf.setFontSize(9);
+  // Address
+  pdf.setFontSize(10);
   pdf.setFont('helvetica', 'normal');
-  
-  const legendItems = [
-    { color: [59, 130, 246], label: 'Pool' },
-    { color: [156, 163, 175], label: 'Pool Coping' },
-    { color: [243, 235, 217], label: 'Paving' },
-    { color: [152, 156, 164], label: 'Drainage' },
-    { color: [93, 165, 218], label: 'Fencing' },
-    { color: [140, 107, 74], label: 'Retaining Wall' },
-    { color: [30, 58, 138], label: 'Boundary' },
-    { color: [0, 0, 0], label: 'House' },
-  ];
+  pdf.setTextColor(...COLORS.text.secondary);
+  pdf.text(project.address, left, top + 14);
 
-  let currentY = y + 6;
-  const boxSize = 5;
-  const spacing = 3;
-  let currentX = x;
+  // Scale (left side)
+  pdf.setTextColor(...COLORS.text.tertiary);
+  pdf.text(`Scale: ${options.scale}`, left, top + 19);
 
-  legendItems.forEach((item, index) => {
-    const textWidth = pdf.getTextWidth(item.label);
-    const itemWidth = boxSize + spacing + textWidth;
-    
-    // Wrap to next row if needed
-    if (currentX + itemWidth > x + width && index > 0) {
-      currentX = x;
-      currentY += 7;
-    }
-    
-    // Draw colored box with border
-    pdf.setFillColor(item.color[0], item.color[1], item.color[2]);
-    pdf.setDrawColor(100, 100, 100);
-    pdf.setLineWidth(0.2);
-    pdf.rect(currentX, currentY - boxSize + 1, boxSize, boxSize, 'FD');
-    
-    // Draw label
-    pdf.setTextColor(0, 0, 0);
-    pdf.text(item.label, currentX + boxSize + spacing, currentY);
-    
-    currentX += itemWidth + 10;
+  // Date (right side)
+  const date = new Date().toLocaleDateString('en-AU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
   });
+  pdf.text(`Date: ${date}`, pageWidth - LAYOUT.margins.right, top + 19, { align: 'right' });
+
+  // Bottom border line
+  pdf.setDrawColor(...COLORS.text.primary);
+  pdf.setLineWidth(0.5);
+  pdf.line(left, top + LAYOUT.header.height, pageWidth - LAYOUT.margins.right, top + LAYOUT.header.height);
+
+  // Reset text color
+  pdf.setTextColor(...COLORS.text.primary);
 };
 
-const addSummary = (pdf: jsPDF, project: Project, x: number, y: number, width: number) => {
-  const summary = calculateMeasurements(project.components);
-  
-  pdf.setFontSize(12);
-  pdf.setFont('helvetica', 'bold');
-  pdf.text('Materials Summary', x, y);
+// ===== DRAWING AREA SECTION =====
+const drawCanvas = (pdf: jsPDF, canvasElement: HTMLCanvasElement) => {
+  const { x, y, width, height, padding } = LAYOUT.drawing;
 
+  // Draw border around drawing area
+  pdf.setDrawColor(...COLORS.borders.medium);
+  pdf.setLineWidth(0.5);
+  pdf.rect(x, y, width, height);
+
+  try {
+    // Get canvas as image
+    const canvasImage = canvasElement.toDataURL('image/png', 1.0);
+
+    // Calculate scaling to fit within drawing area (with padding)
+    const maxWidth = width - padding * 2;
+    const maxHeight = height - padding * 2;
+    const canvasAspect = canvasElement.width / canvasElement.height;
+    const targetAspect = maxWidth / maxHeight;
+
+    let drawWidth: number, drawHeight: number, offsetX: number, offsetY: number;
+
+    if (canvasAspect > targetAspect) {
+      // Canvas is wider - fit to width
+      drawWidth = maxWidth;
+      drawHeight = maxWidth / canvasAspect;
+      offsetX = x + padding;
+      offsetY = y + padding + (maxHeight - drawHeight) / 2;
+    } else {
+      // Canvas is taller - fit to height
+      drawHeight = maxHeight;
+      drawWidth = maxHeight * canvasAspect;
+      offsetX = x + padding + (maxWidth - drawWidth) / 2;
+      offsetY = y + padding;
+    }
+
+    // Add the canvas image
+    pdf.addImage(canvasImage, 'PNG', offsetX, offsetY, drawWidth, drawHeight);
+  } catch (error) {
+    console.error('Failed to add canvas to PDF:', error);
+    // Draw error message in center
+    pdf.setFontSize(10);
+    pdf.setTextColor(...COLORS.text.tertiary);
+    pdf.text('Failed to render drawing', x + width / 2, y + height / 2, { align: 'center' });
+    pdf.setTextColor(...COLORS.text.primary);
+  }
+};
+
+// ===== LEGEND SECTION =====
+const drawLegend = (pdf: jsPDF, options: ExportOptions) => {
+  if (!options.includeLegend) return;
+
+  const { x, y, width } = LAYOUT.sidebar;
+  const padding = 3;
+  let currentY = y;
+
+  // Calculate legend height
+  const legendItems = [
+    { color: COLORS.legend.pool, label: 'Pool' },
+    { color: COLORS.legend.coping, label: 'Pool Coping' },
+    { color: COLORS.legend.paving, label: 'Paving' },
+    { color: COLORS.legend.drainage, label: 'Drainage' },
+    { color: COLORS.legend.fencing, label: 'Fencing' },
+    { color: COLORS.legend.wall, label: 'Retaining Wall' },
+    { color: COLORS.legend.boundary, label: 'Boundary' },
+    { color: COLORS.legend.house, label: 'House' },
+  ];
+
+  const itemHeight = 6;
+  const legendHeight = padding * 2 + 6 + legendItems.length * itemHeight;
+
+  // Draw border
+  pdf.setDrawColor(...COLORS.borders.medium);
+  pdf.setLineWidth(0.5);
+  pdf.rect(x, currentY, width, legendHeight);
+
+  // Title
+  currentY += padding + 6;
+  pdf.setFontSize(11);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setTextColor(...COLORS.text.primary);
+  pdf.text('LEGEND', x + padding, currentY);
+
+  // Legend items
+  currentY += 5;
   pdf.setFontSize(9);
   pdf.setFont('helvetica', 'normal');
-  
-  const lineHeight = 5;
-  const columnWidth = width / 2 - 5;
-  const column2X = x + columnWidth + 10;
-  
-  // Left column
-  let leftY = y + 7;
-  
-  // Pools (Left column)
-  if (summary.pools.length > 0) {
+
+  legendItems.forEach((item) => {
+    const colorBoxWidth = 8;
+    const colorBoxHeight = 5;
+    const colorBoxMargin = 2;
+
+    // Draw color box
+    pdf.setFillColor(item.color[0], item.color[1], item.color[2]);
+    pdf.rect(x + padding, currentY - 3, colorBoxWidth, colorBoxHeight, 'F');
+
+    // Draw label
+    pdf.setTextColor(...COLORS.text.primary);
+    pdf.text(item.label, x + padding + colorBoxWidth + colorBoxMargin, currentY);
+
+    currentY += itemHeight;
+  });
+
+  return legendHeight;
+};
+
+// ===== MATERIALS SUMMARY SECTION =====
+const drawMaterialsSummary = (pdf: jsPDF, project: Project, options: ExportOptions) => {
+  if (!options.includeSummary) return;
+
+  const { x, width, gap } = LAYOUT.sidebar;
+  const padding = 3;
+  const lineHeight = 3.5;
+
+  // Calculate legend height to position summary below it
+  const legendItems = 8; // Number of legend items
+  const legendHeight = options.includeLegend ? padding * 2 + 6 + legendItems * 6 : 0;
+  const legendGap = options.includeLegend ? gap : 0;
+
+  const summaryY = LAYOUT.sidebar.y + legendHeight + legendGap;
+  const summaryHeight = LAYOUT.sidebar.height - legendHeight - legendGap;
+
+  let currentY = summaryY;
+
+  // Draw border
+  pdf.setDrawColor(...COLORS.borders.medium);
+  pdf.setLineWidth(0.5);
+  pdf.rect(x, summaryY, width, summaryHeight);
+
+  // Title
+  currentY += padding + 6;
+  pdf.setFontSize(11);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setTextColor(...COLORS.text.primary);
+  pdf.text('MATERIALS SUMMARY', x + padding, currentY);
+
+  currentY += 5;
+
+  // Calculate materials
+  const summary = calculateMeasurements(project.components);
+
+  pdf.setFontSize(8);
+  const maxY = summaryY + summaryHeight - padding;
+
+  // Helper function to check if we have space
+  const hasSpace = (lines: number) => currentY + lines * lineHeight <= maxY;
+
+  // === POOLS ===
+  if (summary.pools.length > 0 && hasSpace(2)) {
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Pools:', x, leftY);
-    pdf.setFont('helvetica', 'normal');
-    leftY += lineHeight;
-    
-    summary.pools.forEach(pool => {
-      pdf.text(`  • ${pool.type} (${pool.dimensions})`, x, leftY);
-      leftY += lineHeight;
+    pdf.setTextColor(...COLORS.text.primary);
+    pdf.text('Pools:', x + padding, currentY);
+    currentY += lineHeight;
+
+    summary.pools.forEach((pool) => {
+      if (!hasSpace(1)) return;
       
-      // Add coping info if present
-      if (pool.coping) {
-        pdf.setFont('helvetica', 'italic');
-        pdf.text(`    Coping: ${pool.coping.totalPavers} pavers (400×400mm)`, x, leftY);
-        leftY += lineHeight;
-        pdf.text(`    (${pool.coping.fullPavers} full + ${pool.coping.partialPavers} partial) = ${formatArea(pool.coping.area)}`, x, leftY);
-        leftY += lineHeight;
-        pdf.setFont('helvetica', 'normal');
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`• ${pool.type} ${pool.dimensions}`, x + padding + 2, currentY);
+      currentY += lineHeight;
+
+      if (pool.coping && hasSpace(2)) {
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(...COLORS.text.tertiary);
+        pdf.text(`  Coping: ${pool.coping.totalPavers} pavers (400×400mm)`, x + padding + 4, currentY);
+        currentY += lineHeight;
+        pdf.text(`  (${pool.coping.fullPavers} full + ${pool.coping.partialPavers} partial) = ${formatArea(pool.coping.area)}`, x + padding + 4, currentY);
+        currentY += lineHeight;
+        pdf.setFontSize(8);
+        pdf.setTextColor(...COLORS.text.primary);
       }
     });
-    leftY += 2;
+    currentY += 2;
   }
 
-  // Paving (Left column)
-  if (summary.paving.length > 0) {
+  // === PAVING ===
+  if (summary.paving.length > 0 && hasSpace(2)) {
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Paving:', x, leftY);
-    pdf.setFont('helvetica', 'normal');
-    leftY += lineHeight;
-    
-    summary.paving.forEach(paver => {
-      pdf.text(`  • ${paver.size}`, x, leftY);
-      leftY += lineHeight;
-      pdf.text(`    Count: ${paver.count} pavers`, x, leftY);
-      leftY += lineHeight;
-      pdf.text(`    ${paver.fullPavers} full + ${paver.partialPavers} partial`, x, leftY);
-      leftY += lineHeight;
-      pdf.text(`    Total area: ${formatArea(paver.area)}`, x, leftY);
-      leftY += lineHeight;
-      pdf.text(`    Wastage: ${paver.wastage}%`, x, leftY);
-      leftY += lineHeight + 1;
-    });
-    leftY += 2;
-  }
+    pdf.setTextColor(...COLORS.text.primary);
+    pdf.text('Paving:', x + padding, currentY);
+    currentY += lineHeight;
 
-  // Drainage (Left column)
-  if (summary.drainage.length > 0) {
-    pdf.setFont('helvetica', 'bold');
-    pdf.text(`Drainage (${summary.drainage.length}):`, x, leftY);
-    pdf.setFont('helvetica', 'normal');
-    leftY += lineHeight;
-    
-    summary.drainage.forEach(drain => {
-      pdf.text(`  • ${drain.type} Drainage`, x, leftY);
-      leftY += lineHeight;
-      pdf.text(`    Length: ${formatLength(drain.length)}`, x, leftY);
-      leftY += lineHeight;
-      pdf.text(`    Width: 100mm`, x, leftY);
-      leftY += lineHeight;
-      pdf.text(`    Volume: ${((drain.length / 1000) * 0.1).toFixed(2)} m³`, x, leftY);
-      leftY += lineHeight + 1;
-    });
-    leftY += 2;
-  }
+    summary.paving.forEach((paver) => {
+      if (!hasSpace(5)) return;
 
-  // Right column
-  let rightY = y + 7;
-
-  // Fencing (Right column)
-  if (summary.fencing.length > 0) {
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Fencing:', column2X, rightY);
-    pdf.setFont('helvetica', 'normal');
-    rightY += lineHeight;
-    
-    summary.fencing.forEach(fence => {
-      pdf.text(`  • ${fence.type}:`, column2X, rightY);
-      rightY += lineHeight;
-      pdf.text(`    ${formatLength(fence.length)} (${fence.gates} gates)`, column2X, rightY);
-      rightY += lineHeight;
-    });
-    rightY += 2;
-  }
-
-  // Walls (Right column)
-  if (summary.walls.length > 0) {
-    pdf.setFont('helvetica', 'bold');
-    pdf.text(`Walls (${summary.walls.length}):`, column2X, rightY);
-    pdf.setFont('helvetica', 'normal');
-    rightY += lineHeight;
-    
-    summary.walls.forEach(wall => {
-      pdf.text(`  • ${wall.material} Retaining Wall`, column2X, rightY);
-      rightY += lineHeight;
-      pdf.text(`    Length: ${formatLength(wall.length)}`, column2X, rightY);
-      rightY += lineHeight;
-      pdf.text(`    Height: ${formatLength(wall.height)}`, column2X, rightY);
-      rightY += lineHeight;
-      pdf.text(`    Volume: ${((wall.length / 1000) * (wall.height / 1000) * 0.3).toFixed(2)} m³`, column2X, rightY);
-      rightY += lineHeight + 1;
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`• ${paver.size}`, x + padding + 2, currentY);
+      currentY += lineHeight;
+      pdf.text(`• Count: ${paver.count} pavers`, x + padding + 2, currentY);
+      currentY += lineHeight;
+      
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(...COLORS.text.tertiary);
+      pdf.text(`  ${paver.fullPavers} full + ${paver.partialPavers} partial`, x + padding + 4, currentY);
+      currentY += lineHeight;
+      
+      pdf.setFontSize(8);
+      pdf.setTextColor(...COLORS.text.primary);
+      pdf.text(`• Total area: ${formatArea(paver.area)}`, x + padding + 2, currentY);
+      currentY += lineHeight;
+      pdf.text(`• Wastage: ${paver.wastage}%`, x + padding + 2, currentY);
+      currentY += lineHeight + 2;
     });
   }
+
+  // === DRAINAGE ===
+  if (summary.drainage.length > 0 && hasSpace(2)) {
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(...COLORS.text.primary);
+    pdf.text('Drainage:', x + padding, currentY);
+    currentY += lineHeight;
+
+    summary.drainage.forEach((drain) => {
+      if (!hasSpace(3)) return;
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`• ${drain.type}`, x + padding + 2, currentY);
+      currentY += lineHeight;
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(...COLORS.text.tertiary);
+      pdf.text(`  Length: ${formatLength(drain.length)}`, x + padding + 4, currentY);
+      currentY += lineHeight;
+      pdf.text(`  Volume: ${((drain.length / 1000) * 0.1).toFixed(2)} m³`, x + padding + 4, currentY);
+      currentY += lineHeight;
+      pdf.setFontSize(8);
+      pdf.setTextColor(...COLORS.text.primary);
+    });
+    currentY += 2;
+  }
+
+  // === FENCING ===
+  if (summary.fencing.length > 0 && hasSpace(2)) {
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(...COLORS.text.primary);
+    pdf.text('Fencing:', x + padding, currentY);
+    currentY += lineHeight;
+
+    let totalLength = 0;
+    summary.fencing.forEach((fence) => {
+      if (!hasSpace(2)) return;
+
+      const lengthInMeters = fence.length / 1000;
+      totalLength += lengthInMeters;
+      
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`• ${fence.type}:`, x + padding + 2, currentY);
+      currentY += lineHeight;
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(...COLORS.text.tertiary);
+      pdf.text(`  - ${lengthInMeters.toFixed(1)}m (${fence.gates} gates)`, x + padding + 4, currentY);
+      currentY += lineHeight;
+      pdf.setFontSize(8);
+      pdf.setTextColor(...COLORS.text.primary);
+    });
+
+    if (hasSpace(1)) {
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`• Total: ${totalLength.toFixed(1)}m`, x + padding + 2, currentY);
+      currentY += lineHeight + 2;
+    }
+  }
+
+  // === WALLS ===
+  if (summary.walls.length > 0 && hasSpace(2)) {
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(...COLORS.text.primary);
+    pdf.text('Walls:', x + padding, currentY);
+    currentY += lineHeight;
+
+    summary.walls.forEach((wall) => {
+      if (!hasSpace(3)) return;
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`• ${wall.material}: ${formatLength(wall.length)}`, x + padding + 2, currentY);
+      currentY += lineHeight;
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(...COLORS.text.tertiary);
+      pdf.text(`  (H: ${formatLength(wall.height)})`, x + padding + 4, currentY);
+      currentY += lineHeight;
+      pdf.setFontSize(8);
+      pdf.setTextColor(...COLORS.text.primary);
+    });
+    currentY += 2;
+  }
+
+  // Overflow indicator if we ran out of space
+  if (currentY > maxY - 5) {
+    pdf.setFontSize(7);
+    pdf.setTextColor(...COLORS.text.tertiary);
+    pdf.text('...', x + width / 2, maxY - 2, { align: 'center' });
+  }
+};
+
+// ===== NOTES PAGE (if present) =====
+const drawNotesPage = (pdf: jsPDF, project: Project) => {
+  const margin = 15;
+  const contentWidth = LAYOUT.pageWidth - 2 * margin;
+
+  pdf.setFontSize(14);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setTextColor(...COLORS.text.primary);
+  pdf.text('Project Notes', margin, margin + 10);
+
+  pdf.setFontSize(10);
+  pdf.setFont('helvetica', 'normal');
+  const splitNotes = pdf.splitTextToSize(project.notes || '', contentWidth);
+  pdf.text(splitNotes, margin, margin + 18);
 };
