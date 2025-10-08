@@ -875,210 +875,221 @@ export const Canvas = ({
           {/* Measurement preview */}
           {renderMeasurementPreview()}
           
-          {/* Render all components */}
-          {components.map((component) => {
-            const isSelected = component.id === selectedComponentId;
+          {/* Render all components - measurement tools rendered last to appear on top */}
+          {(() => {
+            // Separate components into regular and measurement types
+            const regularComponents = components.filter(c => 
+              c.type !== 'reference_line' && c.type !== 'quick_measure'
+            );
+            const measurementComponents = components.filter(c => 
+              c.type === 'reference_line' || c.type === 'quick_measure'
+            );
             
-            switch (component.type) {
-              case 'pool':
-                return (
-                  <PoolComponent
-                    key={component.id}
-                    component={component}
-                    isSelected={isSelected}
-                    onSelect={() => selectComponent(component.id)}
-                    onDragEnd={(pos) => {
-                      const snapped = {
-                        x: snapToGrid(pos.x),
-                        y: snapToGrid(pos.y),
-                      };
-                      updateComponent(component.id, { position: snapped });
-                    }}
-                  />
-                );
-                
-              case 'paver':
-                return (
-                  <PaverComponent
-                    key={component.id}
-                    component={component}
-                    isSelected={isSelected}
-                    onSelect={() => selectComponent(component.id)}
-                    onDragEnd={(pos) => {
-                      const snapped = {
-                        x: snapToGrid(pos.x),
-                        y: snapToGrid(pos.y),
-                      };
-                      updateComponent(component.id, { position: snapped });
-                    }}
-                    onReplicateRight={(cols) => {
-                      const base = component.properties.paverCount || { rows: 1, cols: 1 };
-                      const safe = {
-                        rows: Math.max(1, Number(base.rows) || 1),
-                        cols: Math.max(1, Number(cols) || 1),
-                      };
-                      const sizeKey = (component.properties.paverSize || '400x400') as keyof typeof PAVER_SIZES;
-                      const size = PAVER_SIZES[sizeKey];
-                      updateComponent(component.id, {
-                        properties: {
-                          ...component.properties,
-                          paverCount: safe,
-                        },
-                        dimensions: {
-                          width: safe.cols * size.width,
-                          height: safe.rows * size.height,
-                        },
-                      });
-                    }}
-                    onReplicateBottom={(rows) => {
-                      const base = component.properties.paverCount || { rows: 1, cols: 1 };
-                      const safe = {
-                        rows: Math.max(1, Number(rows) || 1),
-                        cols: Math.max(1, Number(base.cols) || 1),
-                      };
-                      const sizeKey = (component.properties.paverSize || '400x400') as keyof typeof PAVER_SIZES;
-                      const size = PAVER_SIZES[sizeKey];
-                      updateComponent(component.id, {
-                        properties: {
-                          ...component.properties,
-                          paverCount: safe,
-                        },
-                        dimensions: {
-                          width: safe.cols * size.width,
-                          height: safe.rows * size.height,
-                        },
-                      });
-                    }}
-                  />
-                );
-                
-              case 'drainage':
-                return (
-                  <DrainageComponent
-                    key={component.id}
-                    component={component}
-                    isSelected={isSelected}
-                    onSelect={() => selectComponent(component.id)}
-                    onDragEnd={(pos) => {
-                      const snapped = {
-                        x: snapToGrid(pos.x),
-                        y: snapToGrid(pos.y),
-                      };
-                      updateComponent(component.id, { position: snapped });
-                    }}
-                    onExtend={(length) =>
-                      updateComponent(component.id, {
-                        properties: { ...component.properties, length },
-                        dimensions: { ...component.dimensions, width: length },
-                      })
-                    }
-                  />
-                );
-                
-              case 'fence':
-                return (
-                  <FenceComponent
-                    key={component.id}
-                    component={component}
-                    isSelected={isSelected}
-                    onSelect={() => selectComponent(component.id)}
-                    onDragEnd={(pos) => {
-                      const snapped = {
-                        x: snapToGrid(pos.x),
-                        y: snapToGrid(pos.y),
-                      };
-                      updateComponent(component.id, { position: snapped });
-                    }}
-                    onExtend={(length) =>
-                      updateComponent(component.id, {
-                        dimensions: { ...component.dimensions, width: length },
-                      })
-                    }
-                  />
-                );
-                
-              case 'wall':
-                return (
-                  <WallComponent
-                    key={component.id}
-                    component={component}
-                    isSelected={isSelected}
-                    onSelect={() => selectComponent(component.id)}
-                    onDragEnd={(pos) => {
-                      const snapped = {
-                        x: snapToGrid(pos.x),
-                        y: snapToGrid(pos.y),
-                      };
-                      updateComponent(component.id, { position: snapped });
-                    }}
-                    onExtend={(length) =>
-                      updateComponent(component.id, {
-                        dimensions: { ...component.dimensions, width: length },
-                      })
-                    }
-                  />
-                );
-                
-              case 'boundary':
-                return (
-                  <BoundaryComponent
-                    key={component.id}
-                    component={component}
-                    isSelected={isSelected}
-                    onSelect={() => selectComponent(component.id)}
-                    onDragEnd={(pos) => {
-                      const snapped = {
-                        x: snapToGrid(pos.x),
-                        y: snapToGrid(pos.y),
-                      };
-                      updateComponent(component.id, { position: snapped });
-                    }}
-                  />
-                );
-                
-              case 'house':
-                return (
-                  <HouseComponent
-                    key={component.id}
-                    component={component}
-                    isSelected={isSelected}
-                    onSelect={() => selectComponent(component.id)}
-                    onDragEnd={(pos) => {
-                      const snapped = {
-                        x: snapToGrid(pos.x),
-                        y: snapToGrid(pos.y),
-                      };
-                      updateComponent(component.id, { position: snapped });
-                    }}
-                  />
-                );
+            // Render regular components first, then measurements on top
+            return [...regularComponents, ...measurementComponents].map((component) => {
+              const isSelected = component.id === selectedComponentId;
               
-              case 'reference_line':
-              case 'quick_measure':
-                return (
-                  <ReferenceLineComponent
-                    key={component.id}
-                    component={component}
-                    selected={isSelected}
-                    onSelect={() => selectComponent(component.id)}
-                    onDelete={() => deleteComponent(component.id)}
-                  />
-                );
-              
-              case 'paving_area':
-                return (
-                  <PavingAreaComponent
-                    key={component.id}
-                    component={component}
-                    isSelected={isSelected}
-                    onSelect={() => selectComponent(component.id)}
-                  />
-                );
+              switch (component.type) {
+                case 'pool':
+                  return (
+                    <PoolComponent
+                      key={component.id}
+                      component={component}
+                      isSelected={isSelected}
+                      onSelect={() => selectComponent(component.id)}
+                      onDragEnd={(pos) => {
+                        const snapped = {
+                          x: snapToGrid(pos.x),
+                          y: snapToGrid(pos.y),
+                        };
+                        updateComponent(component.id, { position: snapped });
+                      }}
+                    />
+                  );
+                  
+                case 'paver':
+                  return (
+                    <PaverComponent
+                      key={component.id}
+                      component={component}
+                      isSelected={isSelected}
+                      onSelect={() => selectComponent(component.id)}
+                      onDragEnd={(pos) => {
+                        const snapped = {
+                          x: snapToGrid(pos.x),
+                          y: snapToGrid(pos.y),
+                        };
+                        updateComponent(component.id, { position: snapped });
+                      }}
+                      onReplicateRight={(cols) => {
+                        const base = component.properties.paverCount || { rows: 1, cols: 1 };
+                        const safe = {
+                          rows: Math.max(1, Number(base.rows) || 1),
+                          cols: Math.max(1, Number(cols) || 1),
+                        };
+                        const sizeKey = (component.properties.paverSize || '400x400') as keyof typeof PAVER_SIZES;
+                        const size = PAVER_SIZES[sizeKey];
+                        updateComponent(component.id, {
+                          properties: {
+                            ...component.properties,
+                            paverCount: safe,
+                          },
+                          dimensions: {
+                            width: safe.cols * size.width,
+                            height: safe.rows * size.height,
+                          },
+                        });
+                      }}
+                      onReplicateBottom={(rows) => {
+                        const base = component.properties.paverCount || { rows: 1, cols: 1 };
+                        const safe = {
+                          rows: Math.max(1, Number(rows) || 1),
+                          cols: Math.max(1, Number(base.cols) || 1),
+                        };
+                        const sizeKey = (component.properties.paverSize || '400x400') as keyof typeof PAVER_SIZES;
+                        const size = PAVER_SIZES[sizeKey];
+                        updateComponent(component.id, {
+                          properties: {
+                            ...component.properties,
+                            paverCount: safe,
+                          },
+                          dimensions: {
+                            width: safe.cols * size.width,
+                            height: safe.rows * size.height,
+                          },
+                        });
+                      }}
+                    />
+                  );
+                  
+                case 'drainage':
+                  return (
+                    <DrainageComponent
+                      key={component.id}
+                      component={component}
+                      isSelected={isSelected}
+                      onSelect={() => selectComponent(component.id)}
+                      onDragEnd={(pos) => {
+                        const snapped = {
+                          x: snapToGrid(pos.x),
+                          y: snapToGrid(pos.y),
+                        };
+                        updateComponent(component.id, { position: snapped });
+                      }}
+                      onExtend={(length) =>
+                        updateComponent(component.id, {
+                          properties: { ...component.properties, length },
+                          dimensions: { ...component.dimensions, width: length },
+                        })
+                      }
+                    />
+                  );
+                  
+                case 'fence':
+                  return (
+                    <FenceComponent
+                      key={component.id}
+                      component={component}
+                      isSelected={isSelected}
+                      onSelect={() => selectComponent(component.id)}
+                      onDragEnd={(pos) => {
+                        const snapped = {
+                          x: snapToGrid(pos.x),
+                          y: snapToGrid(pos.y),
+                        };
+                        updateComponent(component.id, { position: snapped });
+                      }}
+                      onExtend={(length) =>
+                        updateComponent(component.id, {
+                          dimensions: { ...component.dimensions, width: length },
+                        })
+                      }
+                    />
+                  );
+                  
+                case 'wall':
+                  return (
+                    <WallComponent
+                      key={component.id}
+                      component={component}
+                      isSelected={isSelected}
+                      onSelect={() => selectComponent(component.id)}
+                      onDragEnd={(pos) => {
+                        const snapped = {
+                          x: snapToGrid(pos.x),
+                          y: snapToGrid(pos.y),
+                        };
+                        updateComponent(component.id, { position: snapped });
+                      }}
+                      onExtend={(length) =>
+                        updateComponent(component.id, {
+                          dimensions: { ...component.dimensions, width: length },
+                        })
+                      }
+                    />
+                  );
+                  
+                case 'boundary':
+                  return (
+                    <BoundaryComponent
+                      key={component.id}
+                      component={component}
+                      isSelected={isSelected}
+                      onSelect={() => selectComponent(component.id)}
+                      onDragEnd={(pos) => {
+                        const snapped = {
+                          x: snapToGrid(pos.x),
+                          y: snapToGrid(pos.y),
+                        };
+                        updateComponent(component.id, { position: snapped });
+                      }}
+                    />
+                  );
+                  
+                case 'house':
+                  return (
+                    <HouseComponent
+                      key={component.id}
+                      component={component}
+                      isSelected={isSelected}
+                      onSelect={() => selectComponent(component.id)}
+                      onDragEnd={(pos) => {
+                        const snapped = {
+                          x: snapToGrid(pos.x),
+                          y: snapToGrid(pos.y),
+                        };
+                        updateComponent(component.id, { position: snapped });
+                      }}
+                    />
+                  );
                 
-              default:
-                return null;
-            }
-          })}
+                case 'reference_line':
+                case 'quick_measure':
+                  return (
+                    <ReferenceLineComponent
+                      key={component.id}
+                      component={component}
+                      selected={isSelected}
+                      onSelect={() => selectComponent(component.id)}
+                      onDelete={() => deleteComponent(component.id)}
+                    />
+                  );
+                
+                case 'paving_area':
+                  return (
+                    <PavingAreaComponent
+                      key={component.id}
+                      component={component}
+                      isSelected={isSelected}
+                      onSelect={() => selectComponent(component.id)}
+                    />
+                  );
+                  
+                default:
+                  return null;
+              }
+            });
+          })()}
         </Layer>
       </Stage>
 
