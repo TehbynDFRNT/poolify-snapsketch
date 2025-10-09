@@ -68,6 +68,13 @@ export const TopBar = ({
   onExport,
   onMenuClick,
 }: TopBarProps) => {
+  const handleToolClick = (toolId: ToolType) => {
+    console.log('Tool clicked:', toolId);
+    console.log('Current active tool:', activeTool);
+    onToolChange(toolId);
+    console.log('Tool change called');
+  };
+
   const formatLastSaved = (date: Date | null) => {
     if (!date) return 'Not saved';
     const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -104,7 +111,7 @@ export const TopBar = ({
             key={tool.id}
             variant={activeTool === tool.id ? 'default' : 'ghost'}
             size="icon"
-            onClick={() => onToolChange(tool.id)}
+            onClick={() => handleToolClick(tool.id)}
             className="min-w-[44px] min-h-[44px] flex-shrink-0"
             title={`${tool.name} (${tool.shortcut})`}
           >

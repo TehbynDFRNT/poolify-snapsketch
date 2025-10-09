@@ -33,6 +33,11 @@ export const DesignCanvas = () => {
   const [isDirty, setIsDirty] = useState(false);
   const initializedRef = useRef(false);
   const [activeTool, setActiveTool] = useState<ToolType>('select');
+
+  const handleToolChange = (tool: ToolType) => {
+    console.log('DesignCanvas: Tool changing from', activeTool, 'to', tool);
+    setActiveTool(tool);
+  };
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(350);
@@ -299,7 +304,7 @@ export const DesignCanvas = () => {
         projectName={currentProject.customerName || 'Untitled Project'}
         lastSaved={lastSaved}
         activeTool={activeTool}
-        onToolChange={setActiveTool}
+        onToolChange={handleToolChange}
         canUndo={historyIndex > 0}
         canRedo={historyIndex < history.length - 1}
         onUndo={undo}
