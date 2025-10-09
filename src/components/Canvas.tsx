@@ -1082,6 +1082,7 @@ export const Canvas = ({
                       component={component}
                       isSelected={isSelected}
                       onSelect={() => selectComponent(component.id)}
+                      onDelete={() => deleteComponent(component.id)}
                     />
                   );
                   

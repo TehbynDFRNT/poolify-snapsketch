@@ -9,9 +9,10 @@ interface PavingAreaComponentProps {
   component: Component;
   isSelected: boolean;
   onSelect: () => void;
+  onDelete?: () => void;
 }
 
-export const PavingAreaComponent = ({ component, isSelected, onSelect }: PavingAreaComponentProps) => {
+export const PavingAreaComponent = ({ component, isSelected, onSelect, onDelete }: PavingAreaComponentProps) => {
   const allComponents = useDesignStore(state => state.components);
   const updateComponent = useDesignStore(state => state.updateComponent);
   const boundary = component.properties.boundary || [];
@@ -138,6 +139,43 @@ export const PavingAreaComponent = ({ component, isSelected, onSelect }: PavingA
         closed={true}
         listening={false}
       />
+
+      {/* Delete button when selected */}
+      {isSelected && onDelete && boundary.length > 0 && (
+        <Group
+          x={boundary[0].x}
+          y={boundary[0].y - 30}
+          onClick={(e) => {
+            e.cancelBubble = true;
+            onDelete();
+          }}
+          onTap={(e) => {
+            e.cancelBubble = true;
+            onDelete();
+          }}
+        >
+          <Rect
+            x={-15}
+            y={-15}
+            width={30}
+            height={30}
+            fill="white"
+            stroke="#dc2626"
+            strokeWidth={2}
+            cornerRadius={4}
+            shadowColor="black"
+            shadowBlur={5}
+            shadowOpacity={0.3}
+          />
+          <Text
+            x={-8}
+            y={-8}
+            text="🗑"
+            fontSize={16}
+            listening={false}
+          />
+        </Group>
+      )}
     </Group>
   );
 };
