@@ -11,13 +11,38 @@ interface Step4Props {
   onSaveDraft: () => void;
 }
 
+// Paver configuration options for corner-first methodology
+const PAVER_CONFIGS = [
+  { 
+    key: '400x400_400x400',
+    name: '400×400 Corner + 400×400 Full',
+    cornerSize: { width: 400, height: 400 },
+    fullSize: { width: 400, height: 400 }
+  },
+  { 
+    key: '400x400_600x400',
+    name: '400×400 Corner + 600×400 Full',
+    cornerSize: { width: 400, height: 400 },
+    fullSize: { width: 600, height: 400 }
+  },
+  { 
+    key: '600x400_400x400',
+    name: '600×400 Corner + 400×400 Full',
+    cornerSize: { width: 600, height: 400 },
+    fullSize: { width: 400, height: 400 }
+  },
+  { 
+    key: '400x600_400x400',
+    name: '400×600 Corner + 400×400 Full',
+    cornerSize: { width: 400, height: 600 },
+    fullSize: { width: 400, height: 400 }
+  },
+];
+
 export default function Step4GenerateCoping({ poolData, setPoolData, onNext, onBack, onSaveDraft }: Step4Props) {
-  const [selectedTypes, setSelectedTypes] = useState({
-    none: true,
-    '400x400': true,
-    '600x400_h': true,
-    '600x400_v': true
-  });
+  const [selectedConfigs, setSelectedConfigs] = useState(
+    PAVER_CONFIGS.reduce((acc, config) => ({ ...acc, [config.key]: true }), {})
+  );
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState('');
 
@@ -26,74 +51,33 @@ export default function Step4GenerateCoping({ poolData, setPoolData, onNext, onB
     const variants = [];
 
     try {
-      if (selectedTypes.none) {
-        setProgress('Creating no-coping variant...');
-        variants.push({
-          ...poolData,
-          variant_name: 'No Coping',
-          has_coping: false,
-          coping_type: null,
-          coping_layout: null
-        });
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-
-      if (selectedTypes['400x400']) {
-        setProgress('Calculating 400×400 coping layout...');
-        const layout = await generateCopingLayout(
-          poolData.outline_points,
-          '400x400',
-          400,
-          5
-        );
-        variants.push({
-          ...poolData,
-          variant_name: '400×400 Coping',
-          has_coping: true,
-          coping_type: '400x400',
-          coping_layout: layout
-        });
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-
-      if (selectedTypes['600x400_h']) {
-        setProgress('Calculating 600×400 H coping layout...');
-        const layout = await generateCopingLayout(
-          poolData.outline_points,
-          '600x400_h',
-          400,
-          5
-        );
-        variants.push({
-          ...poolData,
-          variant_name: '600×400 H Coping',
-          has_coping: true,
-          coping_type: '600x400_h',
-          coping_layout: layout
-        });
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-
-      if (selectedTypes['600x400_v']) {
-        setProgress('Calculating 600×400 V coping layout...');
-        const layout = await generateCopingLayout(
-          poolData.outline_points,
-          '600x400_v',
-          400,
-          5
-        );
-        variants.push({
-          ...poolData,
-          variant_name: '600×400 V Coping',
-          has_coping: true,
-          coping_type: '600x400_v',
-          coping_layout: layout
-        });
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      // Generate coping layout for each selected configuration
+      for (const config of PAVER_CONFIGS) {
+        if (selectedConfigs[config.key]) {
+          setProgress(`Generating ${config.name} layout...`);
+          
+          const layout = generateCopingLayout(
+            poolData.outline_points,
+            config.cornerSize,
+            config.fullSize
+          );
+          
+          variants.push({
+            ...poolData,
+            variant_name: `${poolData.pool_name} - ${config.name}`,
+            has_coping: true,
+            coping_type: config.key,
+            coping_layout: layout,
+            paver_size_corner: `${config.cornerSize.width}×${config.cornerSize.height}`,
+            paver_size_full: `${config.fullSize.width}×${config.fullSize.height}`,
+          });
+          
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
 
       setPoolData({ ...poolData, generatedVariants: variants });
-      setProgress('Complete!');
+      setProgress(`✓ Generated ${variants.length} coping variants!`);
       setTimeout(() => onNext(), 500);
       
     } catch (error) {
@@ -112,67 +96,29 @@ export default function Step4GenerateCoping({ poolData, setPoolData, onNext, onB
       </p>
 
       <div className="space-y-4 mb-8">
-        <label className="flex items-start gap-3 p-4 border rounded hover:bg-muted/50 cursor-pointer">
-          <Checkbox
-            checked={selectedTypes.none}
-            onCheckedChange={(checked) => 
-              setSelectedTypes({ ...selectedTypes, none: !!checked })
-            }
-            className="mt-1"
-          />
-          <div>
-            <div className="font-medium">No Coping</div>
-            <div className="text-sm text-muted-foreground">Pool only, no coping pavers</div>
-          </div>
-        </label>
-
-        <label className="flex items-start gap-3 p-4 border rounded hover:bg-muted/50 cursor-pointer">
-          <Checkbox
-            checked={selectedTypes['400x400']}
-            onCheckedChange={(checked) => 
-              setSelectedTypes({ ...selectedTypes, '400x400': !!checked })
-            }
-            className="mt-1"
-          />
-          <div>
-            <div className="font-medium">400 × 400mm Coping</div>
-            <div className="text-sm text-muted-foreground">
-              Standard square pavers, 400mm from pool edge
+        <p className="text-sm text-muted-foreground mb-4">
+          Select paver configurations to generate. Each creates a separate pool variant using the <strong>corner-first methodology</strong> with uniform stripe patterns.
+        </p>
+        
+        {PAVER_CONFIGS.map(config => (
+          <label key={config.key} className="flex items-start gap-3 p-4 border rounded hover:bg-muted/50 cursor-pointer">
+            <Checkbox
+              checked={selectedConfigs[config.key]}
+              onCheckedChange={(checked) => 
+                setSelectedConfigs({ ...selectedConfigs, [config.key]: !!checked })
+              }
+              className="mt-1"
+            />
+            <div>
+              <div className="font-medium">{config.name}</div>
+              <div className="text-sm text-muted-foreground">
+                Corner: {config.cornerSize.width}×{config.cornerSize.height}mm • 
+                Full: {config.fullSize.width}×{config.fullSize.height}mm • 
+                5mm grout lines
+              </div>
             </div>
-          </div>
-        </label>
-
-        <label className="flex items-start gap-3 p-4 border rounded hover:bg-muted/50 cursor-pointer">
-          <Checkbox
-            checked={selectedTypes['600x400_h']}
-            onCheckedChange={(checked) => 
-              setSelectedTypes({ ...selectedTypes, '600x400_h': !!checked })
-            }
-            className="mt-1"
-          />
-          <div>
-            <div className="font-medium">600 × 400mm Horizontal</div>
-            <div className="text-sm text-muted-foreground">
-              600mm along pool edge, 400mm width
-            </div>
-          </div>
-        </label>
-
-        <label className="flex items-start gap-3 p-4 border rounded hover:bg-muted/50 cursor-pointer">
-          <Checkbox
-            checked={selectedTypes['600x400_v']}
-            onCheckedChange={(checked) => 
-              setSelectedTypes({ ...selectedTypes, '600x400_v': !!checked })
-            }
-            className="mt-1"
-          />
-          <div>
-            <div className="font-medium">600 × 400mm Vertical</div>
-            <div className="text-sm text-muted-foreground">
-              400mm along pool edge, 600mm width
-            </div>
-          </div>
-        </label>
+          </label>
+        ))}
       </div>
 
       {generating && (

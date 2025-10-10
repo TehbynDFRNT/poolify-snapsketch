@@ -1,311 +1,299 @@
-interface Point {
+export interface Point {
   x: number;
   y: number;
 }
 
-interface CopingPaver {
+export interface PaverSize {
+  width: number;
+  height: number;
+}
+
+export interface CopingPaver {
   id: string;
   position: Point;
-  dimensions: { width: number; height: number };
+  size: PaverSize;
   rotation: number;
-  type: 'corner' | 'full' | 'stripe_cut';
-  original_size: string;
-  cut_width?: number;
-  notes?: string;
+  type: 'corner' | 'full' | 'stripe';
+  corner?: 'NW' | 'NE' | 'SE' | 'SW';
+  side?: 'north' | 'south' | 'east' | 'west';
+  sequence?: number;
+  cutWidth?: number;
+  originalWidth?: number;
+  pairIndex?: 0 | 1;
 }
 
-interface CopingLayout {
-  pavers: CopingPaver[];
-  metadata: {
-    total_pavers: number;
-    corner_pavers: number;
-    full_pavers: number;
-    stripe_pavers: number;
-    total_area_m2: number;
-    grout_width_mm: number;
-  };
-  validation: {
-    is_valid: boolean;
-    errors: string[];
-    warnings: string[];
+export interface CopingLayout {
+  cornerPavers: CopingPaver[];
+  fullPavers: CopingPaver[];
+  stripePavers: CopingPaver[];
+  groutWidth: 5;
+  measurements: {
+    totalPavers: number;
+    cornerPavers: 4;
+    fullPavers: number;
+    stripePavers: number;
+    sides: {
+      north: { fullPavers: number; stripeWidth: number };
+      south: { fullPavers: number; stripeWidth: number };
+      east: { fullPavers: number; stripeWidth: number };
+      west: { fullPavers: number; stripeWidth: number };
+    };
+    totalArea: number;
+    copingPerimeter: number;
   };
 }
 
-export async function generateCopingLayout(
+/**
+ * CORNER-FIRST COPING ALGORITHM
+ * 
+ * Methodology:
+ * 1. Place 4 corner pavers FIRST (aligned with waterline)
+ * 2. Work from each corner toward center with full-size pavers
+ * 3. Fill remaining gap in center with UNIFORM stripe pattern (2 equal cuts)
+ * 4. Always use 5mm grout lines (professional standard)
+ */
+export function generateCopingLayout(
   poolOutline: Point[],
-  copingType: '400x400' | '600x400_h' | '600x400_v',
-  copingWidth: number = 400,
-  groutWidth: number = 5
-): Promise<CopingLayout> {
+  cornerSize: PaverSize,
+  fullSize: PaverSize
+): CopingLayout {
   
-  const paverSize = getPaverDimensions(copingType);
-  const pavers: CopingPaver[] = [];
+  const GROUT_WIDTH = 5; // mm - always 5mm for professional finish
+  
+  const layout: CopingLayout = {
+    cornerPavers: [],
+    fullPavers: [],
+    stripePavers: [],
+    groutWidth: GROUT_WIDTH,
+    measurements: {
+      totalPavers: 0,
+      cornerPavers: 4,
+      fullPavers: 0,
+      stripePavers: 0,
+      sides: {
+        north: { fullPavers: 0, stripeWidth: 0 },
+        south: { fullPavers: 0, stripeWidth: 0 },
+        east: { fullPavers: 0, stripeWidth: 0 },
+        west: { fullPavers: 0, stripeWidth: 0 },
+      },
+      totalArea: 0,
+      copingPerimeter: 0,
+    },
+  };
 
-  // Remove duplicate closing point
-  const points = poolOutline[0].x === poolOutline[poolOutline.length - 1].x &&
-                 poolOutline[0].y === poolOutline[poolOutline.length - 1].y
-    ? poolOutline.slice(0, -1)
-    : poolOutline;
+  // STEP 1: Find corners (assuming rectangular pool)
+  const corners = findCorners(poolOutline);
 
-  // Assume 4 corners for rectangle
-  const corners = points.slice(0, 4);
-
-  // Place corner pavers
+  // STEP 2: Place corner pavers FIRST (corner-first methodology)
+  const cornerPositions = ['NW', 'NE', 'SE', 'SW'] as const;
   corners.forEach((corner, index) => {
-    pavers.push(createCornerPaver(corner, paverSize, index, copingWidth));
+    layout.cornerPavers.push({
+      id: `corner-${cornerPositions[index]}`,
+      position: corner,
+      size: cornerSize,
+      rotation: getCornerRotation(cornerPositions[index]),
+      type: 'corner',
+      corner: cornerPositions[index],
+    });
   });
 
-  // Fill each side
-  for (let i = 0; i < 4; i++) {
-    const startCorner = corners[i];
-    const endCorner = corners[(i + 1) % 4];
-    const sidePavers = fillSide(startCorner, endCorner, paverSize, groutWidth, i);
-    pavers.push(...sidePavers);
-  }
+  // STEP 3: For each side, work from corners toward center
+  const sides = [
+    { name: 'north' as const, start: corners[0], end: corners[1] },
+    { name: 'east' as const, start: corners[1], end: corners[2] },
+    { name: 'south' as const, start: corners[2], end: corners[3] },
+    { name: 'west' as const, start: corners[3], end: corners[0] },
+  ];
 
-  const metadata = calculateMetadata(pavers, groutWidth);
-  const validation = validateCopingLayout(pavers);
-
-  return {
-    pavers,
-    metadata,
-    validation
-  };
-}
-
-function getPaverDimensions(type: string) {
-  switch(type) {
-    case '400x400':
-      return { width: 400, height: 400 };
-    case '600x400_h':
-      return { width: 600, height: 400 };
-    case '600x400_v':
-      return { width: 400, height: 600 };
-    default:
-      return { width: 400, height: 400 };
-  }
-}
-
-function createCornerPaver(
-  corner: Point,
-  paverSize: { width: number; height: number },
-  cornerIndex: number,
-  copingWidth: number
-): CopingPaver {
-  const offset = copingWidth;
-  let position = { ...corner };
-  
-  if (cornerIndex === 0) {
-    position.x -= offset;
-    position.y -= offset;
-  } else if (cornerIndex === 1) {
-    position.x += offset;
-    position.y -= offset;
-  } else if (cornerIndex === 2) {
-    position.x += offset;
-    position.y += offset;
-  } else {
-    position.x -= offset;
-    position.y += offset;
-  }
-
-  return {
-    id: crypto.randomUUID(),
-    position,
-    dimensions: paverSize,
-    rotation: 0,
-    type: 'corner',
-    original_size: `${paverSize.width}x${paverSize.height}`,
-    notes: `Corner paver ${cornerIndex + 1}`
-  };
-}
-
-function fillSide(
-  startCorner: Point,
-  endCorner: Point,
-  paverSize: { width: number; height: number },
-  groutWidth: number,
-  sideIndex: number
-): CopingPaver[] {
-  const pavers: CopingPaver[] = [];
-  const sideLength = calculateDistance(startCorner, endCorner);
-  const paverPlusGrout = paverSize.width + groutWidth;
-  
-  const maxFullPaversPerSide = Math.floor((sideLength / 2) / paverPlusGrout);
-  
-  // Full pavers from start
-  for (let j = 1; j <= maxFullPaversPerSide; j++) {
-    const paver = createFullPaver(
-      startCorner,
-      endCorner,
-      j * paverPlusGrout,
-      paverSize,
-      sideIndex,
-      'start',
-      j
-    );
-    pavers.push(paver);
-  }
-  
-  // Full pavers from end
-  for (let j = 1; j <= maxFullPaversPerSide; j++) {
-    const paver = createFullPaver(
-      endCorner,
-      startCorner,
-      j * paverPlusGrout,
-      paverSize,
-      sideIndex,
-      'end',
-      j
-    );
-    pavers.push(paver);
-  }
-  
-  const fullPaversLength = maxFullPaversPerSide * 2 * paverPlusGrout;
-  const gap = sideLength - fullPaversLength - (paverSize.width * 2);
-  
-  if (gap > 0) {
-    const stripePaverWidth = (gap - groutWidth) / 2;
+  sides.forEach(side => {
+    const sideLength = distance(side.start, side.end);
+    const angle = Math.atan2(side.end.y - side.start.y, side.end.x - side.start.x);
     
-    if (stripePaverWidth >= 150) {
-      const stripe1 = createStripePaver(
-        startCorner,
-        endCorner,
-        (maxFullPaversPerSide + 1) * paverPlusGrout,
-        stripePaverWidth,
-        paverSize.height,
-        sideIndex,
-        1
-      );
-      
-      const stripe2 = createStripePaver(
-        startCorner,
-        endCorner,
-        (maxFullPaversPerSide + 1) * paverPlusGrout + stripePaverWidth + groutWidth,
-        stripePaverWidth,
-        paverSize.height,
-        sideIndex,
-        2
-      );
-      
-      pavers.push(stripe1, stripe2);
+    // Start from first corner
+    let distanceFromStart = cornerSize.width + GROUT_WIDTH;
+    let startPaverCount = 0;
+
+    // Lay full pavers from start corner toward center
+    while (distanceFromStart + fullSize.width + GROUT_WIDTH < sideLength / 2) {
+      const position = {
+        x: side.start.x + Math.cos(angle) * distanceFromStart,
+        y: side.start.y + Math.sin(angle) * distanceFromStart,
+      };
+
+      layout.fullPavers.push({
+        id: `full-${side.name}-start-${startPaverCount}`,
+        position,
+        size: fullSize,
+        rotation: (angle * 180) / Math.PI,
+        type: 'full',
+        side: side.name,
+        sequence: startPaverCount + 1,
+      });
+
+      distanceFromStart += fullSize.width + GROUT_WIDTH;
+      startPaverCount++;
+    }
+
+    // Same from end corner toward center
+    let distanceFromEnd = cornerSize.width + GROUT_WIDTH;
+    let endPaverCount = 0;
+
+    while (distanceFromEnd + fullSize.width + GROUT_WIDTH < sideLength / 2) {
+      const position = {
+        x: side.end.x - Math.cos(angle) * distanceFromEnd,
+        y: side.end.y - Math.sin(angle) * distanceFromEnd,
+      };
+
+      layout.fullPavers.push({
+        id: `full-${side.name}-end-${endPaverCount}`,
+        position,
+        size: fullSize,
+        rotation: (angle * 180) / Math.PI,
+        type: 'full',
+        side: side.name,
+        sequence: endPaverCount + 1,
+      });
+
+      distanceFromEnd += fullSize.width + GROUT_WIDTH;
+      endPaverCount++;
+    }
+
+    // STEP 4: Calculate stripe pavers in middle (UNIFORM PATTERN)
+    const totalFullPavers = startPaverCount + endPaverCount;
+    const remainingGap = sideLength - distanceFromStart - distanceFromEnd;
+    
+    // Divide remaining gap into 2 equal stripe pavers (uniform)
+    const stripePaverWidth = (remainingGap - GROUT_WIDTH) / 2;
+
+    // Add first stripe paver
+    const stripe1Position = {
+      x: side.start.x + Math.cos(angle) * distanceFromStart,
+      y: side.start.y + Math.sin(angle) * distanceFromStart,
+    };
+
+    layout.stripePavers.push({
+      id: `stripe-${side.name}-1`,
+      position: stripe1Position,
+      size: { width: stripePaverWidth, height: fullSize.height },
+      rotation: (angle * 180) / Math.PI,
+      type: 'stripe',
+      side: side.name,
+      cutWidth: stripePaverWidth,
+      originalWidth: fullSize.width,
+      pairIndex: 0,
+    });
+
+    // Add second stripe paver (mirror of first)
+    const stripe2Position = {
+      x: stripe1Position.x + Math.cos(angle) * (stripePaverWidth + GROUT_WIDTH),
+      y: stripe1Position.y + Math.sin(angle) * (stripePaverWidth + GROUT_WIDTH),
+    };
+
+    layout.stripePavers.push({
+      id: `stripe-${side.name}-2`,
+      position: stripe2Position,
+      size: { width: stripePaverWidth, height: fullSize.height },
+      rotation: (angle * 180) / Math.PI,
+      type: 'stripe',
+      side: side.name,
+      cutWidth: stripePaverWidth,
+      originalWidth: fullSize.width,
+      pairIndex: 1,
+    });
+
+    // Record measurements for this side
+    layout.measurements.sides[side.name] = {
+      fullPavers: totalFullPavers,
+      stripeWidth: stripePaverWidth,
+    };
+  });
+
+  // STEP 5: Calculate totals
+  layout.measurements.fullPavers = layout.fullPavers.length;
+  layout.measurements.stripePavers = layout.stripePavers.length;
+  layout.measurements.totalPavers = 
+    layout.cornerPavers.length + 
+    layout.fullPavers.length + 
+    layout.stripePavers.length;
+
+  // Calculate total area and perimeter
+  layout.measurements.totalArea = calculateTotalArea(layout);
+  layout.measurements.copingPerimeter = calculatePerimeter(poolOutline);
+
+  return layout;
+}
+
+// Helper functions
+function findCorners(outline: Point[]): Point[] {
+  // For rectangular pools, find the 4 corners
+  if (outline.length === 4) {
+    return outline;
+  }
+  
+  // For complex shapes, detect corners based on angle changes
+  // Find points with significant direction changes (> 45 degrees)
+  const corners: Point[] = [];
+  const threshold = Math.PI / 4; // 45 degrees
+  
+  for (let i = 0; i < outline.length; i++) {
+    const prev = outline[(i - 1 + outline.length) % outline.length];
+    const curr = outline[i];
+    const next = outline[(i + 1) % outline.length];
+    
+    const angle1 = Math.atan2(curr.y - prev.y, curr.x - prev.x);
+    const angle2 = Math.atan2(next.y - curr.y, next.x - curr.x);
+    const angleDiff = Math.abs(angle2 - angle1);
+    
+    if (angleDiff > threshold && angleDiff < Math.PI * 2 - threshold) {
+      corners.push(curr);
     }
   }
   
-  return pavers;
+  // If we found exactly 4 corners, great! Otherwise return first 4 points
+  return corners.length === 4 ? corners : outline.slice(0, 4);
 }
 
-function createFullPaver(
-  startPoint: Point,
-  endPoint: Point,
-  offset: number,
-  paverSize: { width: number; height: number },
-  sideIndex: number,
-  direction: 'start' | 'end',
-  paverNum: number
-): CopingPaver {
-  const dx = endPoint.x - startPoint.x;
-  const dy = endPoint.y - startPoint.y;
-  const length = Math.sqrt(dx * dx + dy * dy);
-  
-  const ux = dx / length;
-  const uy = dy / length;
-  
-  const position = {
-    x: startPoint.x + ux * offset,
-    y: startPoint.y + uy * offset
+function getCornerRotation(corner: 'NW' | 'NE' | 'SE' | 'SW'): number {
+  // Align pavers with waterline at each corner
+  const rotations = {
+    'NW': 0,
+    'NE': 90,
+    'SE': 180,
+    'SW': 270,
   };
-
-  return {
-    id: crypto.randomUUID(),
-    position,
-    dimensions: paverSize,
-    rotation: Math.atan2(dy, dx) * 180 / Math.PI,
-    type: 'full',
-    original_size: `${paverSize.width}x${paverSize.height}`,
-    notes: `Full paver ${paverNum} - Side ${sideIndex + 1} ${direction}`
-  };
+  return rotations[corner];
 }
 
-function createStripePaver(
-  startPoint: Point,
-  endPoint: Point,
-  offset: number,
-  width: number,
-  height: number,
-  sideIndex: number,
-  stripeNum: number
-): CopingPaver {
-  const dx = endPoint.x - startPoint.x;
-  const dy = endPoint.y - startPoint.y;
-  const length = Math.sqrt(dx * dx + dy * dy);
-  
-  const ux = dx / length;
-  const uy = dy / length;
-  
-  const position = {
-    x: startPoint.x + ux * offset,
-    y: startPoint.y + uy * offset
-  };
-
-  return {
-    id: crypto.randomUUID(),
-    position,
-    dimensions: { width, height },
-    rotation: Math.atan2(dy, dx) * 180 / Math.PI,
-    type: 'stripe_cut',
-    original_size: `${width}x${height}`,
-    cut_width: width,
-    notes: `Stripe paver ${stripeNum} - Side ${sideIndex + 1} (${Math.round(width)}mm)`
-  };
-}
-
-function calculateDistance(p1: Point, p2: Point): number {
+function distance(p1: Point, p2: Point): number {
   return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
 }
 
-function calculateMetadata(pavers: CopingPaver[], groutWidth: number) {
-  const cornerCount = pavers.filter(p => p.type === 'corner').length;
-  const fullCount = pavers.filter(p => p.type === 'full').length;
-  const stripeCount = pavers.filter(p => p.type === 'stripe_cut').length;
-
-  const totalArea = pavers.reduce((sum, paver) => {
-    const area = (paver.dimensions.width * paver.dimensions.height) / 1000000;
-    return sum + area;
-  }, 0);
-
-  return {
-    total_pavers: pavers.length,
-    corner_pavers: cornerCount,
-    full_pavers: fullCount,
-    stripe_pavers: stripeCount,
-    total_area_m2: Math.round(totalArea * 100) / 100,
-    grout_width_mm: groutWidth
-  };
+function calculateTotalArea(layout: CopingLayout): number {
+  let area = 0;
+  
+  // Corner pavers
+  layout.cornerPavers.forEach(p => {
+    area += (p.size.width * p.size.height) / 1000000; // mm² to m²
+  });
+  
+  // Full pavers
+  layout.fullPavers.forEach(p => {
+    area += (p.size.width * p.size.height) / 1000000;
+  });
+  
+  // Stripe pavers (use actual cut width)
+  layout.stripePavers.forEach(p => {
+    area += ((p.cutWidth || p.size.width) * p.size.height) / 1000000;
+  });
+  
+  return area;
 }
 
-function validateCopingLayout(pavers: CopingPaver[]) {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-
-  const stripePavers = pavers.filter(p => p.type === 'stripe_cut');
-  stripePavers.forEach(sp => {
-    if (sp.cut_width && sp.cut_width < 200) {
-      warnings.push(`Stripe paver is narrow (${Math.round(sp.cut_width)}mm)`);
-    }
-    if (sp.cut_width && sp.cut_width < 150) {
-      errors.push(`Stripe paver too narrow (${Math.round(sp.cut_width)}mm)`);
-    }
-  });
-
-  const cornerCount = pavers.filter(p => p.type === 'corner').length;
-  if (cornerCount !== 4) {
-    errors.push(`Must have exactly 4 corner pavers (found ${cornerCount})`);
+function calculatePerimeter(outline: Point[]): number {
+  let perimeter = 0;
+  for (let i = 0; i < outline.length; i++) {
+    const next = (i + 1) % outline.length;
+    perimeter += distance(outline[i], outline[next]);
   }
-
-  return {
-    is_valid: errors.length === 0,
-    errors,
-    warnings
-  };
+  return perimeter / 1000; // mm to m
 }
