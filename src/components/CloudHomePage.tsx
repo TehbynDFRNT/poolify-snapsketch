@@ -290,10 +290,20 @@ export function CloudHomePage() {
                 Profile Settings
               </DropdownMenuItem>
               {userProfile?.role === 'admin' && (
-                <DropdownMenuItem onClick={() => navigate('/settings/team')}>
-                  <User className="w-4 h-4 mr-2" />
-                  Team Management
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem onClick={() => navigate('/admin/pool-library')}>
+                    <Settings className="w-4 h-4 mr-2" />
+                    Pool Library (Admin)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/admin/users')}>
+                    <User className="w-4 h-4 mr-2" />
+                    User Management
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/settings/team')}>
+                    <User className="w-4 h-4 mr-2" />
+                    Team Management
+                  </DropdownMenuItem>
+                </>
               )}
               <DropdownMenuItem onClick={handleSignOut}>
                 <LogOut className="w-4 h-4 mr-2" />
