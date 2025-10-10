@@ -47,12 +47,18 @@ export function BulkImportModal({ open, onClose, onSuccess }: BulkImportModalPro
       setProgress(20);
 
       const allVariants = [];
+      const nameCounts: Record<string, number> = {};
       const progressPerPool = 70 / pools.length;
 
       // Generate 4 variants for each pool
       for (let poolIndex = 0; poolIndex < pools.length; poolIndex++) {
         const pool = pools[poolIndex];
         const poolName = pool.name;
+
+        // Ensure unique variant names if DXF contains duplicate pool names
+        const count = (nameCounts[poolName] ?? 0) + 1;
+        nameCounts[poolName] = count;
+        const variantPrefix = count > 1 ? `${poolName} (${count})` : poolName;
 
         for (let configIndex = 0; configIndex < PAVER_CONFIGS.length; configIndex++) {
           const config = PAVER_CONFIGS[configIndex];
@@ -65,7 +71,7 @@ export function BulkImportModal({ open, onClose, onSuccess }: BulkImportModalPro
 
           allVariants.push({
             pool_name: poolName,
-            variant_name: `${poolName} - ${config.name}`,
+            variant_name: `${variantPrefix} - ${config.name}`,
             length: pool.dimensions.length,
             width: pool.dimensions.width,
             outline_points: pool.outlinePoints,

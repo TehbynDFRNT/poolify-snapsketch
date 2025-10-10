@@ -220,7 +220,7 @@ export default function PoolLibrary() {
                             <div className="flex items-center justify-between">
                               <div className="flex-1">
                                 <div className="flex items-center gap-3 mb-2">
-                                  <h4 className="font-semibold">{variant.display_name}</h4>
+                                  <h4 className="font-semibold">{variant.display_name || variant.variant_name}</h4>
                                   <Badge variant={
                                     variant.status === 'published' ? 'default' :
                                     variant.status === 'draft' ? 'secondary' : 'outline'
