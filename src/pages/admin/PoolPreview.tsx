@@ -69,20 +69,18 @@ export default function PoolPreview() {
           <div className="flex justify-between items-start">
             <div>
               <h1 className="text-3xl font-bold">{pool.pool_name}</h1>
-              <p className="text-xl text-muted-foreground">{pool.variant_name}</p>
               <div className="flex gap-4 mt-2 text-sm text-muted-foreground">
-                <span>
-                  {pool.length}mm × {pool.width}mm 
-                  ({(pool.length / 1000).toFixed(1)}m × {(pool.width / 1000).toFixed(1)}m)
-                </span>
+                <span>Paver Size: {pool.paver_size || 'N/A'}</span>
                 <span>•</span>
                 <span className={
                   pool.status === 'published' ? 'text-green-600' :
                   pool.status === 'draft' ? 'text-yellow-600' :
+                  pool.status === 'unconfigured' ? 'text-orange-600' :
                   'text-red-600'
                 }>
                   {pool.status === 'published' ? '✓ Published' :
                    pool.status === 'draft' ? '📝 Draft' :
+                   pool.status === 'unconfigured' ? '⚠ Unconfigured' :
                    '📦 Archived'}
                 </span>
               </div>
@@ -99,39 +97,39 @@ export default function PoolPreview() {
         <div className="bg-card rounded-lg shadow p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">Visual Preview</h2>
           <CopingPreview 
-            poolOutline={pool.outline_points as any}
+            poolOutline={pool.outline as any}
             copingLayout={pool.coping_layout as any}
             width={1000}
             height={700}
           />
         </div>
 
-        {pool.has_coping && pool.coping_layout && (pool.coping_layout as any)?.metadata && (
+        {pool.coping_layout && (pool.coping_layout as any)?.measurements && (
           <div className="bg-card rounded-lg shadow p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">Paver Breakdown</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                 <div className="text-sm text-muted-foreground">Corner Pavers</div>
                 <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                  {(pool.coping_layout as any).metadata?.corner_pavers || 0}
+                  {(pool.coping_layout as any).measurements?.cornerPavers || 0}
                 </div>
               </div>
               <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg p-4">
                 <div className="text-sm text-muted-foreground">Full Pavers</div>
                 <div className="text-3xl font-bold text-green-600 dark:text-green-400">
-                  {(pool.coping_layout as any).metadata?.full_pavers || 0}
+                  {(pool.coping_layout as any).measurements?.fullPavers || 0}
                 </div>
               </div>
               <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
                 <div className="text-sm text-muted-foreground">Stripe Pavers</div>
                 <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">
-                  {(pool.coping_layout as any).metadata?.stripe_pavers || 0}
+                  {(pool.coping_layout as any).measurements?.stripePavers || 0}
                 </div>
               </div>
               <div className="bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
                 <div className="text-sm text-muted-foreground">Total Area</div>
                 <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-                  {(pool.coping_layout as any).metadata?.total_area_m2 || 0}
+                  {((pool.coping_layout as any).measurements?.totalArea || 0).toFixed(2)}
                 </div>
                 <div className="text-xs text-muted-foreground">m²</div>
               </div>
@@ -139,16 +137,16 @@ export default function PoolPreview() {
 
             <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
               <div className="p-3 bg-muted rounded">
-                <span className="font-medium">Total Pavers:</span> {(pool.coping_layout as any).metadata?.total_pavers || 0} pcs
+                <span className="font-medium">Total Pavers:</span> {(pool.coping_layout as any).measurements?.totalPavers || 0} pcs
               </div>
               <div className="p-3 bg-muted rounded">
-                <span className="font-medium">Grout Width:</span> {(pool.coping_layout as any).metadata?.grout_width_mm || 0}mm
+                <span className="font-medium">Grout Width:</span> {pool.grout_width || 5}mm
               </div>
               <div className="p-3 bg-muted rounded">
-                <span className="font-medium">Coping Width:</span> {pool.coping_width}mm
+                <span className="font-medium">Coping Width:</span> {pool.coping_width || 400}mm
               </div>
               <div className="p-3 bg-muted rounded">
-                <span className="font-medium">Coping Type:</span> {pool.coping_type || 'None'}
+                <span className="font-medium">Paver Size:</span> {pool.paver_size || 'N/A'}
               </div>
             </div>
           </div>
@@ -159,11 +157,11 @@ export default function PoolPreview() {
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-muted-foreground">Outline Points:</span>
-              <span className="ml-2 font-medium">{(pool.outline_points as any)?.length || 0}</span>
+              <span className="ml-2 font-medium">{(pool.outline as any)?.length || 0}</span>
             </div>
             <div>
               <span className="text-muted-foreground">Has Coping:</span>
-              <span className="ml-2 font-medium">{pool.has_coping ? 'Yes' : 'No'}</span>
+              <span className="ml-2 font-medium">{pool.coping_layout ? 'Yes' : 'No'}</span>
             </div>
             {pool.features && (pool.features as any[]).length > 0 && (
               <div className="col-span-2">

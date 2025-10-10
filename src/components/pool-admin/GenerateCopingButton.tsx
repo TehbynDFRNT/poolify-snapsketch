@@ -42,7 +42,9 @@ export function GenerateCopingButton({ pool, onSuccess }: GenerateCopingButtonPr
         const paverConfig = PAVER_SIZES.find(s => s.value === sizeStr)!;
         const paverSize = { width: paverConfig.width, height: paverConfig.height };
         
-        const copingLayout = generateCopingLayout(pool.outline, paverSize) as any;
+        // Corner pavers are always 400x400, full pavers use selected size
+        const cornerSize = { width: 400, height: 400 };
+        const copingLayout = generateCopingLayout(pool.outline, cornerSize, paverSize) as any;
 
         return {
           pool_name: `${pool.pool_name} - ${sizeStr}`,
