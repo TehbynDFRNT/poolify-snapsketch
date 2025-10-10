@@ -23,6 +23,7 @@ export default function PoolLibrary() {
   const [sortBy, setSortBy] = useState<'name' | 'updated' | 'created'>('name');
   const [showImportModal, setShowImportModal] = useState(false);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
+  const [openPools, setOpenPools] = useState<Record<string, boolean>>({});
 
   // Fetch pool variants
   const { data: poolVariants, isLoading, refetch } = useQuery({
@@ -200,10 +201,14 @@ export default function PoolLibrary() {
           <div className="space-y-4">
             {filteredPoolNames.map(poolName => {
               const variants = groupedPools[poolName];
-              const [isOpen, setIsOpen] = useState(true);
+              const isOpen = openPools[poolName] ?? true;
 
               return (
-                <Collapsible key={poolName} open={isOpen} onOpenChange={setIsOpen}>
+                <Collapsible 
+                  key={poolName} 
+                  open={isOpen} 
+                  onOpenChange={(open) => setOpenPools(prev => ({ ...prev, [poolName]: open }))}
+                >
                   <Card className="overflow-hidden">
                     <CollapsibleTrigger className="w-full p-4 flex items-center justify-between hover:bg-accent/50 transition-colors">
                       <div className="flex items-center gap-3">
