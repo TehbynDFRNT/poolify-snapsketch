@@ -126,9 +126,22 @@ export function BulkImportModal({ open, onClose, onSuccess }: BulkImportModalPro
         setStatusText(`Generated variants for ${poolName}...`);
       }
 
-      setStatusText('Saving to database...');
+      setStatusText('Checking for duplicates...');
       setProgress(90);
 
+      // Get unique pool names to check for existing variants
+      const uniquePoolNames = [...new Set(allVariants.map(v => v.pool_name))];
+      
+      // Delete existing variants for these pools to allow re-import
+      const { error: deleteError } = await supabase
+        .from('pool_variants')
+        .delete()
+        .in('pool_name', uniquePoolNames);
+
+      if (deleteError) throw deleteError;
+
+      setStatusText('Saving to database...');
+      
       const { error } = await supabase
         .from('pool_variants')
         .insert(allVariants as any);

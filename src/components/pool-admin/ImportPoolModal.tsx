@@ -114,6 +114,16 @@ export function ImportPoolModal({ open, onClose, onSuccess }: ImportPoolModalPro
         };
       });
 
+      setProgress('Checking for duplicates...');
+
+      // Delete existing variants for this pool name to allow re-import
+      const { error: deleteError } = await supabase
+        .from('pool_variants')
+        .delete()
+        .eq('pool_name', poolName.trim());
+
+      if (deleteError) throw deleteError;
+
       setProgress('Saving to database...');
 
       const { error } = await supabase
