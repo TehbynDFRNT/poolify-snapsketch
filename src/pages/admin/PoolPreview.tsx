@@ -8,16 +8,19 @@ export default function PoolPreview() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const { data: pool, isLoading } = useQuery({
+  const { data: pool, isLoading, error } = useQuery({
     queryKey: ['pool-variant-preview', id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('pool_variants')
         .select('*')
         .eq('id', id)
-        .single();
+        .maybeSingle();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading pool:', error);
+        throw error;
+      }
       return data;
     }
   });
@@ -26,6 +29,17 @@ export default function PoolPreview() {
     return (
       <div className="p-6">
         <div className="animate-pulse">Loading pool preview...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="text-destructive">Error loading pool: {error.message}</div>
+        <Button onClick={() => navigate('/admin/pool-library')} className="mt-4">
+          ← Back to Library
+        </Button>
       </div>
     );
   }

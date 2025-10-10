@@ -35,7 +35,7 @@ export default function PoolWizard() {
   });
 
   // Load existing pool if editing
-  const { data: existingPool } = useQuery({
+  const { data: existingPool, error: loadError } = useQuery({
     queryKey: ['pool-variant', id],
     queryFn: async () => {
       if (!id) return null;
@@ -43,8 +43,11 @@ export default function PoolWizard() {
         .from('pool_variants')
         .select('*')
         .eq('id', id)
-        .single();
-      if (error) throw error;
+        .maybeSingle();
+      if (error) {
+        console.error('Error loading pool for edit:', error);
+        throw error;
+      }
       return data;
     },
     enabled: isEdit
