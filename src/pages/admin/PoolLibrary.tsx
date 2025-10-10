@@ -107,6 +107,22 @@ export default function PoolLibrary() {
     }
   };
 
+  const handleDeleteAll = async () => {
+    if (!confirm('⚠️ Are you sure you want to delete ALL pools? This cannot be undone!')) return;
+
+    const { error } = await supabase
+      .from('pool_variants')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all records
+
+    if (error) {
+      toast.error('Failed to delete pools');
+    } else {
+      toast.success('All pools deleted');
+      refetch();
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -117,6 +133,10 @@ export default function PoolLibrary() {
             <p className="text-muted-foreground">Import pools from DXF and manage coping variants</p>
           </div>
           <div className="flex gap-2">
+            <Button onClick={handleDeleteAll} variant="destructive" size="lg">
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete All
+            </Button>
             <Button onClick={() => setShowBulkImportModal(true)} variant="outline" size="lg">
               <FolderOpen className="w-4 h-4 mr-2" />
               Bulk Import
