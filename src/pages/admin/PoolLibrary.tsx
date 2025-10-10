@@ -112,7 +112,7 @@ export default function PoolLibrary() {
             <h1 className="text-3xl font-bold">🏊 Pool Library Management</h1>
             <p className="text-muted-foreground">Create and manage pool variants for the design tool</p>
           </div>
-          <Button onClick={() => navigate('/admin/pool-library/new')} size="lg">
+          <Button onClick={() => toast.info('Pool creation coming soon')} size="lg" disabled>
             <Plus className="w-4 h-4 mr-2" />
             New Pool
           </Button>
@@ -218,7 +218,8 @@ export default function PoolLibrary() {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => navigate(`/admin/pool-library/${variant.id}/edit`)}
+                                  onClick={() => toast.info('Pool editing coming soon')}
+                                  disabled
                                 >
                                   <Edit className="w-4 h-4" />
                                 </Button>
@@ -232,7 +233,8 @@ export default function PoolLibrary() {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => navigate(`/admin/pool-library/new?duplicate=${variant.id}`)}
+                                  onClick={() => toast.info('Pool duplication coming soon')}
+                                  disabled
                                 >
                                   <Copy className="w-4 h-4" />
                                 </Button>

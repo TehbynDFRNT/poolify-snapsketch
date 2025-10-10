@@ -18,7 +18,7 @@ import { TeamManagement } from "./pages/TeamManagement";
 import { LandingPage } from "./pages/LandingPage";
 import NotFound from "./pages/NotFound";
 import PoolLibrary from "./pages/admin/PoolLibrary";
-import PoolWizard from "./pages/admin/PoolWizard";
+
 import PoolPreview from "./pages/admin/PoolPreview";
 import UserManagement from "./pages/admin/UserManagement";
 
@@ -67,12 +67,12 @@ const App = () => (
             } />
             <Route path="/admin/pool-library/new" element={
               <ProtectedRoute>
-                <PoolWizard />
+                <Navigate to="/admin/pool-library" replace />
               </ProtectedRoute>
             } />
             <Route path="/admin/pool-library/:id/edit" element={
               <ProtectedRoute>
-                <PoolWizard />
+                <Navigate to="/admin/pool-library" replace />
               </ProtectedRoute>
             } />
             <Route path="/admin/pool-library/:id/preview" element={
