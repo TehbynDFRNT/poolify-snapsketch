@@ -10,8 +10,10 @@ import { Card } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { ChevronDown, ChevronRight, Plus, Edit, Eye, Copy, Archive, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Edit, Eye, Copy, Archive, Trash2, FolderOpen } from 'lucide-react';
 import { toast } from 'sonner';
+import { ImportPoolModal } from '@/components/pool-admin/ImportPoolModal';
+import { BulkImportModal } from '@/components/pool-admin/BulkImportModal';
 
 export default function PoolLibrary() {
   const navigate = useNavigate();
@@ -19,6 +21,8 @@ export default function PoolLibrary() {
   const [searchFilter, setSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'published' | 'archived'>('all');
   const [sortBy, setSortBy] = useState<'name' | 'updated' | 'created'>('name');
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showBulkImportModal, setShowBulkImportModal] = useState(false);
 
   // Fetch pool variants
   const { data: poolVariants, isLoading, refetch } = useQuery({
@@ -110,12 +114,18 @@ export default function PoolLibrary() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">🏊 Pool Library Management</h1>
-            <p className="text-muted-foreground">Create and manage pool variants for the design tool</p>
+            <p className="text-muted-foreground">Import pools from DXF and manage coping variants</p>
           </div>
-          <Button onClick={() => navigate('/admin/pool-library/new')} size="lg">
-            <Plus className="w-4 h-4 mr-2" />
-            New Pool
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setShowBulkImportModal(true)} variant="outline" size="lg">
+              <FolderOpen className="w-4 h-4 mr-2" />
+              Bulk Import
+            </Button>
+            <Button onClick={() => setShowImportModal(true)} size="lg">
+              <Plus className="w-4 h-4 mr-2" />
+              New Pool
+            </Button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -276,6 +286,19 @@ export default function PoolLibrary() {
           </div>
         )}
       </div>
+
+      {/* Modals */}
+      <ImportPoolModal 
+        open={showImportModal} 
+        onClose={() => setShowImportModal(false)}
+        onSuccess={refetch}
+      />
+      
+      <BulkImportModal
+        open={showBulkImportModal}
+        onClose={() => setShowBulkImportModal(false)}
+        onSuccess={refetch}
+      />
     </div>
   );
 }
