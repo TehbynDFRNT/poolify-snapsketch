@@ -1,5 +1,11 @@
 import { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Upload, Check } from 'lucide-react';
+import { parseDxfFile, ParsedPool } from '@/utils/dxfParser';
+import { toast } from 'sonner';
 
 interface Point {
   x: number;
@@ -28,6 +34,9 @@ export default function Step2CanvasEditor({ poolData, setPoolData, onNext, onBac
   const POINT_RADIUS = 6;
   
   const [ghostPoint, setGhostPoint] = useState<Point | null>(null);
+  const [importedPools, setImportedPools] = useState<ParsedPool[]>([]);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const snapToGrid = (value: number) => {
     if (!snapEnabled) return value;
@@ -237,12 +246,62 @@ export default function Step2CanvasEditor({ poolData, setPoolData, onNext, onBac
     const hoveredIndex = findPointAt(x, y);
     setHoveredPointIndex(hoveredIndex);
     
-    // Update ghost point for live measurement
     if (tool === 'add_point' && poolData.outline_points.length > 0) {
       setGhostPoint({ x, y });
     } else {
       setGhostPoint(null);
     }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (!file.name.toLowerCase().endsWith('.dxf')) {
+      toast.error('Please upload a DXF file');
+      return;
+    }
+    
+    try {
+      const text = await file.text();
+      const pools = parseDxfFile(text);
+      
+      if (pools.length === 0) {
+        toast.error('No pool shapes found in DXF file');
+        return;
+      }
+      
+      setImportedPools(pools);
+      setShowImportDialog(true);
+      toast.success(`Found ${pools.length} pool shapes!`);
+    } catch (error) {
+      console.error('Error parsing DXF:', error);
+      toast.error('Failed to parse DXF file');
+    }
+  };
+  
+  const importPool = (pool: ParsedPool) => {
+    // Convert DXF coordinates to canvas coordinates
+    // DXF is in mm, canvas uses 10px = 100mm scale
+    const canvasPoints = pool.outlinePoints.map(p => ({
+      x: p.x / 100, // Convert mm to canvas units (1 unit = 100mm)
+      y: p.y / 100
+    }));
+    
+    // Update pool data
+    setPoolData({
+      ...poolData,
+      pool_name: pool.name.split(' ')[0], // e.g., "Serenity"
+      variant_name: pool.name,
+      display_name: pool.name,
+      length: pool.dimensions.length,
+      width: pool.dimensions.width,
+      outline_points: canvasPoints
+    });
+    
+    setShowImportDialog(false);
+    setImportedPools([]);
+    toast.success(`Imported ${pool.name}`);
   };
 
   const closeOutline = () => {
@@ -265,29 +324,99 @@ export default function Step2CanvasEditor({ poolData, setPoolData, onNext, onBac
     poolData.outline_points[0].y === poolData.outline_points[poolData.outline_points.length - 1]?.y;
 
   return (
-    <div className="bg-card rounded-lg shadow">
-      <div className="flex">
-        {/* Tools Sidebar */}
-        <div className="w-56 border-r p-4 space-y-4">
-          <h3 className="font-semibold mb-4">Drawing Tools</h3>
+    <>
+      {/* Import Dialog */}
+      {showImportDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-[600px] max-h-[80vh] p-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Select Pool to Import</h3>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => {
+                    setShowImportDialog(false);
+                    setImportedPools([]);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+              
+              <ScrollArea className="h-[400px]">
+                <div className="space-y-2">
+                  {importedPools.map((pool, index) => (
+                    <Card 
+                      key={index}
+                      className="p-4 cursor-pointer hover:bg-accent transition-colors"
+                      onClick={() => importPool(pool)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h4 className="font-semibold">{pool.name}</h4>
+                          <p className="text-sm text-muted-foreground">
+                            {(pool.dimensions.length / 1000).toFixed(1)}m × {(pool.dimensions.width / 1000).toFixed(1)}m
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {pool.outlinePoints.length} points
+                          </p>
+                        </div>
+                        <Check className="w-5 h-5 text-muted-foreground" />
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          </Card>
+        </div>
+      )}
+    
+      <div className="bg-card rounded-lg shadow">
+        <div className="flex">
+          {/* Tools Sidebar */}
+          <div className="w-56 border-r p-4 space-y-4">
+            <div className="space-y-2">
+              <h3 className="font-semibold">Import Pool</h3>
+              <Input
+                ref={fileInputRef}
+                type="file"
+                accept=".dxf"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <Button
+                onClick={() => fileInputRef.current?.click()}
+                variant="outline"
+                className="w-full justify-start gap-2"
+              >
+                <Upload className="w-4 h-4" />
+                Import DXF
+              </Button>
+            </div>
+            
+            <div className="border-t pt-4 space-y-2">
+              <h3 className="font-semibold mb-4">Drawing Tools</h3>
           
-          <Button
-            variant={tool === 'add_point' ? 'default' : 'outline'}
-            className="w-full justify-start"
-            onClick={() => setTool('add_point')}
-          >
-            📐 Add Point
-          </Button>
-          
-          <Button
-            variant={tool === 'delete_point' ? 'default' : 'outline'}
-            className="w-full justify-start"
-            onClick={() => setTool('delete_point')}
-          >
-            🗑️ Delete Point
-          </Button>
+              <Button
+                variant={tool === 'add_point' ? 'default' : 'outline'}
+                className="w-full justify-start"
+                onClick={() => setTool('add_point')}
+              >
+                📐 Add Point
+              </Button>
+              
+              <Button
+                variant={tool === 'delete_point' ? 'default' : 'outline'}
+                className="w-full justify-start"
+                onClick={() => setTool('delete_point')}
+              >
+                🗑️ Delete Point
+              </Button>
+            </div>
 
-          <div className="border-t pt-4 space-y-2">
+            <div className="border-t pt-4 space-y-2">
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -368,26 +497,27 @@ export default function Step2CanvasEditor({ poolData, setPoolData, onNext, onBac
               <p className="text-sm text-muted-foreground">No points yet</p>
             )}
           </div>
+          </div>
         </div>
-      </div>
 
-      {/* Actions */}
-      <div className="flex justify-between p-6 border-t">
-        <Button variant="outline" onClick={onBack}>
-          ← Back
-        </Button>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onSaveDraft}>
-            💾 Save Draft
+        {/* Actions */}
+        <div className="flex justify-between p-6 border-t">
+          <Button variant="outline" onClick={onBack}>
+            ← Back
           </Button>
-          <Button 
-            onClick={onNext}
-            disabled={poolData.outline_points.length < 3 || !isClosed}
-          >
-            Next: Features →
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onSaveDraft}>
+              💾 Save Draft
+            </Button>
+            <Button 
+              onClick={onNext}
+              disabled={poolData.outline_points.length < 3 || !isClosed}
+            >
+              Next: Features →
+            </Button>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
