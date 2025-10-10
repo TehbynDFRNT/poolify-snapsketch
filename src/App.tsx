@@ -17,6 +17,7 @@ import { ProfileSettings } from "./pages/ProfileSettings";
 import { TeamManagement } from "./pages/TeamManagement";
 import { LandingPage } from "./pages/LandingPage";
 import NotFound from "./pages/NotFound";
+import PoolLibrary from "./pages/admin/PoolLibrary";
 
 const queryClient = new QueryClient();
 
@@ -54,6 +55,11 @@ const App = () => (
             <Route path="/settings/team" element={
               <ProtectedRoute>
                 <TeamManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/pool-library" element={
+              <ProtectedRoute>
+                <PoolLibrary />
               </ProtectedRoute>
             } />
             

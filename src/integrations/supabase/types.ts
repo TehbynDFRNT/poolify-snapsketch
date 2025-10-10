@@ -102,6 +102,141 @@ export type Database = {
         }
         Relationships: []
       }
+      pool_activity_log: {
+        Row: {
+          action: string
+          changes: Json | null
+          created_at: string | null
+          id: string
+          pool_variant_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          changes?: Json | null
+          created_at?: string | null
+          id?: string
+          pool_variant_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          changes?: Json | null
+          created_at?: string | null
+          id?: string
+          pool_variant_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pool_activity_log_pool_variant_id_fkey"
+            columns: ["pool_variant_id"]
+            isOneToOne: false
+            referencedRelation: "pool_variants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pool_activity_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pool_variants: {
+        Row: {
+          coping_layout: Json | null
+          coping_type: string | null
+          coping_width: number | null
+          created_at: string | null
+          created_by: string | null
+          deep_end: Json | null
+          display_name: string | null
+          features: Json | null
+          grout_width: number | null
+          has_coping: boolean | null
+          id: string
+          length: number
+          notes: string | null
+          outline_points: Json
+          pool_name: string
+          published_at: string | null
+          published_by: string | null
+          shallow_end: Json | null
+          sort_order: number | null
+          status: string | null
+          updated_at: string | null
+          variant_name: string
+          width: number
+        }
+        Insert: {
+          coping_layout?: Json | null
+          coping_type?: string | null
+          coping_width?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          deep_end?: Json | null
+          display_name?: string | null
+          features?: Json | null
+          grout_width?: number | null
+          has_coping?: boolean | null
+          id?: string
+          length: number
+          notes?: string | null
+          outline_points: Json
+          pool_name: string
+          published_at?: string | null
+          published_by?: string | null
+          shallow_end?: Json | null
+          sort_order?: number | null
+          status?: string | null
+          updated_at?: string | null
+          variant_name: string
+          width: number
+        }
+        Update: {
+          coping_layout?: Json | null
+          coping_type?: string | null
+          coping_width?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          deep_end?: Json | null
+          display_name?: string | null
+          features?: Json | null
+          grout_width?: number | null
+          has_coping?: boolean | null
+          id?: string
+          length?: number
+          notes?: string | null
+          outline_points?: Json
+          pool_name?: string
+          published_at?: string | null
+          published_by?: string | null
+          shallow_end?: Json | null
+          sort_order?: number | null
+          status?: string | null
+          updated_at?: string | null
+          variant_name?: string
+          width?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pool_variants_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pool_variants_published_by_fkey"
+            columns: ["published_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -236,6 +371,10 @@ export type Database = {
           has_access: boolean
           permission: Database["public"]["Enums"]["share_permission"]
         }[]
+      }
+      is_admin: {
+        Args: { _user_id: string }
+        Returns: boolean
       }
     }
     Enums: {
