@@ -147,78 +147,63 @@ export type Database = {
       pool_variants: {
         Row: {
           coping_layout: Json | null
-          coping_type: string | null
           coping_width: number | null
           created_at: string | null
           created_by: string | null
-          deep_end: Json | null
-          display_name: string | null
+          deep_end_position: Json | null
           features: Json | null
           grout_width: number | null
-          has_coping: boolean | null
           id: string
-          length: number
           notes: string | null
-          outline_points: Json
+          outline: Json
+          paver_size: string | null
           pool_name: string
           published_at: string | null
           published_by: string | null
-          shallow_end: Json | null
+          shallow_end_position: Json | null
           sort_order: number | null
           status: string | null
           updated_at: string | null
-          variant_name: string
-          width: number
         }
         Insert: {
           coping_layout?: Json | null
-          coping_type?: string | null
           coping_width?: number | null
           created_at?: string | null
           created_by?: string | null
-          deep_end?: Json | null
-          display_name?: string | null
+          deep_end_position?: Json | null
           features?: Json | null
           grout_width?: number | null
-          has_coping?: boolean | null
           id?: string
-          length: number
           notes?: string | null
-          outline_points: Json
+          outline: Json
+          paver_size?: string | null
           pool_name: string
           published_at?: string | null
           published_by?: string | null
-          shallow_end?: Json | null
+          shallow_end_position?: Json | null
           sort_order?: number | null
           status?: string | null
           updated_at?: string | null
-          variant_name: string
-          width: number
         }
         Update: {
           coping_layout?: Json | null
-          coping_type?: string | null
           coping_width?: number | null
           created_at?: string | null
           created_by?: string | null
-          deep_end?: Json | null
-          display_name?: string | null
+          deep_end_position?: Json | null
           features?: Json | null
           grout_width?: number | null
-          has_coping?: boolean | null
           id?: string
-          length?: number
           notes?: string | null
-          outline_points?: Json
+          outline?: Json
+          paver_size?: string | null
           pool_name?: string
           published_at?: string | null
           published_by?: string | null
-          shallow_end?: Json | null
+          shallow_end_position?: Json | null
           sort_order?: number | null
           status?: string | null
           updated_at?: string | null
-          variant_name?: string
-          width?: number
         }
         Relationships: [
           {
