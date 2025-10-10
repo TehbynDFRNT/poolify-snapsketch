@@ -224,32 +224,32 @@ export default function Step5Review({ poolData, onBack }: Step5Props) {
                   </p>
                 </div>
 
-                {variant.has_coping && variant.coping_layout && (
+                {variant.has_coping && variant.coping_layout && variant.coping_layout.metadata && (
                   <div>
                     <h3 className="font-semibold mb-3">Paver Breakdown</h3>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                         <div className="text-sm text-muted-foreground">Corner Pavers</div>
                         <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                          {variant.coping_layout.metadata.corner_pavers}
+                          {variant.coping_layout.metadata?.corner_pavers || 0}
                         </div>
                       </div>
                       <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg p-4">
                         <div className="text-sm text-muted-foreground">Full Pavers</div>
                         <div className="text-3xl font-bold text-green-600 dark:text-green-400">
-                          {variant.coping_layout.metadata.full_pavers}
+                          {variant.coping_layout.metadata?.full_pavers || 0}
                         </div>
                       </div>
                       <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
                         <div className="text-sm text-muted-foreground">Stripe Pavers</div>
                         <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">
-                          {variant.coping_layout.metadata.stripe_pavers}
+                          {variant.coping_layout.metadata?.stripe_pavers || 0}
                         </div>
                       </div>
                       <div className="bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
                         <div className="text-sm text-muted-foreground">Total Area</div>
                         <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-                          {variant.coping_layout.metadata.total_area_m2}
+                          {variant.coping_layout.metadata?.total_area_m2 || 0}
                         </div>
                         <div className="text-xs text-muted-foreground">m²</div>
                       </div>
@@ -257,10 +257,10 @@ export default function Step5Review({ poolData, onBack }: Step5Props) {
 
                     <div className="mt-4 p-4 bg-muted rounded-lg">
                       <div className="text-sm">
-                        <span className="font-medium">Total Pavers:</span> {variant.coping_layout.metadata.total_pavers} pcs
+                        <span className="font-medium">Total Pavers:</span> {variant.coping_layout.metadata?.total_pavers || 0} pcs
                       </div>
                       <div className="text-sm">
-                        <span className="font-medium">Grout Width:</span> {variant.coping_layout.metadata.grout_width_mm}mm
+                        <span className="font-medium">Grout Width:</span> {variant.coping_layout.metadata?.grout_width_mm || 0}mm
                       </div>
                       <div className="text-sm">
                         <span className="font-medium">Coping Width:</span> {variant.coping_width || 400}mm from pool edge
