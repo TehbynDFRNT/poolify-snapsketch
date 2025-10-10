@@ -58,7 +58,6 @@ export function ImportPoolModal({ open, onClose, onSuccess }: ImportPoolModalPro
         return {
           pool_name: poolName.trim(),
           variant_name: `${poolName.trim()} - ${config.name}`,
-          display_name: `${poolName.trim()} - ${config.name}`,
           length: pool.dimensions.length,
           width: pool.dimensions.width,
           outline_points: outline,

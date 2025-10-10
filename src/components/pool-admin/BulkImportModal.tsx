@@ -66,7 +66,6 @@ export function BulkImportModal({ open, onClose, onSuccess }: BulkImportModalPro
           allVariants.push({
             pool_name: poolName,
             variant_name: `${poolName} - ${config.name}`,
-            display_name: `${poolName} - ${config.name}`,
             length: pool.dimensions.length,
             width: pool.dimensions.width,
             outline_points: pool.outlinePoints,
