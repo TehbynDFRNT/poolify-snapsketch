@@ -119,6 +119,13 @@ export default function CopingPreview({
 
     const { scaledOutline, scaledPavers } = getScaledData();
 
+    console.log('CopingPreview render:', {
+      poolOutlineLength: poolOutline?.length,
+      copingLayout: copingLayout,
+      paversCount: copingLayout?.pavers?.length,
+      scaledPaversCount: scaledPavers.length
+    });
+
     ctx.save();
 
     // Draw pool outline
@@ -140,7 +147,8 @@ export default function CopingPreview({
 
     // Draw pavers
     if (scaledPavers.length > 0) {
-      scaledPavers.forEach(paver => {
+      console.log('Drawing pavers:', scaledPavers.length);
+      scaledPavers.forEach((paver, index) => {
         ctx.save();
         ctx.translate(paver.position.x, paver.position.y);
         ctx.rotate((paver.rotation * Math.PI) / 180);
@@ -150,7 +158,7 @@ export default function CopingPreview({
           paver.type === 'stripe_cut' ? '#B8956A' :
           '#C9A66B';
 
-        const groutAdjust = (GROUT_WIDTH * (Math.min(scaledOutline.length > 0 ? 0.5 : 1, 1))) / 2;
+        const groutAdjust = (GROUT_WIDTH * 0.5) / 2;
         
         ctx.fillStyle = fillColor;
         ctx.fillRect(
@@ -171,6 +179,8 @@ export default function CopingPreview({
 
         ctx.restore();
       });
+    } else {
+      console.log('No pavers to draw');
     }
 
     ctx.restore();
@@ -187,6 +197,26 @@ export default function CopingPreview({
     return (
       <div className="flex items-center justify-center h-96 bg-muted rounded">
         <p className="text-muted-foreground">No pool outline to preview</p>
+      </div>
+    );
+  }
+
+  // Show message if no coping layout exists
+  if (!copingLayout || !copingLayout.pavers || copingLayout.pavers.length === 0) {
+    return (
+      <div className="relative">
+        <canvas
+          ref={canvasRef}
+          width={width}
+          height={height}
+          className="border rounded bg-background"
+        />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="bg-card border rounded-lg p-6 text-center">
+            <p className="text-muted-foreground">No coping layout generated yet</p>
+            <p className="text-sm text-muted-foreground mt-2">Generate coping in Step 4 to see pavers</p>
+          </div>
+        </div>
       </div>
     );
   }
