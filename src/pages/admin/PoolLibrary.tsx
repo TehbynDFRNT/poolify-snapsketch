@@ -10,10 +10,8 @@ import { Card } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { ChevronDown, ChevronRight, Plus, Edit, Eye, Copy, Archive, Trash2, FolderOpen } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Edit, Eye, Copy, Archive, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { ImportPoolModal } from '@/components/pool-admin/ImportPoolModal';
-import { BulkImportModal } from '@/components/pool-admin/BulkImportModal';
 
 export default function PoolLibrary() {
   const navigate = useNavigate();
@@ -21,9 +19,6 @@ export default function PoolLibrary() {
   const [searchFilter, setSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'published' | 'archived'>('all');
   const [sortBy, setSortBy] = useState<'name' | 'updated' | 'created'>('name');
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [showBulkImportModal, setShowBulkImportModal] = useState(false);
-  const [openPools, setOpenPools] = useState<Record<string, boolean>>({});
 
   // Fetch pool variants
   const { data: poolVariants, isLoading, refetch } = useQuery({
@@ -108,22 +103,6 @@ export default function PoolLibrary() {
     }
   };
 
-  const handleDeleteAll = async () => {
-    if (!confirm('⚠️ Are you sure you want to delete ALL pools? This cannot be undone!')) return;
-
-    const { error } = await supabase
-      .from('pool_variants')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all records
-
-    if (error) {
-      toast.error('Failed to delete pools');
-    } else {
-      toast.success('All pools deleted');
-      refetch();
-    }
-  };
-
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -131,22 +110,12 @@ export default function PoolLibrary() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">🏊 Pool Library Management</h1>
-            <p className="text-muted-foreground">Import pools from DXF and manage coping variants</p>
+            <p className="text-muted-foreground">Create and manage pool variants for the design tool</p>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={handleDeleteAll} variant="destructive" size="lg">
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete All
-            </Button>
-            <Button onClick={() => setShowBulkImportModal(true)} variant="outline" size="lg">
-              <FolderOpen className="w-4 h-4 mr-2" />
-              Bulk Import
-            </Button>
-            <Button onClick={() => setShowImportModal(true)} size="lg">
-              <Plus className="w-4 h-4 mr-2" />
-              New Pool
-            </Button>
-          </div>
+          <Button onClick={() => navigate('/admin/pool-library/new')} size="lg">
+            <Plus className="w-4 h-4 mr-2" />
+            New Pool
+          </Button>
         </div>
 
         {/* Filters */}
@@ -201,14 +170,10 @@ export default function PoolLibrary() {
           <div className="space-y-4">
             {filteredPoolNames.map(poolName => {
               const variants = groupedPools[poolName];
-              const isOpen = openPools[poolName] ?? true;
+              const [isOpen, setIsOpen] = useState(true);
 
               return (
-                <Collapsible 
-                  key={poolName} 
-                  open={isOpen} 
-                  onOpenChange={(open) => setOpenPools(prev => ({ ...prev, [poolName]: open }))}
-                >
+                <Collapsible key={poolName} open={isOpen} onOpenChange={setIsOpen}>
                   <Card className="overflow-hidden">
                     <CollapsibleTrigger className="w-full p-4 flex items-center justify-between hover:bg-accent/50 transition-colors">
                       <div className="flex items-center gap-3">
@@ -225,7 +190,7 @@ export default function PoolLibrary() {
                             <div className="flex items-center justify-between">
                               <div className="flex-1">
                                 <div className="flex items-center gap-3 mb-2">
-                                  <h4 className="font-semibold">{variant.display_name || variant.variant_name}</h4>
+                                  <h4 className="font-semibold">{variant.display_name}</h4>
                                   <Badge variant={
                                     variant.status === 'published' ? 'default' :
                                     variant.status === 'draft' ? 'secondary' : 'outline'
@@ -311,19 +276,6 @@ export default function PoolLibrary() {
           </div>
         )}
       </div>
-
-      {/* Modals */}
-      <ImportPoolModal 
-        open={showImportModal} 
-        onClose={() => setShowImportModal(false)}
-        onSuccess={refetch}
-      />
-      
-      <BulkImportModal
-        open={showBulkImportModal}
-        onClose={() => setShowBulkImportModal(false)}
-        onSuccess={refetch}
-      />
     </div>
   );
 }

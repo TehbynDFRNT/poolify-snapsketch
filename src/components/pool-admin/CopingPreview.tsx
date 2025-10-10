@@ -37,77 +37,6 @@ export default function CopingPreview({
 
   const GROUT_WIDTH = 5;
 
-  // Auto-scale and center content to fit canvas
-  const getScaledData = () => {
-    if (!poolOutline || poolOutline.length === 0) {
-      return { scaledOutline: [], scaledPavers: [], scale: 1, offset: { x: 0, y: 0 } };
-    }
-
-    // Find bounds of all elements
-    let minX = poolOutline[0].x;
-    let maxX = poolOutline[0].x;
-    let minY = poolOutline[0].y;
-    let maxY = poolOutline[0].y;
-
-    poolOutline.forEach(p => {
-      minX = Math.min(minX, p.x);
-      maxX = Math.max(maxX, p.x);
-      minY = Math.min(minY, p.y);
-      maxY = Math.max(maxY, p.y);
-    });
-
-    // Include pavers in bounds if they exist
-    if (copingLayout?.pavers) {
-      copingLayout.pavers.forEach(paver => {
-        const px = paver.position.x;
-        const py = paver.position.y;
-        const w = paver.dimensions.width;
-        const h = paver.dimensions.height;
-        
-        minX = Math.min(minX, px - w);
-        maxX = Math.max(maxX, px + w);
-        minY = Math.min(minY, py - h);
-        maxY = Math.max(maxY, py + h);
-      });
-    }
-
-    const contentWidth = maxX - minX;
-    const contentHeight = maxY - minY;
-
-    // Calculate scale with padding
-    const padding = 50;
-    const scaleX = contentWidth > 0 ? (width - padding * 2) / contentWidth : 1;
-    const scaleY = contentHeight > 0 ? (height - padding * 2) / contentHeight : 1;
-    const scale = Math.min(scaleX, scaleY);
-
-    // Calculate offset to center content
-    const offset = {
-      x: padding + (width - padding * 2 - contentWidth * scale) / 2 - minX * scale,
-      y: padding + (height - padding * 2 - contentHeight * scale) / 2 - minY * scale
-    };
-
-    // Scale outline points
-    const scaledOutline = poolOutline.map(p => ({
-      x: p.x * scale + offset.x,
-      y: p.y * scale + offset.y
-    }));
-
-    // Scale pavers
-    const scaledPavers = copingLayout?.pavers?.map(paver => ({
-      ...paver,
-      position: {
-        x: paver.position.x * scale + offset.x,
-        y: paver.position.y * scale + offset.y
-      },
-      dimensions: {
-        width: paver.dimensions.width * scale,
-        height: paver.dimensions.height * scale
-      }
-    })) || [];
-
-    return { scaledOutline, scaledPavers, scale, offset };
-  };
-
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -117,24 +46,16 @@ export default function CopingPreview({
 
     ctx.clearRect(0, 0, width, height);
 
-    const { scaledOutline, scaledPavers } = getScaledData();
-
-    console.log('CopingPreview render:', {
-      poolOutlineLength: poolOutline?.length,
-      copingLayout: copingLayout,
-      paversCount: copingLayout?.pavers?.length,
-      scaledPaversCount: scaledPavers.length
-    });
-
     ctx.save();
+    ctx.translate(pan.x, pan.y);
+    ctx.scale(zoom, zoom);
 
-    // Draw pool outline
-    if (scaledOutline.length > 2) {
+    if (poolOutline && poolOutline.length > 2) {
       ctx.beginPath();
-      ctx.moveTo(scaledOutline[0].x, scaledOutline[0].y);
+      ctx.moveTo(poolOutline[0].x, poolOutline[0].y);
       
-      for (let i = 1; i < scaledOutline.length; i++) {
-        ctx.lineTo(scaledOutline[i].x, scaledOutline[i].y);
+      for (let i = 1; i < poolOutline.length; i++) {
+        ctx.lineTo(poolOutline[i].x, poolOutline[i].y);
       }
       
       ctx.closePath();
@@ -145,10 +66,8 @@ export default function CopingPreview({
       ctx.stroke();
     }
 
-    // Draw pavers
-    if (scaledPavers.length > 0) {
-      console.log('Drawing pavers:', scaledPavers.length);
-      scaledPavers.forEach((paver, index) => {
+    if (copingLayout?.pavers) {
+      copingLayout.pavers.forEach(paver => {
         ctx.save();
         ctx.translate(paver.position.x, paver.position.y);
         ctx.rotate((paver.rotation * Math.PI) / 180);
@@ -158,33 +77,29 @@ export default function CopingPreview({
           paver.type === 'stripe_cut' ? '#B8956A' :
           '#C9A66B';
 
-        const groutAdjust = (GROUT_WIDTH * 0.5) / 2;
-        
         ctx.fillStyle = fillColor;
         ctx.fillRect(
-          -groutAdjust, 
-          -groutAdjust, 
-          paver.dimensions.width - GROUT_WIDTH * 0.5, 
-          paver.dimensions.height - GROUT_WIDTH * 0.5
+          -GROUT_WIDTH / 2, 
+          -GROUT_WIDTH / 2, 
+          paver.dimensions.width - GROUT_WIDTH, 
+          paver.dimensions.height - GROUT_WIDTH
         );
 
         ctx.strokeStyle = '#8B6F47';
         ctx.lineWidth = 1;
         ctx.strokeRect(
-          -groutAdjust, 
-          -groutAdjust, 
-          paver.dimensions.width - GROUT_WIDTH * 0.5, 
-          paver.dimensions.height - GROUT_WIDTH * 0.5
+          -GROUT_WIDTH / 2, 
+          -GROUT_WIDTH / 2, 
+          paver.dimensions.width - GROUT_WIDTH, 
+          paver.dimensions.height - GROUT_WIDTH
         );
 
         ctx.restore();
       });
-    } else {
-      console.log('No pavers to draw');
     }
 
     ctx.restore();
-  }, [poolOutline, copingLayout, width, height]);
+  }, [poolOutline, copingLayout, width, height, zoom, pan]);
 
   const handleZoomIn = () => setZoom(Math.min(zoom * 1.2, 3));
   const handleZoomOut = () => setZoom(Math.max(zoom / 1.2, 0.3));
@@ -197,26 +112,6 @@ export default function CopingPreview({
     return (
       <div className="flex items-center justify-center h-96 bg-muted rounded">
         <p className="text-muted-foreground">No pool outline to preview</p>
-      </div>
-    );
-  }
-
-  // Show message if no coping layout exists
-  if (!copingLayout || !copingLayout.pavers || copingLayout.pavers.length === 0) {
-    return (
-      <div className="relative">
-        <canvas
-          ref={canvasRef}
-          width={width}
-          height={height}
-          className="border rounded bg-background"
-        />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="bg-card border rounded-lg p-6 text-center">
-            <p className="text-muted-foreground">No coping layout generated yet</p>
-            <p className="text-sm text-muted-foreground mt-2">Generate coping in Step 4 to see pavers</p>
-          </div>
-        </div>
       </div>
     );
   }

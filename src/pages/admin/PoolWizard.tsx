@@ -35,7 +35,7 @@ export default function PoolWizard() {
   });
 
   // Load existing pool if editing
-  const { data: existingPool, error: loadError } = useQuery({
+  const { data: existingPool } = useQuery({
     queryKey: ['pool-variant', id],
     queryFn: async () => {
       if (!id) return null;
@@ -43,11 +43,8 @@ export default function PoolWizard() {
         .from('pool_variants')
         .select('*')
         .eq('id', id)
-        .maybeSingle();
-      if (error) {
-        console.error('Error loading pool for edit:', error);
-        throw error;
-      }
+        .single();
+      if (error) throw error;
       return data;
     },
     enabled: isEdit
@@ -57,17 +54,17 @@ export default function PoolWizard() {
     if (existingPool) {
       setPoolData({
         pool_name: existingPool.pool_name,
-        variant_name: '', // No longer in schema
-        length: 6000, // Default value
-        width: 3000, // Default value
-        outline_points: existingPool.outline as any[] || [],
-        shallow_end: existingPool.shallow_end_position as any,
-        deep_end: existingPool.deep_end_position as any,
+        variant_name: existingPool.variant_name,
+        length: existingPool.length,
+        width: existingPool.width,
+        outline_points: existingPool.outline_points as any[] || [],
+        shallow_end: existingPool.shallow_end as any,
+        deep_end: existingPool.deep_end as any,
         features: existingPool.features as any[] || [],
-        has_coping: !!existingPool.coping_layout,
-        coping_type: existingPool.paver_size as any,
-        coping_width: existingPool.coping_width || 400,
-        grout_width: existingPool.grout_width || 5,
+        has_coping: existingPool.has_coping,
+        coping_type: existingPool.coping_type,
+        coping_width: existingPool.coping_width,
+        grout_width: existingPool.grout_width,
         coping_layout: existingPool.coping_layout as any,
         notes: existingPool.notes || '',
         generatedVariants: []
@@ -91,14 +88,18 @@ export default function PoolWizard() {
       
       const poolVariant = {
         pool_name: poolData.pool_name,
-        outline: poolData.outline_points,
-        shallow_end_position: poolData.shallow_end,
-        deep_end_position: poolData.deep_end,
+        variant_name: poolData.variant_name,
+        length: poolData.length,
+        width: poolData.width,
+        outline_points: poolData.outline_points,
+        shallow_end: poolData.shallow_end,
+        deep_end: poolData.deep_end,
         features: poolData.features,
-        coping_layout: poolData.coping_layout,
-        paver_size: poolData.coping_type,
+        has_coping: poolData.has_coping,
+        coping_type: poolData.coping_type,
         coping_width: poolData.coping_width,
         grout_width: poolData.grout_width,
+        coping_layout: poolData.coping_layout,
         notes: poolData.notes,
         status: 'draft',
         created_by: user?.id,

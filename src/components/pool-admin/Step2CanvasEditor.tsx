@@ -50,44 +50,6 @@ export default function Step2CanvasEditor({ poolData, setPoolData, onNext, onBac
     return Math.sqrt(dx * dx + dy * dy) * 100; // Convert to mm (1 unit = 100mm)
   };
 
-  // Auto-scale and center points to fit canvas
-  const getScaledPoints = () => {
-    if (poolData.outline_points.length === 0) return [];
-    
-    const points = poolData.outline_points;
-    
-    // Find bounds
-    let minX = points[0].x, maxX = points[0].x;
-    let minY = points[0].y, maxY = points[0].y;
-    
-    points.forEach((p: Point) => {
-      minX = Math.min(minX, p.x);
-      maxX = Math.max(maxX, p.x);
-      minY = Math.min(minY, p.y);
-      maxY = Math.max(maxY, p.y);
-    });
-    
-    const width = maxX - minX;
-    const height = maxY - minY;
-    
-    // If points are already in canvas range, return as-is
-    if (width <= CANVAS_WIDTH && height <= CANVAS_HEIGHT && minX >= 0 && minY >= 0) {
-      return points;
-    }
-    
-    // Calculate scale to fit with padding
-    const padding = 100;
-    const scaleX = width > 0 ? (CANVAS_WIDTH - padding * 2) / width : 1;
-    const scaleY = height > 0 ? (CANVAS_HEIGHT - padding * 2) / height : 1;
-    const scale = Math.min(scaleX, scaleY);
-    
-    // Scale and center
-    return points.map((p: Point) => ({
-      x: (p.x - minX) * scale + padding,
-      y: (p.y - minY) * scale + padding
-    }));
-  };
-
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -96,9 +58,6 @@ export default function Step2CanvasEditor({ poolData, setPoolData, onNext, onBac
     if (!ctx) return;
     
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    
-    // Get scaled points for rendering
-    const scaledPoints = getScaledPoints();
 
     // Draw grid
     if (gridVisible) {
@@ -124,15 +83,15 @@ export default function Step2CanvasEditor({ poolData, setPoolData, onNext, onBac
     }
 
     // Draw pool outline
-    if (scaledPoints.length > 1) {
+    if (poolData.outline_points.length > 1) {
       ctx.beginPath();
-      ctx.moveTo(scaledPoints[0].x, scaledPoints[0].y);
+      ctx.moveTo(poolData.outline_points[0].x, poolData.outline_points[0].y);
       
-      for (let i = 1; i < scaledPoints.length; i++) {
-        ctx.lineTo(scaledPoints[i].x, scaledPoints[i].y);
+      for (let i = 1; i < poolData.outline_points.length; i++) {
+        ctx.lineTo(poolData.outline_points[i].x, poolData.outline_points[i].y);
       }
       
-      if (scaledPoints.length >= 3) {
+      if (poolData.outline_points.length >= 3) {
         ctx.closePath();
         ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
         ctx.fill();
@@ -144,14 +103,14 @@ export default function Step2CanvasEditor({ poolData, setPoolData, onNext, onBac
     }
     
     // Draw line measurements
-    if (scaledPoints.length > 1) {
+    if (poolData.outline_points.length > 1) {
       ctx.fillStyle = '#000';
       ctx.font = 'bold 12px sans-serif';
       
-      for (let i = 0; i < scaledPoints.length - 1; i++) {
-        const p1 = scaledPoints[i];
-        const p2 = scaledPoints[i + 1];
-        const distance = calculateDistance(poolData.outline_points[i], poolData.outline_points[i + 1]);
+      for (let i = 0; i < poolData.outline_points.length - 1; i++) {
+        const p1 = poolData.outline_points[i];
+        const p2 = poolData.outline_points[i + 1];
+        const distance = calculateDistance(p1, p2);
         
         // Calculate midpoint
         const midX = (p1.x + p2.x) / 2;
@@ -221,7 +180,7 @@ export default function Step2CanvasEditor({ poolData, setPoolData, onNext, onBac
     }
 
     // Draw points
-    scaledPoints.forEach((point: any, index: number) => {
+    poolData.outline_points.forEach((point: any, index: number) => {
       ctx.beginPath();
       ctx.arc(point.x, point.y, POINT_RADIUS, 0, Math.PI * 2);
       
