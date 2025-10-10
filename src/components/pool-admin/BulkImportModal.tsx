@@ -70,13 +70,11 @@ export function BulkImportModal({ open, onClose, onSuccess }: BulkImportModalPro
           );
 
           allVariants.push({
-            pool_name: poolName,
-            variant_name: `${variantPrefix} - ${config.name}`,
-            length: pool.dimensions.length,
-            width: pool.dimensions.width,
-            outline_points: pool.outlinePoints,
-            has_coping: true,
-            coping_type: `${config.corner.width}x${config.corner.height}_${config.full.width}x${config.full.height}`,
+            pool_name: `${poolName} - ${config.name}`,
+            outline: pool.outlinePoints,
+            shallow_end_position: null,
+            deep_end_position: null,
+            paver_size: config.name,
             coping_width: 400,
             grout_width: 5,
             coping_layout: {
