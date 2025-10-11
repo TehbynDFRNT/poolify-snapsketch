@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./hooks/useAuth";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
 import { CloudHomePage } from "./components/CloudHomePage";
 import { DesignCanvas } from "./components/DesignCanvas";
 import { InstallPrompt } from "./components/InstallPrompt";
@@ -18,7 +19,7 @@ import { TeamManagement } from "./pages/TeamManagement";
 import { LandingPage } from "./pages/LandingPage";
 import NotFound from "./pages/NotFound";
 import PoolLibrary from "./pages/admin/PoolLibrary";
-
+import PoolEditor from "./pages/admin/PoolEditor";
 import PoolPreview from "./pages/admin/PoolPreview";
 import UserManagement from "./pages/admin/UserManagement";
 
@@ -61,29 +62,29 @@ const App = () => (
               </ProtectedRoute>
             } />
             <Route path="/admin/pool-library" element={
-              <ProtectedRoute>
+              <AdminProtectedRoute>
                 <PoolLibrary />
-              </ProtectedRoute>
+              </AdminProtectedRoute>
             } />
             <Route path="/admin/pool-library/new" element={
-              <ProtectedRoute>
+              <AdminProtectedRoute>
                 <Navigate to="/admin/pool-library" replace />
-              </ProtectedRoute>
+              </AdminProtectedRoute>
             } />
             <Route path="/admin/pool-library/:id/edit" element={
-              <ProtectedRoute>
-                <Navigate to="/admin/pool-library" replace />
-              </ProtectedRoute>
+              <AdminProtectedRoute>
+                <PoolEditor />
+              </AdminProtectedRoute>
             } />
             <Route path="/admin/pool-library/:id/preview" element={
-              <ProtectedRoute>
+              <AdminProtectedRoute>
                 <PoolPreview />
-              </ProtectedRoute>
+              </AdminProtectedRoute>
             } />
             <Route path="/admin/users" element={
-              <ProtectedRoute>
+              <AdminProtectedRoute>
                 <UserManagement />
-              </ProtectedRoute>
+              </AdminProtectedRoute>
             } />
             
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

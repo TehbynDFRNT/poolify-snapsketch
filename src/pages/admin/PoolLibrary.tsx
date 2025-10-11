@@ -10,8 +10,9 @@ import { Card } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { ChevronDown, ChevronRight, Plus, Edit, Eye, Copy, Archive, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Edit2, Eye, Copy, Archive, Trash2, Layers } from 'lucide-react';
 import { toast } from 'sonner';
+import { CopingGeneratorDialog } from '@/components/pool-admin/CopingGeneratorDialog';
 
 export default function PoolLibrary() {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ export default function PoolLibrary() {
   const [searchFilter, setSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'published' | 'archived'>('all');
   const [sortBy, setSortBy] = useState<'name' | 'updated' | 'created'>('name');
+  const [generatingVariant, setGeneratingVariant] = useState<PoolVariant | null>(null);
 
   // Fetch pool variants
   const { data: poolVariants, isLoading, refetch } = useQuery({
@@ -218,10 +220,9 @@ export default function PoolLibrary() {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => toast.info('Pool editing coming soon')}
-                                  disabled
+                                  onClick={() => navigate(`/admin/pool-library/${variant.id}/edit`)}
                                 >
-                                  <Edit className="w-4 h-4" />
+                                  <Edit2 className="w-4 h-4" />
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -229,6 +230,15 @@ export default function PoolLibrary() {
                                   onClick={() => navigate(`/admin/pool-library/${variant.id}/preview`)}
                                 >
                                   <Eye className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setGeneratingVariant(variant)}
+                                  title="Generate new coping variant"
+                                >
+                                  <Layers className="h-4 w-4 mr-2" />
+                                  Coping
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -278,6 +288,14 @@ export default function PoolLibrary() {
           </div>
         )}
       </div>
+
+      {generatingVariant && (
+        <CopingGeneratorDialog
+          open={!!generatingVariant}
+          onClose={() => setGeneratingVariant(null)}
+          variant={generatingVariant}
+        />
+      )}
     </div>
   );
 }

@@ -1,3 +1,5 @@
+export type CopingOption = 'none' | '400x400' | '400x600' | '600x400';
+
 export interface Point {
   x: number;
   y: number;
@@ -296,4 +298,39 @@ function calculatePerimeter(outline: Point[]): number {
     perimeter += distance(outline[i], outline[next]);
   }
   return perimeter / 1000; // mm to m
+}
+
+/**
+ * Generate coping layout for a given coping option
+ * Supports: none, 400x400, 400x600, 600x400
+ * All options use 400x400 corner pavers
+ */
+export function generateCopingForOption(
+  poolOutline: Array<{x: number, y: number}>,
+  option: CopingOption,
+  groutWidth: number = 5
+): any | null {
+  
+  if (option === 'none') {
+    return null;
+  }
+
+  // All options use 400×400 corners
+  const cornerSize = { width: 400, height: 400 };
+  
+  let fullSize: PaverSize;
+  switch (option) {
+    case '400x400':
+      fullSize = { width: 400, height: 400 };
+      break;
+    case '400x600':
+      fullSize = { width: 400, height: 600 };
+      break;
+    case '600x400':
+      fullSize = { width: 600, height: 400 };
+      break;
+  }
+
+  // Use existing generateCopingLayout function
+  return generateCopingLayout(poolOutline, cornerSize, fullSize);
 }

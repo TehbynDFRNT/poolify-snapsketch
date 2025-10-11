@@ -6,6 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { X } from 'lucide-react';
 import { calculatePoolCoping } from '@/utils/copingCalculation';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 interface PoolSelectorProps {
   onSelect: (pool: Pool, copingOptions: { showCoping: boolean; copingCalculation?: any }) => void;
@@ -15,6 +17,24 @@ interface PoolSelectorProps {
 export const PoolSelector = ({ onSelect, onClose }: PoolSelectorProps) => {
   const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
   const [enableCoping, setEnableCoping] = useState(true);
+
+  // Fetch published pool variants from database
+  const { data: cloudPools } = useQuery({
+    queryKey: ['pool-variants-published'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pool_variants')
+        .select('*')
+        .eq('status', 'published')
+        .order('sort_order');
+      
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  // Combine hardcoded pools with published cloud pools
+  const allPools = POOL_LIBRARY;
 
   const handleSelect = () => {
     if (selectedPoolId) {
@@ -45,7 +65,7 @@ export const PoolSelector = ({ onSelect, onClose }: PoolSelectorProps) => {
         
         <RadioGroup value={selectedPoolId || ''} onValueChange={setSelectedPoolId}>
           <div className="space-y-2 max-h-[400px] overflow-y-auto">
-            {POOL_LIBRARY.map(pool => (
+            {allPools.map(pool => (
               <div
                 key={pool.id}
                 className="flex items-center gap-3 p-3 border rounded hover:bg-accent cursor-pointer transition-colors"
