@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { PoolVariant } from '@/types/poolVariant';
@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { ChevronDown, ChevronRight, Plus, Edit2, Eye, Copy, Archive, Trash2, Layers, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { CopingGeneratorDialog } from '@/components/pool-admin/CopingGeneratorDialog';
+import { seedPoolsIfEmpty } from '@/utils/seedPools';
 
 export default function PoolLibrary() {
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ export default function PoolLibrary() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'published' | 'archived'>('all');
   const [sortBy, setSortBy] = useState<'name' | 'updated' | 'created'>('name');
   const [generatingVariant, setGeneratingVariant] = useState<PoolVariant | null>(null);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   // Fetch pool variants
   const { data: poolVariants, isLoading, refetch } = useQuery({
@@ -42,6 +44,18 @@ export default function PoolLibrary() {
       return (data || []) as unknown as PoolVariant[];
     },
   });
+
+  // Seed database from POOL_LIBRARY if empty (admin only UI)
+  useEffect(() => {
+    if (!isLoading && (poolVariants?.length ?? 0) === 0) {
+      seedPoolsIfEmpty().then(({ seeded }) => {
+        if (seeded) {
+          toast.success('Seeded base pool library');
+          refetch();
+        }
+      });
+    }
+  }, [isLoading, poolVariants, refetch]);
 
   // Group variants by pool name
   const groupedPools = poolVariants?.reduce((acc, variant) => {
@@ -177,10 +191,10 @@ export default function PoolLibrary() {
         ) : (
           <div className="space-y-4">
             {filteredPoolGroups.map(group => {
-              const [isOpen, setIsOpen] = useState(true);
+              const isOpen = openGroups[group.pool_name] ?? true;
 
               return (
-                <Collapsible key={group.pool_name} open={isOpen} onOpenChange={setIsOpen}>
+                <Collapsible key={group.pool_name} open={isOpen} onOpenChange={(v) => setOpenGroups(prev => ({ ...prev, [group.pool_name]: v }))}>
                   <Card className="overflow-hidden">
                     <CollapsibleTrigger className="w-full p-4 flex items-center justify-between hover:bg-accent/50 transition-colors">
                       <div className="flex items-center gap-3">
