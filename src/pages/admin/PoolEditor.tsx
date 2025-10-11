@@ -29,25 +29,89 @@ export default function PoolEditor() {
   const [shallowEnd, setShallowEnd] = useState<{x: number, y: number} | null>(null);
   const [deepEnd, setDeepEnd] = useState<{x: number, y: number} | null>(null);
   const [mode, setMode] = useState<'edit' | 'set-se' | 'set-de'>('edit');
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
 
-  // Initialize points when variant loads
+  // Initialize points when variant loads with proper scaling
   useEffect(() => {
     if (variant?.outline) {
       const outlineData = variant.outline as any;
-      setPoints(Array.isArray(outlineData) ? outlineData : []);
-      setShallowEnd((variant.shallow_end_position as any) || null);
-      setDeepEnd((variant.deep_end_position as any) || null);
+      const rawPoints = Array.isArray(outlineData) ? outlineData : [];
+      
+      if (rawPoints.length > 0) {
+        // Find bounds
+        const minX = Math.min(...rawPoints.map((p: any) => p.x));
+        const maxX = Math.max(...rawPoints.map((p: any) => p.x));
+        const minY = Math.min(...rawPoints.map((p: any) => p.y));
+        const maxY = Math.max(...rawPoints.map((p: any) => p.y));
+        
+        const poolWidth = maxX - minX;
+        const poolHeight = maxY - minY;
+        
+        // Calculate scale to fit in 700x500 (leaving padding)
+        const scaleX = 700 / poolWidth;
+        const scaleY = 500 / poolHeight;
+        const newScale = Math.min(scaleX, scaleY);
+        
+        // Calculate offset to center
+        const newOffset = {
+          x: 50 - minX * newScale,
+          y: 50 - minY * newScale
+        };
+        
+        setScale(newScale);
+        setOffset(newOffset);
+        
+        // Scale points
+        const scaledPoints = rawPoints.map((p: any) => ({
+          x: p.x * newScale + newOffset.x,
+          y: p.y * newScale + newOffset.y
+        }));
+        setPoints(scaledPoints);
+        
+        // Scale shallow/deep end positions
+        const sePos = variant.shallow_end_position as any;
+        const dePos = variant.deep_end_position as any;
+        
+        setShallowEnd(sePos ? {
+          x: sePos.x * newScale + newOffset.x,
+          y: sePos.y * newScale + newOffset.y
+        } : null);
+        
+        setDeepEnd(dePos ? {
+          x: dePos.x * newScale + newOffset.x,
+          y: dePos.y * newScale + newOffset.y
+        } : null);
+      }
     }
   }, [variant]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      // Unscale points back to original coordinates
+      const originalPoints = points.map(p => ({
+        x: (p.x - offset.x) / scale,
+        y: (p.y - offset.y) / scale
+      }));
+      
+      const originalSE = shallowEnd ? {
+        x: (shallowEnd.x - offset.x) / scale,
+        y: (shallowEnd.y - offset.y) / scale,
+        label: 'SE'
+      } : null;
+      
+      const originalDE = deepEnd ? {
+        x: (deepEnd.x - offset.x) / scale,
+        y: (deepEnd.y - offset.y) / scale,
+        label: 'DE'
+      } : null;
+      
       const { error } = await (supabase as any)
         .from('pool_variants')
         .update({
-          outline: points,
-          shallow_end_position: shallowEnd,
-          deep_end_position: deepEnd,
+          outline: originalPoints,
+          shallow_end_position: originalSE,
+          deep_end_position: originalDE,
           updated_at: new Date().toISOString()
         })
         .eq('id', id);
@@ -97,7 +161,7 @@ export default function PoolEditor() {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back
             </Button>
-            <h1 className="text-2xl font-bold">Edit: {variant?.display_name}</h1>
+            <h1 className="text-2xl font-bold">Edit: {variant?.pool_name}</h1>
           </div>
           <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
             <Save className="h-4 w-4 mr-2" />
