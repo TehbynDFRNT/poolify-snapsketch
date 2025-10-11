@@ -44,20 +44,28 @@ export const PoolSelector = ({ onSelect, onClose }: PoolSelectorProps) => {
   });
 
   // Convert database pools to Pool interface format
-  const allPools: Pool[] = (poolVariants || []).map(variant => ({
-    id: variant.id,
-    name: variant.display_name || variant.pool_name,
-    length: variant.length,
-    width: variant.width,
-    outline: variant.outline_points as Array<{x: number, y: number}>,
-    shallowEnd: variant.shallow_end 
-      ? { ...variant.shallow_end as any, label: 'SE' }
-      : { x: 150, y: variant.width / 2, label: 'SE' },
-    deepEnd: variant.deep_end
-      ? { ...variant.deep_end as any, label: 'DE' }
-      : { x: variant.length - 150, y: variant.width / 2, label: 'DE' },
-    color: '#3B82F6'
-  }));
+  const allPools: Pool[] = (poolVariants || []).map((variant: any) => {
+    const outline: Array<{x:number;y:number}> = variant.outline || [];
+    const minX = Math.min(...outline.map(p => p.x), 0);
+    const maxX = Math.max(...outline.map(p => p.x), 0);
+    const minY = Math.min(...outline.map(p => p.y), 0);
+    const maxY = Math.max(...outline.map(p => p.y), 0);
+
+    return {
+      id: variant.id,
+      name: variant.pool_name,
+      length: maxX - minX,
+      width: maxY - minY,
+      outline,
+      shallowEnd: variant.shallow_end_position
+        ? { ...(variant.shallow_end_position as any) }
+        : { x: 150, y: (maxY - minY) / 2, label: 'SE' },
+      deepEnd: variant.deep_end_position
+        ? { ...(variant.deep_end_position as any) }
+        : { x: (maxX - minX) - 150, y: (maxY - minY) / 2, label: 'DE' },
+      color: '#3B82F6'
+    };
+  });
 
   const handleSelect = () => {
     if (selectedPoolId) {

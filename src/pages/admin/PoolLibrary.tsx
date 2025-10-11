@@ -211,7 +211,7 @@ export default function PoolLibrary() {
                             <div className="flex items-center justify-between">
                               <div className="flex-1">
                                 <div className="flex items-center gap-3 mb-2">
-                                  <h4 className="font-semibold">{variant.display_name}</h4>
+                                  <h4 className="font-semibold">{(variant as any).display_name || variant.pool_name}</h4>
                                   <Badge variant={
                                     variant.status === 'published' ? 'default' :
                                     variant.status === 'draft' ? 'secondary' : 'outline'
@@ -223,8 +223,15 @@ export default function PoolLibrary() {
                                   </Badge>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
-                                  {variant.length} × {variant.width}mm
-                                  {variant.has_coping && ` • ${variant.coping_type} coping`}
+                                  {(() => {
+                                    const o = (variant as any).outline || [];
+                                    if (!o.length) return 'Size N/A';
+                                    const minX = Math.min(...o.map((p:any) => p.x));
+                                    const maxX = Math.max(...o.map((p:any) => p.x));
+                                    const minY = Math.min(...o.map((p:any) => p.y));
+                                    const maxY = Math.max(...o.map((p:any) => p.y));
+                                    return `${maxX - minX} × ${maxY - minY}mm`;
+                                  })()}
                                   {variant.coping_layout && ` • ${variant.coping_layout.metadata.total_pavers} pavers`}
                                 </p>
                                 <p className="text-xs text-muted-foreground mt-1">

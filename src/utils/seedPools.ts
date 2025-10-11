@@ -15,19 +15,12 @@ export async function seedPoolsIfEmpty(): Promise<{ seeded: boolean; count: numb
 
   // Table empty: seed using POOL_LIBRARY
   const rows = POOL_LIBRARY.map((p) => {
-    const length = p.length ?? Math.max(...p.outline.map(pt => pt.x));
-    const width = p.width ?? Math.max(...p.outline.map(pt => pt.y));
     return {
       pool_name: p.name,
-      display_name: p.name,
-      variant_name: "Base",
-      length,
-      width,
-      outline_points: p.outline,
-      shallow_end: { x: p.shallowEnd.x, y: p.shallowEnd.y, label: p.shallowEnd.label },
-      deep_end: { x: p.deepEnd.x, y: p.deepEnd.y, label: p.deepEnd.label },
+      outline: p.outline,
+      shallow_end_position: { x: p.shallowEnd.x, y: p.shallowEnd.y, label: p.shallowEnd.label },
+      deep_end_position: { x: p.deepEnd.x, y: p.deepEnd.y, label: p.deepEnd.label },
       features: [],
-      has_coping: false,
       coping_width: 400,
       grout_width: 5,
       status: "published" as const,
