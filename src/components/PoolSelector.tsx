@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Pool, POOL_LIBRARY } from '@/constants/pools';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
@@ -8,6 +7,17 @@ import { X } from 'lucide-react';
 import { calculatePoolCoping } from '@/utils/copingCalculation';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+
+interface Pool {
+  id: string;
+  name: string;
+  length: number;
+  width: number;
+  outline: Array<{x: number, y: number}>;
+  shallowEnd: {x: number, y: number, label: string};
+  deepEnd: {x: number, y: number, label: string};
+  color: string;
+}
 
 interface PoolSelectorProps {
   onSelect: (pool: Pool, copingOptions: { showCoping: boolean; copingCalculation?: any }) => void;
@@ -19,7 +29,7 @@ export const PoolSelector = ({ onSelect, onClose }: PoolSelectorProps) => {
   const [enableCoping, setEnableCoping] = useState(true);
 
   // Fetch published pool variants from database
-  const { data: cloudPools } = useQuery({
+  const { data: poolVariants, isLoading } = useQuery({
     queryKey: ['pool-variants-published'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -33,12 +43,25 @@ export const PoolSelector = ({ onSelect, onClose }: PoolSelectorProps) => {
     }
   });
 
-  // Combine hardcoded pools with published cloud pools
-  const allPools = POOL_LIBRARY;
+  // Convert database pools to Pool interface format
+  const allPools: Pool[] = (poolVariants || []).map(variant => ({
+    id: variant.id,
+    name: variant.display_name || variant.pool_name,
+    length: variant.length,
+    width: variant.width,
+    outline: variant.outline_points as Array<{x: number, y: number}>,
+    shallowEnd: variant.shallow_end 
+      ? { ...variant.shallow_end as any, label: 'SE' }
+      : { x: 150, y: variant.width / 2, label: 'SE' },
+    deepEnd: variant.deep_end
+      ? { ...variant.deep_end as any, label: 'DE' }
+      : { x: variant.length - 150, y: variant.width / 2, label: 'DE' },
+    color: '#3B82F6'
+  }));
 
   const handleSelect = () => {
     if (selectedPoolId) {
-      const pool = POOL_LIBRARY.find(p => p.id === selectedPoolId);
+      const pool = allPools.find(p => p.id === selectedPoolId);
       if (pool) {
         const copingCalculation = enableCoping ? calculatePoolCoping(pool) : undefined;
         onSelect(pool, {
@@ -63,22 +86,28 @@ export const PoolSelector = ({ onSelect, onClose }: PoolSelectorProps) => {
           </Button>
         </div>
         
-        <RadioGroup value={selectedPoolId || ''} onValueChange={setSelectedPoolId}>
-          <div className="space-y-2 max-h-[400px] overflow-y-auto">
-            {allPools.map(pool => (
-              <div
-                key={pool.id}
-                className="flex items-center gap-3 p-3 border rounded hover:bg-accent cursor-pointer transition-colors"
-                onClick={() => setSelectedPoolId(pool.id)}
-              >
-                <RadioGroupItem value={pool.id} id={pool.id} />
-                <Label htmlFor={pool.id} className="font-medium cursor-pointer flex-1">
-                  {pool.name}
-                </Label>
-              </div>
-            ))}
-          </div>
-        </RadioGroup>
+        {isLoading ? (
+          <div className="py-8 text-center text-muted-foreground">Loading pools...</div>
+        ) : allPools.length === 0 ? (
+          <div className="py-8 text-center text-muted-foreground">No pools available</div>
+        ) : (
+          <RadioGroup value={selectedPoolId || ''} onValueChange={setSelectedPoolId}>
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              {allPools.map(pool => (
+                <div
+                  key={pool.id}
+                  className="flex items-center gap-3 p-3 border rounded hover:bg-accent cursor-pointer transition-colors"
+                  onClick={() => setSelectedPoolId(pool.id)}
+                >
+                  <RadioGroupItem value={pool.id} id={pool.id} />
+                  <Label htmlFor={pool.id} className="font-medium cursor-pointer flex-1">
+                    {pool.name}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </RadioGroup>
+        )}
 
         <div className="flex items-center gap-2 mt-4 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
           <Checkbox

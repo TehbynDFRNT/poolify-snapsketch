@@ -1,3 +1,9 @@
+/**
+ * @deprecated This file is now for reference only.
+ * All pool data has been migrated to the pool_variants database table.
+ * Use the database for all pool operations instead of this hardcoded array.
+ */
+
 export interface Pool {
   id: string;
   name: string;
@@ -9,6 +15,9 @@ export interface Pool {
   color: string;
 }
 
+/**
+ * @deprecated Use database pool_variants table instead
+ */
 export const POOL_LIBRARY: Pool[] = [
   // 1. Hayman 8.5 × 3.8m
   {
