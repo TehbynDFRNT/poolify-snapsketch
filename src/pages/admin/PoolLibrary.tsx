@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { PoolVariant } from '@/types/poolVariant';
+import { POOL_LIBRARY } from '@/constants/pools';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -10,7 +11,7 @@ import { Card } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { ChevronDown, ChevronRight, Plus, Edit2, Eye, Copy, Archive, Trash2, Layers } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Edit2, Eye, Copy, Archive, Trash2, Layers, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { CopingGeneratorDialog } from '@/components/pool-admin/CopingGeneratorDialog';
 
@@ -43,6 +44,20 @@ export default function PoolLibrary() {
     },
   });
 
+  // Convert hardcoded pools to display format for admin view
+  const hardcodedPools = POOL_LIBRARY.map(pool => ({
+    pool_name: pool.name,
+    variants: [{
+      id: pool.id,
+      pool_name: pool.name,
+      display_name: pool.name,
+      length: pool.length,
+      width: pool.width,
+      status: 'hardcoded' as const,
+      isHardcoded: true
+    }]
+  }));
+
   // Group variants by pool name
   const groupedPools = poolVariants?.reduce((acc, variant) => {
     if (!acc[variant.pool_name]) {
@@ -52,9 +67,18 @@ export default function PoolLibrary() {
     return acc;
   }, {} as Record<string, PoolVariant[]>) || {};
 
+  // Combine with hardcoded pools
+  const allPoolGroups = [
+    ...hardcodedPools,
+    ...Object.entries(groupedPools).map(([name, variants]) => ({
+      pool_name: name,
+      variants
+    }))
+  ];
+
   // Filter by search
-  const filteredPoolNames = Object.keys(groupedPools).filter(poolName =>
-    poolName.toLowerCase().includes(searchFilter.toLowerCase())
+  const filteredPoolGroups = allPoolGroups.filter(group =>
+    group.pool_name.toLowerCase().includes(searchFilter.toLowerCase())
   );
 
   const handlePublish = async (id: string) => {
@@ -164,121 +188,137 @@ export default function PoolLibrary() {
         {/* Pool Groups */}
         {isLoading ? (
           <div className="text-center py-12">Loading pools...</div>
-        ) : filteredPoolNames.length === 0 ? (
+        ) : filteredPoolGroups.length === 0 ? (
           <Card className="p-12 text-center">
-            <p className="text-muted-foreground">No pools found. Create your first pool to get started!</p>
+            <p className="text-muted-foreground">No pools found matching your search.</p>
           </Card>
         ) : (
           <div className="space-y-4">
-            {filteredPoolNames.map(poolName => {
-              const variants = groupedPools[poolName];
+            {filteredPoolGroups.map(group => {
               const [isOpen, setIsOpen] = useState(true);
+              const isHardcodedGroup = (group.variants[0] as any).isHardcoded;
 
               return (
-                <Collapsible key={poolName} open={isOpen} onOpenChange={setIsOpen}>
+                <Collapsible key={group.pool_name} open={isOpen} onOpenChange={setIsOpen}>
                   <Card className="overflow-hidden">
                     <CollapsibleTrigger className="w-full p-4 flex items-center justify-between hover:bg-accent/50 transition-colors">
                       <div className="flex items-center gap-3">
                         {isOpen ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
-                        <h3 className="text-lg font-semibold">{poolName}</h3>
-                        <Badge variant="secondary">{variants.length} variants</Badge>
+                        <h3 className="text-lg font-semibold">{group.pool_name}</h3>
+                        <Badge variant="secondary">{group.variants.length} {isHardcodedGroup ? 'base' : 'variants'}</Badge>
+                        {isHardcodedGroup && <Badge variant="outline">Hardcoded</Badge>}
                       </div>
                     </CollapsibleTrigger>
 
                     <CollapsibleContent>
                       <div className="p-4 space-y-3 bg-muted/30">
-                        {variants.map(variant => (
-                          <Card key={variant.id} className="p-4">
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-3 mb-2">
-                                  <h4 className="font-semibold">{variant.display_name}</h4>
-                                  <Badge variant={
-                                    variant.status === 'published' ? 'default' :
-                                    variant.status === 'draft' ? 'secondary' : 'outline'
-                                  }>
-                                    {variant.status === 'published' && '🟢'}
-                                    {variant.status === 'draft' && '🟡'}
-                                    {variant.status === 'archived' && '🔴'}
-                                    {' '}{variant.status}
-                                  </Badge>
+                        {group.variants.map(variant => {
+                          const isHardcoded = (variant as any).isHardcoded;
+                          return (
+                            <Card key={variant.id} className="p-4">
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-3 mb-2">
+                                    <h4 className="font-semibold">{variant.display_name}</h4>
+                                    {!isHardcoded && (
+                                      <Badge variant={
+                                        variant.status === 'published' ? 'default' :
+                                        variant.status === 'draft' ? 'secondary' : 'outline'
+                                      }>
+                                        {variant.status === 'published' && '🟢'}
+                                        {variant.status === 'draft' && '🟡'}
+                                        {variant.status === 'archived' && '🔴'}
+                                        {' '}{variant.status}
+                                      </Badge>
+                                    )}
+                                    {isHardcoded && <Badge variant="outline">Base Pool</Badge>}
+                                  </div>
+                                  <p className="text-sm text-muted-foreground">
+                                    {variant.length} × {variant.width}mm
+                                    {!isHardcoded && variant.has_coping && ` • ${variant.coping_type} coping`}
+                                    {!isHardcoded && variant.coping_layout && ` • ${variant.coping_layout.metadata.total_pavers} pavers`}
+                                  </p>
+                                  {!isHardcoded && variant.updated_at && (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      {variant.status === 'published' 
+                                        ? `Published ${new Date(variant.published_at!).toLocaleDateString()}`
+                                        : `Last edited ${new Date(variant.updated_at).toLocaleDateString()}`
+                                      }
+                                    </p>
+                                  )}
+                                  {isHardcoded && (
+                                    <p className="text-xs text-amber-600 mt-1">
+                                      💡 Generate coping variants from this base pool
+                                    </p>
+                                  )}
                                 </div>
-                                <p className="text-sm text-muted-foreground">
-                                  {variant.length} × {variant.width}mm
-                                  {variant.has_coping && ` • ${variant.coping_type} coping`}
-                                  {variant.coping_layout && ` • ${variant.coping_layout.metadata.total_pavers} pavers`}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {variant.status === 'published' 
-                                    ? `Published ${new Date(variant.published_at!).toLocaleDateString()}`
-                                    : `Last edited ${new Date(variant.updated_at).toLocaleDateString()}`
-                                  }
-                                </p>
-                              </div>
 
-                              <div className="flex gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => navigate(`/admin/pool-library/${variant.id}/edit`)}
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => navigate(`/admin/pool-library/${variant.id}/preview`)}
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setGeneratingVariant(variant)}
-                                  title="Generate new coping variant"
-                                >
-                                  <Layers className="h-4 w-4 mr-2" />
-                                  Coping
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => toast.info('Pool duplication coming soon')}
-                                  disabled
-                                >
-                                  <Copy className="w-4 h-4" />
-                                </Button>
-                                {variant.status === 'draft' && (
-                                  <>
+                                <div className="flex gap-2">
+                                  {!isHardcoded && (
+                                    <>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => navigate(`/admin/pool-library/${variant.id}/edit`)}
+                                      >
+                                        <Edit2 className="w-4 h-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => navigate(`/admin/pool-library/${variant.id}/preview`)}
+                                      >
+                                        <Eye className="w-4 h-4" />
+                                      </Button>
+                                    </>
+                                  )}
+                                  {!isHardcoded && (
                                     <Button
-                                      variant="ghost"
+                                      variant="outline"
                                       size="sm"
-                                      onClick={() => handlePublish(variant.id)}
+                                      onClick={() => setGeneratingVariant(variant as any)}
+                                      title="Generate new coping variant"
                                     >
-                                      Publish
+                                      <Layers className="h-4 w-4 mr-2" />
+                                      Coping
                                     </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleDelete(variant.id)}
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                  </>
-                                )}
-                                {variant.status === 'published' && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleUnpublish(variant.id)}
-                                  >
-                                    Unpublish
-                                  </Button>
-                                )}
+                                  )}
+                                  {!isHardcoded && (
+                                    <>
+                                      {variant.status === 'draft' && (
+                                        <>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handlePublish(variant.id)}
+                                          >
+                                            Publish
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleDelete(variant.id)}
+                                          >
+                                            <Trash2 className="w-4 h-4" />
+                                          </Button>
+                                        </>
+                                      )}
+                                      {variant.status === 'published' && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => handleUnpublish(variant.id)}
+                                        >
+                                          Unpublish
+                                        </Button>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          </Card>
-                        ))}
+                            </Card>
+                          );
+                        })}
                       </div>
                     </CollapsibleContent>
                   </Card>
