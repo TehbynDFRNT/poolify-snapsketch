@@ -55,11 +55,19 @@ export default function PoolPreview() {
           <div className="flex justify-between items-start">
             <div>
               <h1 className="text-3xl font-bold">{pool.pool_name}</h1>
-              <p className="text-xl text-muted-foreground">{pool.variant_name}</p>
               <div className="flex gap-4 mt-2 text-sm text-muted-foreground">
                 <span>
-                  {pool.length}mm × {pool.width}mm 
-                  ({(pool.length / 1000).toFixed(1)}m × {(pool.width / 1000).toFixed(1)}m)
+                  {(() => {
+                    const outline = (pool.outline as any) || [];
+                    if (!outline.length) return 'Size N/A';
+                    const minX = Math.min(...outline.map((p:any) => p.x));
+                    const maxX = Math.max(...outline.map((p:any) => p.x));
+                    const minY = Math.min(...outline.map((p:any) => p.y));
+                    const maxY = Math.max(...outline.map((p:any) => p.y));
+                    const length = maxX - minX;
+                    const width = maxY - minY;
+                    return `${length}mm × ${width}mm (${(length / 1000).toFixed(1)}m × ${(width / 1000).toFixed(1)}m)`;
+                  })()}
                 </span>
                 <span>•</span>
                 <span className={
@@ -85,14 +93,14 @@ export default function PoolPreview() {
         <div className="bg-card rounded-lg shadow p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">Visual Preview</h2>
           <CopingPreview 
-            poolOutline={pool.outline_points as any}
+            poolOutline={pool.outline as any}
             copingLayout={pool.coping_layout as any}
             width={1000}
             height={700}
           />
         </div>
 
-        {pool.has_coping && pool.coping_layout && (
+        {pool.coping_layout && (
           <div className="bg-card rounded-lg shadow p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">Paver Breakdown</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -133,9 +141,6 @@ export default function PoolPreview() {
               <div className="p-3 bg-muted rounded">
                 <span className="font-medium">Coping Width:</span> {pool.coping_width}mm
               </div>
-              <div className="p-3 bg-muted rounded">
-                <span className="font-medium">Coping Type:</span> {pool.coping_type || 'None'}
-              </div>
             </div>
           </div>
         )}
@@ -145,11 +150,11 @@ export default function PoolPreview() {
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-muted-foreground">Outline Points:</span>
-              <span className="ml-2 font-medium">{(pool.outline_points as any)?.length || 0}</span>
+              <span className="ml-2 font-medium">{(pool.outline as any)?.length || 0}</span>
             </div>
             <div>
-              <span className="text-muted-foreground">Has Coping:</span>
-              <span className="ml-2 font-medium">{pool.has_coping ? 'Yes' : 'No'}</span>
+              <span className="text-muted-foreground">Status:</span>
+              <span className="ml-2 font-medium">{pool.status}</span>
             </div>
             {pool.features && (pool.features as any[]).length > 0 && (
               <div className="col-span-2">
