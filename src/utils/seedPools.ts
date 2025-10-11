@@ -21,6 +21,7 @@ export async function seedPoolsIfEmpty(): Promise<{ seeded: boolean; count: numb
       shallow_end_position: { x: p.shallowEnd.x, y: p.shallowEnd.y, label: p.shallowEnd.label },
       deep_end_position: { x: p.deepEnd.x, y: p.deepEnd.y, label: p.deepEnd.label },
       features: [],
+      has_coping: false,
       coping_width: 400,
       grout_width: 5,
       status: "published" as const,
