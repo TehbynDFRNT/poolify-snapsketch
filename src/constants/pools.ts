@@ -116,5 +116,101 @@ export const POOL_LIBRARY: Pool[] = [
     shallowEnd: {x: 150, y: 1250, label: "SE"},
     deepEnd: {x: 6850, y: 1250, label: "DE"},
     color: '#3B82F6'
+  },
+
+  // 7. Grandeur 8.25 × 4.0m
+  {
+    id: "grandeur-8.25x4",
+    name: "Grandeur 8.25 × 4.0m",
+    length: 8250,
+    width: 4000,
+    outline: [
+      {x: 0, y: 0},
+      {x: 8250, y: 0},
+      {x: 8250, y: 3600},
+      {x: 7850, y: 4000},
+      {x: 0, y: 4000},
+      {x: 0, y: 0}
+    ],
+    shallowEnd: {x: 150, y: 2000, label: "SE"},
+    deepEnd: {x: 8100, y: 2000, label: "DE"},
+    color: '#3B82F6'
+  },
+
+  // 8. Florentina 6.5 × 2.5m
+  {
+    id: "florentina-6.5x2.5",
+    name: "Florentina 6.5 × 2.5m",
+    length: 6500,
+    width: 2500,
+    outline: [
+      {x: 0, y: 0},
+      {x: 6500, y: 0},
+      {x: 6500, y: 2500},
+      {x: 0, y: 2500},
+      {x: 0, y: 0}
+    ],
+    shallowEnd: {x: 150, y: 1250, label: "SE"},
+    deepEnd: {x: 6350, y: 1250, label: "DE"},
+    color: '#3B82F6'
+  },
+
+  // 9. Europa 7.5 × 3.65m
+  {
+    id: "europa-7.5x3.65",
+    name: "Europa 7.5 × 3.65m",
+    length: 7500,
+    width: 3650,
+    outline: [
+      {x: 0, y: 300},
+      {x: 300, y: 0},
+      {x: 7200, y: 0},
+      {x: 7500, y: 300},
+      {x: 7500, y: 3350},
+      {x: 7200, y: 3650},
+      {x: 300, y: 3650},
+      {x: 0, y: 3350},
+      {x: 0, y: 300}
+    ],
+    shallowEnd: {x: 150, y: 1825, label: "SE"},
+    deepEnd: {x: 7350, y: 1825, label: "DE"},
+    color: '#3B82F6'
+  },
+
+  // 10. Empire 6.0 × 3.0m
+  {
+    id: "empire-6x3",
+    name: "Empire 6.0 × 3.0m",
+    length: 6000,
+    width: 3000,
+    outline: [
+      {x: 0, y: 0},
+      {x: 6000, y: 0},
+      {x: 6000, y: 2600},
+      {x: 5600, y: 3000},
+      {x: 0, y: 3000},
+      {x: 0, y: 0}
+    ],
+    shallowEnd: {x: 150, y: 1500, label: "SE"},
+    deepEnd: {x: 5850, y: 1500, label: "DE"},
+    color: '#3B82F6'
+  },
+
+  // 11. Elysian 8.3 × 3.3m
+  {
+    id: "elysian-8.3x3.3",
+    name: "Elysian 8.3 × 3.3m",
+    length: 8300,
+    width: 3300,
+    outline: [
+      {x: 0, y: 0},
+      {x: 8300, y: 0},
+      {x: 8300, y: 3300},
+      {x: 0, y: 3300},
+      {x: 0, y: 0}
+    ],
+    shallowEnd: {x: 150, y: 1650, label: "SE"},
+    deepEnd: {x: 8150, y: 1650, label: "DE"},
+    color: '#3B82F6'
   }
 ];
