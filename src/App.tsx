@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./hooks/useAuth";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
 import { CloudHomePage } from "./components/CloudHomePage";
 import { DesignCanvas } from "./components/DesignCanvas";
 import { InstallPrompt } from "./components/InstallPrompt";
@@ -18,10 +17,6 @@ import { ProfileSettings } from "./pages/ProfileSettings";
 import { TeamManagement } from "./pages/TeamManagement";
 import { LandingPage } from "./pages/LandingPage";
 import NotFound from "./pages/NotFound";
-import PoolLibrary from "./pages/admin/PoolLibrary";
-import PoolEditor from "./pages/admin/PoolEditor";
-import PoolPreview from "./pages/admin/PoolPreview";
-import UserManagement from "./pages/admin/UserManagement";
 
 const queryClient = new QueryClient();
 
@@ -60,31 +55,6 @@ const App = () => (
               <ProtectedRoute>
                 <TeamManagement />
               </ProtectedRoute>
-            } />
-            <Route path="/admin/pool-library" element={
-              <AdminProtectedRoute>
-                <PoolLibrary />
-              </AdminProtectedRoute>
-            } />
-            <Route path="/admin/pool-library/new" element={
-              <AdminProtectedRoute>
-                <Navigate to="/admin/pool-library" replace />
-              </AdminProtectedRoute>
-            } />
-            <Route path="/admin/pool-library/:id/edit" element={
-              <AdminProtectedRoute>
-                <PoolEditor />
-              </AdminProtectedRoute>
-            } />
-            <Route path="/admin/pool-library/:id/preview" element={
-              <AdminProtectedRoute>
-                <PoolPreview />
-              </AdminProtectedRoute>
-            } />
-            <Route path="/admin/users" element={
-              <AdminProtectedRoute>
-                <UserManagement />
-              </AdminProtectedRoute>
             } />
             
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

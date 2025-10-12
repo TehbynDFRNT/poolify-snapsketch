@@ -130,15 +130,6 @@ export const PavingAreaComponent = ({ component, isSelected, onSelect, onDelete 
         })}
       </Group>
 
-      {/* Invisible hit area for selection */}
-      <Line
-        points={boundary.flatMap(p => [p.x, p.y])}
-        closed
-        fill="rgba(255,255,255,0.01)"
-        strokeEnabled={false}
-        listening={true}
-      />
-
       {/* Boundary outline - render last so it's on top */}
       <Line
         points={boundary.flatMap(p => [p.x, p.y])}

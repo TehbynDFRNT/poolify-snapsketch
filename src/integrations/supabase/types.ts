@@ -102,126 +102,6 @@ export type Database = {
         }
         Relationships: []
       }
-      pool_activity_log: {
-        Row: {
-          action: string
-          changes: Json | null
-          created_at: string | null
-          id: string
-          pool_variant_id: string | null
-          user_id: string | null
-        }
-        Insert: {
-          action: string
-          changes?: Json | null
-          created_at?: string | null
-          id?: string
-          pool_variant_id?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          action?: string
-          changes?: Json | null
-          created_at?: string | null
-          id?: string
-          pool_variant_id?: string | null
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pool_activity_log_pool_variant_id_fkey"
-            columns: ["pool_variant_id"]
-            isOneToOne: false
-            referencedRelation: "pool_variants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pool_activity_log_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      pool_variants: {
-        Row: {
-          coping_layout: Json | null
-          coping_width: number | null
-          created_at: string | null
-          created_by: string | null
-          deep_end_position: Json | null
-          features: Json | null
-          grout_width: number | null
-          id: string
-          notes: string | null
-          outline: Json
-          paver_size: string | null
-          pool_name: string
-          published_at: string | null
-          published_by: string | null
-          shallow_end_position: Json | null
-          sort_order: number | null
-          status: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          coping_layout?: Json | null
-          coping_width?: number | null
-          created_at?: string | null
-          created_by?: string | null
-          deep_end_position?: Json | null
-          features?: Json | null
-          grout_width?: number | null
-          id?: string
-          notes?: string | null
-          outline: Json
-          paver_size?: string | null
-          pool_name: string
-          published_at?: string | null
-          published_by?: string | null
-          shallow_end_position?: Json | null
-          sort_order?: number | null
-          status?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          coping_layout?: Json | null
-          coping_width?: number | null
-          created_at?: string | null
-          created_by?: string | null
-          deep_end_position?: Json | null
-          features?: Json | null
-          grout_width?: number | null
-          id?: string
-          notes?: string | null
-          outline?: Json
-          paver_size?: string | null
-          pool_name?: string
-          published_at?: string | null
-          published_by?: string | null
-          shallow_end_position?: Json | null
-          sort_order?: number | null
-          status?: string | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pool_variants_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pool_variants_published_by_fkey"
-            columns: ["published_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -356,10 +236,6 @@ export type Database = {
           has_access: boolean
           permission: Database["public"]["Enums"]["share_permission"]
         }[]
-      }
-      is_admin: {
-        Args: { _user_id: string }
-        Returns: boolean
       }
     }
     Enums: {
