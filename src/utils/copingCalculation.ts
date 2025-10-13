@@ -114,21 +114,14 @@ const calculatePavers = (
   // CRITICAL: If cut pavers would be too small (< 200mm each), remove one full paver
   // to create properly sized cut pavers instead of tiny slivers
   const MIN_CUT_PAVER_SIZE = 200; // Minimum 200mm per cut paver
-  if (middleGap > 0 && middleGap < MIN_CUT_PAVER_SIZE * 2) {
-    // Try to remove a middle full paver first
-    if (middleFullPavers > 0) {
-      middleFullPavers--;
-      fullPavers--;
-      groutLines--;
-      middleGap += paverSize + GROUT_LINE_WIDTH;
-    } 
-    // If no middle pavers, remove one from corners instead
-    else if (fullPavers > 0) {
-      fullPavers--;
-      groutLines = fullPavers > 0 ? fullPavers - 1 : 0;
-      spaceUsed = (fullPavers * paverSize) + (groutLines * GROUT_LINE_WIDTH);
-      middleGap = dimension - spaceUsed;
-    }
+  // Keep removing middle pavers until cuts are at least 200mm each
+  // Corner pavers are NEVER removed - they must stay full size for symmetry
+  const minRequired = MIN_CUT_PAVER_SIZE * 2 + GROUT_LINE_WIDTH; // 405mm total
+  while (middleGap > 0 && middleGap < minRequired && middleFullPavers > 0) {
+    middleFullPavers--;
+    fullPavers--;
+    groutLines--;
+    middleGap += paverSize + GROUT_LINE_WIDTH;
   }
   
   return { 
