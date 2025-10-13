@@ -27,7 +27,10 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
 
   // Calculate coping if enabled
   const showCoping = component.properties.showCoping ?? false;
-  const copingCalc = showCoping && poolData ? calculatePoolCoping(poolData) : null;
+  const copingConfig = component.properties.copingConfig;
+  const copingCalc = showCoping && poolData 
+    ? (component.properties.copingCalculation || calculatePoolCoping(poolData, copingConfig))
+    : null;
 
   const handleDragEnd = (e: any) => {
     const newPos = { x: e.target.x(), y: e.target.y() };

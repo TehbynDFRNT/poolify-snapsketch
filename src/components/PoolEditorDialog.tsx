@@ -5,12 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCreatePoolVariant, useUpdatePoolVariant, PoolVariant } from '@/hooks/usePoolVariants';
-import { calculatePoolCoping } from '@/utils/copingCalculation';
+import { calculatePoolCoping, DEFAULT_COPING_OPTIONS, CopingConfig } from '@/utils/copingCalculation';
 import { Calculator } from 'lucide-react';
+import { Card } from '@/components/ui/card';
 
 interface PoolEditorDialogProps {
   open: boolean;
@@ -24,15 +23,12 @@ export const PoolEditorDialog = ({ open, onOpenChange, pool }: PoolEditorDialogP
   const [width, setWidth] = useState('');
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState<'draft' | 'published'>('draft');
-  const [enableCoping, setEnableCoping] = useState(false);
-  const [paverSize, setPaverSize] = useState('400x400');
-  const [copingWidth, setCopingWidth] = useState('400');
-  const [groutWidth, setGroutWidth] = useState('5');
   const [shallowX, setShallowX] = useState('');
   const [shallowY, setShallowY] = useState('');
   const [deepX, setDeepX] = useState('');
   const [deepY, setDeepY] = useState('');
-  const [copingLayout, setCopingLayout] = useState<any>(null);
+  const [copingOptions, setCopingOptions] = useState<any[]>(DEFAULT_COPING_OPTIONS);
+  const [calculatedLayouts, setCalculatedLayouts] = useState<any[]>([]);
 
   const createMutation = useCreatePoolVariant();
   const updateMutation = useUpdatePoolVariant();
@@ -42,11 +38,6 @@ export const PoolEditorDialog = ({ open, onOpenChange, pool }: PoolEditorDialogP
       setPoolName(pool.pool_name);
       setNotes(pool.notes || '');
       setStatus((pool.status as 'draft' | 'published') || 'draft');
-      setEnableCoping(!!pool.coping_layout);
-      setPaverSize(pool.paver_size || '400x400');
-      setCopingWidth(String(pool.coping_width || 400));
-      setGroutWidth(String(pool.grout_width || 5));
-      setCopingLayout(pool.coping_layout);
       
       if (pool.shallow_end_position) {
         setShallowX(String(pool.shallow_end_position.x));
@@ -55,6 +46,13 @@ export const PoolEditorDialog = ({ open, onOpenChange, pool }: PoolEditorDialogP
       if (pool.deep_end_position) {
         setDeepX(String(pool.deep_end_position.x));
         setDeepY(String(pool.deep_end_position.y));
+      }
+
+      // Load coping options from pool
+      if (pool.coping_options && Array.isArray(pool.coping_options) && pool.coping_options.length > 0) {
+        setCopingOptions(pool.coping_options as any[]);
+      } else {
+        setCopingOptions(DEFAULT_COPING_OPTIONS);
       }
 
       // Calculate dimensions from outline
@@ -73,15 +71,12 @@ export const PoolEditorDialog = ({ open, onOpenChange, pool }: PoolEditorDialogP
       setWidth('');
       setNotes('');
       setStatus('draft');
-      setEnableCoping(false);
-      setPaverSize('400x400');
-      setCopingWidth('400');
-      setGroutWidth('5');
       setShallowX('');
       setShallowY('');
       setDeepX('');
       setDeepY('');
-      setCopingLayout(null);
+      setCopingOptions(DEFAULT_COPING_OPTIONS);
+      setCalculatedLayouts([]);
     }
   }, [pool, open]);
 
@@ -99,7 +94,7 @@ export const PoolEditorDialog = ({ open, onOpenChange, pool }: PoolEditorDialogP
     ];
   };
 
-  const handleCalculateCoping = () => {
+  const handleCalculateAllCoping = () => {
     const l = parseFloat(length);
     const w = parseFloat(width);
     
@@ -118,8 +113,13 @@ export const PoolEditorDialog = ({ open, onOpenChange, pool }: PoolEditorDialogP
       color: '#3B82F6'
     };
 
-    const calculation = calculatePoolCoping(poolData);
-    setCopingLayout(calculation);
+    // Calculate layouts for all coping options
+    const layouts = copingOptions.map(config => ({
+      config,
+      calculation: calculatePoolCoping(poolData, config as CopingConfig)
+    }));
+
+    setCalculatedLayouts(layouts);
   };
 
   const handleSave = async () => {
@@ -141,10 +141,7 @@ export const PoolEditorDialog = ({ open, onOpenChange, pool }: PoolEditorDialogP
       deep_end_position: deepPos,
       notes,
       status,
-      coping_width: enableCoping ? parseInt(copingWidth) : null,
-      grout_width: enableCoping ? parseInt(groutWidth) : null,
-      paver_size: enableCoping ? paverSize : null,
-      coping_layout: enableCoping ? copingLayout : null,
+      coping_options: copingOptions,
       features: [],
     };
 
@@ -171,7 +168,7 @@ export const PoolEditorDialog = ({ open, onOpenChange, pool }: PoolEditorDialogP
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="basic">Basic Info</TabsTrigger>
             <TabsTrigger value="positions">Positions</TabsTrigger>
-            <TabsTrigger value="coping">Coping</TabsTrigger>
+            <TabsTrigger value="coping">Coping Options</TabsTrigger>
           </TabsList>
 
           <TabsContent value="basic" className="space-y-4">
@@ -301,78 +298,55 @@ export const PoolEditorDialog = ({ open, onOpenChange, pool }: PoolEditorDialogP
           </TabsContent>
 
           <TabsContent value="coping" className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Switch
-                id="enable-coping"
-                checked={enableCoping}
-                onCheckedChange={setEnableCoping}
-              />
-              <Label htmlFor="enable-coping" className="cursor-pointer">
-                Enable pool coping
-              </Label>
+            <div>
+              <Label className="text-base font-semibold">Default Coping Options</Label>
+              <p className="text-sm text-muted-foreground mt-1">
+                This pool will have 3 standard coping configurations available
+              </p>
             </div>
 
-            {enableCoping && (
-              <>
-                <div>
-                  <Label htmlFor="paver-size">Paver Size</Label>
-                  <Select value={paverSize} onValueChange={setPaverSize}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="400x400">400×400mm</SelectItem>
-                      <SelectItem value="400x600">400×600mm</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="coping-width">Coping Width (mm)</Label>
-                    <Input
-                      id="coping-width"
-                      type="number"
-                      value={copingWidth}
-                      onChange={(e) => setCopingWidth(e.target.value)}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="grout-width">Grout Width (mm)</Label>
-                    <Input
-                      id="grout-width"
-                      type="number"
-                      value={groutWidth}
-                      onChange={(e) => setGroutWidth(e.target.value)}
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleCalculateCoping}
-                  className="w-full"
-                >
-                  <Calculator className="w-4 h-4 mr-2" />
-                  Calculate Coping Layout
-                </Button>
-
-                {copingLayout && (
-                  <div className="p-4 bg-muted rounded-lg">
-                    <p className="text-sm font-semibold mb-2">Coping Summary:</p>
-                    <div className="text-sm space-y-1">
-                      <p>Total Pavers: {copingLayout.totalPavers}</p>
-                      <p>Total Area: {copingLayout.totalArea.toFixed(2)} m²</p>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Deep End: {copingLayout.deepEnd.fullPavers} full + {copingLayout.deepEnd.partialPavers} partial
+            <div className="space-y-3">
+              {copingOptions.map((option, idx) => (
+                <Card key={option.id} className="p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{option.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Tile: {option.tile.along}×{option.tile.inward}mm | 
+                        Rows: SE={option.rows.shallow}, Sides={option.rows.sides}, DE={option.rows.deep}
                       </p>
                     </div>
+                    {calculatedLayouts[idx] && (
+                      <div className="text-right text-sm">
+                        <p className="font-semibold">{calculatedLayouts[idx].calculation.totalArea.toFixed(2)} m²</p>
+                        <p className="text-xs text-muted-foreground">
+                          {calculatedLayouts[idx].calculation.totalPavers} pavers
+                        </p>
+                      </div>
+                    )}
                   </div>
-                )}
-              </>
+                </Card>
+              ))}
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCalculateAllCoping}
+              className="w-full"
+              disabled={!length || !width}
+            >
+              <Calculator className="w-4 h-4 mr-2" />
+              Calculate All Coping Layouts
+            </Button>
+
+            {calculatedLayouts.length > 0 && (
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-sm font-semibold mb-2">All coping options calculated successfully!</p>
+                <p className="text-xs text-muted-foreground">
+                  Users will be able to select from these 3 configurations when adding the pool.
+                </p>
+              </div>
             )}
           </TabsContent>
         </Tabs>

@@ -147,6 +147,7 @@ export type Database = {
       pool_variants: {
         Row: {
           coping_layout: Json | null
+          coping_options: Json | null
           coping_width: number | null
           created_at: string | null
           created_by: string | null
@@ -167,6 +168,7 @@ export type Database = {
         }
         Insert: {
           coping_layout?: Json | null
+          coping_options?: Json | null
           coping_width?: number | null
           created_at?: string | null
           created_by?: string | null
@@ -187,6 +189,7 @@ export type Database = {
         }
         Update: {
           coping_layout?: Json | null
+          coping_options?: Json | null
           coping_width?: number | null
           created_at?: string | null
           created_by?: string | null

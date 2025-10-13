@@ -86,6 +86,7 @@ export interface ComponentProperties {
   // Pool
   poolId?: string;
   showCoping?: boolean;
+  copingConfig?: any;
   copingCalculation?: CopingCalculation;
   
   // Paver

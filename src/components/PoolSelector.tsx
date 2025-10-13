@@ -3,20 +3,24 @@ import { Pool } from '@/constants/pools';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { X, Loader2 } from 'lucide-react';
-import { calculatePoolCoping } from '@/utils/copingCalculation';
+import { calculatePoolCoping, CopingConfig } from '@/utils/copingCalculation';
 import { usePublishedPools } from '@/hooks/usePoolVariants';
 
 interface PoolSelectorProps {
-  onSelect: (pool: Pool, copingOptions: { showCoping: boolean; copingCalculation?: any }) => void;
+  onSelect: (pool: Pool, copingOptions: { showCoping: boolean; copingConfig?: CopingConfig; copingCalculation?: any }) => void;
   onClose: () => void;
 }
 
 export const PoolSelector = ({ onSelect, onClose }: PoolSelectorProps) => {
   const { data: publishedPools, isLoading } = usePublishedPools();
   const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
-  const [enableCoping, setEnableCoping] = useState(true);
+  const [selectedCopingId, setSelectedCopingId] = useState<string>('none');
+
+  const selectedPool = publishedPools?.find(p => p.id === selectedPoolId);
+  const copingOptions = (selectedPool?.coping_options as CopingConfig[]) || [];
+  const selectedCoping = copingOptions.find(opt => opt.id === selectedCopingId);
 
   const handleSelect = () => {
     if (selectedPoolId && publishedPools) {
@@ -38,9 +42,14 @@ export const PoolSelector = ({ onSelect, onClose }: PoolSelectorProps) => {
           color: '#3B82F6'
         };
         
-        const copingCalculation = enableCoping ? calculatePoolCoping(pool) : undefined;
+        const showCoping = selectedCopingId !== 'none';
+        const copingCalculation = showCoping && selectedCoping 
+          ? calculatePoolCoping(pool, selectedCoping) 
+          : undefined;
+        
         onSelect(pool, {
-          showCoping: enableCoping,
+          showCoping,
+          copingConfig: selectedCoping,
           copingCalculation,
         });
         onClose();
@@ -74,37 +83,53 @@ export const PoolSelector = ({ onSelect, onClose }: PoolSelectorProps) => {
             </p>
           </div>
         ) : (
-          <RadioGroup value={selectedPoolId || ''} onValueChange={setSelectedPoolId}>
-            <div className="space-y-2 max-h-[400px] overflow-y-auto">
-              {publishedPools.map(pool => (
-                <div
-                  key={pool.id}
-                  className="flex items-center gap-3 p-3 border rounded hover:bg-accent cursor-pointer transition-colors"
-                  onClick={() => setSelectedPoolId(pool.id)}
-                >
-                  <RadioGroupItem value={pool.id} id={pool.id} />
-                  <Label htmlFor={pool.id} className="font-medium cursor-pointer flex-1">
-                    {pool.pool_name}
-                  </Label>
-                </div>
-              ))}
-            </div>
-          </RadioGroup>
-        )}
+          <>
+            <RadioGroup value={selectedPoolId || ''} onValueChange={setSelectedPoolId}>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {publishedPools.map(pool => (
+                  <div
+                    key={pool.id}
+                    className="flex items-center gap-3 p-3 border rounded hover:bg-accent cursor-pointer transition-colors"
+                    onClick={() => setSelectedPoolId(pool.id)}
+                  >
+                    <RadioGroupItem value={pool.id} id={pool.id} />
+                    <Label htmlFor={pool.id} className="font-medium cursor-pointer flex-1">
+                      {pool.pool_name}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </RadioGroup>
 
-        <div className="flex items-center gap-2 mt-4 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-          <Checkbox
-            id="enableCoping"
-            checked={enableCoping}
-            onCheckedChange={(checked) => setEnableCoping(checked as boolean)}
-          />
-          <label htmlFor="enableCoping" className="text-sm cursor-pointer flex-1">
-            Add pool coping (400×400mm pavers)
-            <div className="text-xs text-muted-foreground mt-0.5">
-              1 row on SE + sides, 2 rows on DE
-            </div>
-          </label>
-        </div>
+            {selectedPool && copingOptions.length > 0 && (
+              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                <Label htmlFor="coping-type" className="text-sm font-medium mb-2 block">
+                  Coping Type
+                </Label>
+                <Select value={selectedCopingId} onValueChange={setSelectedCopingId}>
+                  <SelectTrigger id="coping-type" className="w-full bg-background">
+                    <SelectValue placeholder="Select coping type" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background">
+                    <SelectItem value="none">No Coping</SelectItem>
+                    {copingOptions.map(opt => (
+                      <SelectItem key={opt.id} value={opt.id}>
+                        {opt.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                {selectedCoping && (
+                  <div className="text-xs text-muted-foreground mt-2">
+                    Tile: {selectedCoping.tile.along}×{selectedCoping.tile.inward}mm | 
+                    Rows: SE={selectedCoping.rows.shallow}, Sides={selectedCoping.rows.sides}, DE={selectedCoping.rows.deep}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
 
         <div className="flex gap-3 mt-6">
           <Button 
