@@ -81,6 +81,7 @@ const calculatePavers = (
 ): { 
   fullPavers: number; 
   paversPerCorner: number;
+  middleFullPavers: number;
   middleGap: number; 
   groutLines: number;
   effectiveUnit: number;
@@ -92,19 +93,28 @@ const calculatePavers = (
   const paversPerCorner = Math.floor((dimension / 2) / effectiveUnit);
   
   // Total full pavers from both corners
-  const fullPavers = paversPerCorner * 2;
+  let fullPavers = paversPerCorner * 2;
   
   // Calculate space used by pavers and grout lines
-  // Number of grout lines = fullPavers - 1 (one less than pavers)
-  const groutLines = fullPavers > 0 ? fullPavers - 1 : 0;
-  const spaceUsed = (fullPavers * paverSize) + (groutLines * GROUT_LINE_WIDTH);
+  let groutLines = fullPavers > 0 ? fullPavers - 1 : 0;
+  let spaceUsed = (fullPavers * paverSize) + (groutLines * GROUT_LINE_WIDTH);
   
-  // Middle gap is what's left
-  const middleGap = dimension - spaceUsed;
+  // Calculate initial middle gap
+  let middleGap = dimension - spaceUsed;
+  
+  // Check if we can fit more full pavers in the middle gap
+  let middleFullPavers = 0;
+  while (middleGap >= paverSize) {
+    middleFullPavers++;
+    fullPavers++;
+    groutLines++; // Add grout line for the new paver
+    middleGap -= paverSize + GROUT_LINE_WIDTH;
+  }
   
   return { 
     fullPavers, 
     paversPerCorner,
+    middleFullPavers,
     middleGap, 
     groutLines,
     effectiveUnit
@@ -122,7 +132,7 @@ const generatePaverPositions = (
   rows: number
 ): CopingPaver[] => {
   const positions: CopingPaver[] = [];
-  const { fullPavers, paversPerCorner, middleGap, effectiveUnit } = calculatePavers(length, paverSize);
+  const { fullPavers, paversPerCorner, middleFullPavers, middleGap, effectiveUnit } = calculatePavers(length, paverSize);
   
   for (let row = 0; row < rows; row++) {
     // Place pavers from LEFT/TOP corner working inward
@@ -139,6 +149,19 @@ const generatePaverPositions = (
       });
     }
     
+    // Place full pavers in the middle (if any fit)
+    let middleStart = paversPerCorner * effectiveUnit;
+    for (let i = 0; i < middleFullPavers; i++) {
+      positions.push({
+        x: startX + (isHorizontal ? middleStart : row * paverWidth),
+        y: startY + (isHorizontal ? row * paverWidth : middleStart),
+        width: isHorizontal ? paverSize : paverWidth,
+        height: isHorizontal ? paverWidth : paverSize,
+        isPartial: false,
+      });
+      middleStart += effectiveUnit;
+    }
+    
     // Place pavers from RIGHT/BOTTOM corner working inward
     for (let i = 0; i < paversPerCorner; i++) {
       // Start from the far end and work backwards
@@ -153,10 +176,8 @@ const generatePaverPositions = (
       });
     }
     
-    // Fill middle gap with cut paver(s) if gap exists and is significant
+    // Fill remaining middle gap with cut paver if gap exists
     if (middleGap > 0) {
-      const middleStart = paversPerCorner * effectiveUnit;
-      
       positions.push({
         x: startX + (isHorizontal ? middleStart : row * paverWidth),
         y: startY + (isHorizontal ? row * paverWidth : middleStart),
