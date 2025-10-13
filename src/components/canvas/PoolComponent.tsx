@@ -79,8 +79,8 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
               width={paver.width * scale}
               height={paver.height * scale}
               fill={paver.isPartial ? "#FCD34D" : "#9CA3AF"}
-              stroke="#6B7280"
-              strokeWidth={0.5}
+              stroke="#374151"
+              strokeWidth={2}
               dash={paver.isPartial ? [2, 2] : undefined}
               opacity={paver.isPartial ? 0.8 : 1}
             />
