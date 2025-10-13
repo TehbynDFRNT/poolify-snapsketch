@@ -111,9 +111,9 @@ const calculatePavers = (
     middleGap -= paverSize + GROUT_LINE_WIDTH;
   }
   
-  // CRITICAL: If cut pavers would be too small (< 100mm each), remove one full paver
+  // CRITICAL: If cut pavers would be too small (< 200mm each), remove one full paver
   // to create properly sized cut pavers instead of tiny slivers
-  const MIN_CUT_PAVER_SIZE = 100; // Minimum 100mm per cut paver
+  const MIN_CUT_PAVER_SIZE = 200; // Minimum 200mm per cut paver
   if (middleGap > 0 && middleGap < MIN_CUT_PAVER_SIZE * 2) {
     // Remove the last middle full paver to create bigger cut pavers
     if (middleFullPavers > 0) {
