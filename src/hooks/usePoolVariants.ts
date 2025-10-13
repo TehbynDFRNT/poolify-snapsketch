@@ -20,6 +20,7 @@ export interface PoolVariant {
   updated_at: string | null;
   published_at: string | null;
   sort_order: number | null;
+  zone_of_influence: Array<{x: number, y: number}> | null;
 }
 
 export const usePoolVariants = () => {

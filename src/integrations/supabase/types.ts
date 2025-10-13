@@ -165,6 +165,7 @@ export type Database = {
           sort_order: number | null
           status: string | null
           updated_at: string | null
+          zone_of_influence: Json | null
         }
         Insert: {
           coping_layout?: Json | null
@@ -186,6 +187,7 @@ export type Database = {
           sort_order?: number | null
           status?: string | null
           updated_at?: string | null
+          zone_of_influence?: Json | null
         }
         Update: {
           coping_layout?: Json | null
@@ -207,6 +209,7 @@ export type Database = {
           sort_order?: number | null
           status?: string | null
           updated_at?: string | null
+          zone_of_influence?: Json | null
         }
         Relationships: [
           {
