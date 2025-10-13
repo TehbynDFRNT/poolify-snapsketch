@@ -176,13 +176,27 @@ const generatePaverPositions = (
       });
     }
     
-    // Fill remaining middle gap with cut paver if gap exists
+    // Split remaining middle gap into TWO equal cut pavers if gap exists
     if (middleGap > 0) {
+      const halfGap = middleGap / 2;
+      
+      // First cut paver (left/top side)
+      const leftCutPosition = paversPerCorner * effectiveUnit;
       positions.push({
-        x: startX + (isHorizontal ? middleStart : row * paverWidth),
-        y: startY + (isHorizontal ? row * paverWidth : middleStart),
-        width: isHorizontal ? middleGap : paverWidth,
-        height: isHorizontal ? paverWidth : middleGap,
+        x: startX + (isHorizontal ? leftCutPosition : row * paverWidth),
+        y: startY + (isHorizontal ? row * paverWidth : leftCutPosition),
+        width: isHorizontal ? halfGap : paverWidth,
+        height: isHorizontal ? paverWidth : halfGap,
+        isPartial: true,
+      });
+      
+      // Second cut paver (right/bottom side) - placed before right corner pavers
+      const rightCutPosition = length - (paversPerCorner * effectiveUnit) - halfGap;
+      positions.push({
+        x: startX + (isHorizontal ? rightCutPosition : row * paverWidth),
+        y: startY + (isHorizontal ? row * paverWidth : rightCutPosition),
+        width: isHorizontal ? halfGap : paverWidth,
+        height: isHorizontal ? paverWidth : halfGap,
         isPartial: true,
       });
     }
@@ -292,11 +306,12 @@ export const calculatePoolCoping = (pool: Pool, config?: CopingConfig): CopingCa
     leftSide.fullPavers + 
     rightSide.fullPavers;
   
+  // Each side with a gap gets TWO equal cut pavers per row
   const totalPartialPavers = 
-    (deepEnd.partialPaver ? rowsDeep : 0) +
-    (shallowEnd.partialPaver ? rowsShallow : 0) +
-    (leftSide.partialPaver ? rowsSides : 0) +
-    (rightSide.partialPaver ? rowsSides : 0);
+    (deepEnd.partialPaver ? rowsDeep * 2 : 0) +
+    (shallowEnd.partialPaver ? rowsShallow * 2 : 0) +
+    (leftSide.partialPaver ? rowsSides * 2 : 0) +
+    (rightSide.partialPaver ? rowsSides * 2 : 0);
   
   const totalPavers = totalFullPavers + totalPartialPavers;
   
