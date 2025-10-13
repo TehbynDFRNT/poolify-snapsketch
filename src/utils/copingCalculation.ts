@@ -1,22 +1,24 @@
 import { Pool } from '@/constants/pools';
 
-// Grout line width constant (5mm between all pavers)
-const GROUT_LINE_WIDTH = 5;
+// ──────────────────────────────────────────────────────────────────────────────
+// CONFIG
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const GROUT_MM = 5;            // grout between every adjacent paver
+export const MIN_CUT_MM = 200;        // minimum acceptable cut paver width
 
 export interface CopingConfig {
   id: string;
   name: string;
   tile: {
-    along: number; // mm - dimension along pool edge
-    inward: number; // mm - dimension extending from pool
+    along: number;   // mm (dimension that runs along each pool edge)
+    inward: number;  // mm (dimension that runs away from the waterline towards the deck)
   };
   rows: {
-    sides: number;
-    shallow: number;
-    deep: number;
+    sides: number;    // rows along each long side (left/right)
+    shallow: number;  // rows at the shallow end
+    deep: number;     // rows at the deep end
   };
-  cornerStrategy: 'corner-first';
-  balanceCuts: 'two-small-on-long-edges' | 'one-at-end';
 }
 
 export const DEFAULT_COPING_OPTIONS: CopingConfig[] = [
@@ -25,26 +27,70 @@ export const DEFAULT_COPING_OPTIONS: CopingConfig[] = [
     name: 'Coping 400×400',
     tile: { along: 400, inward: 400 },
     rows: { sides: 1, shallow: 1, deep: 2 },
-    cornerStrategy: 'corner-first',
-    balanceCuts: 'two-small-on-long-edges'
   },
   {
     id: 'coping-600x400',
     name: 'Coping 600×400',
     tile: { along: 600, inward: 400 },
     rows: { sides: 1, shallow: 1, deep: 2 },
-    cornerStrategy: 'corner-first',
-    balanceCuts: 'two-small-on-long-edges'
   },
   {
     id: 'coping-400x600',
     name: 'Coping 400×600',
     tile: { along: 400, inward: 600 },
     rows: { sides: 1, shallow: 1, deep: 2 },
-    cornerStrategy: 'corner-first',
-    balanceCuts: 'two-small-on-long-edges'
   }
 ];
+
+// ──────────────────────────────────────────────────────────────────────────────
+// NEW ALGORITHM TYPES
+// ──────────────────────────────────────────────────────────────────────────────
+
+export type CentreStrategy = 'perfect' | 'single_cut' | 'double_cut';
+
+export interface AxisPlan {
+  edgeLength: number;
+  tileAlong: number;
+  grout: number;
+  minCut: number;
+  paversPerCorner: number;
+  centreMode: CentreStrategy;
+  cutSizes: number[];
+  centreJoints: number;
+  removedFromEachSide: number;
+  gapBeforeCuts: number;
+  meetsMinCut: boolean;
+  fullPaversTotal: number;
+  partialPaversTotal: number;
+  paversTotal: number;
+}
+
+export interface EdgeTotals {
+  rows: number;
+  fullPavers: number;
+  partialPavers: number;
+  pavers: number;
+}
+
+export interface CopingPlan {
+  lengthAxis: AxisPlan;
+  widthAxis: AxisPlan;
+  leftSide: EdgeTotals;
+  rightSide: EdgeTotals;
+  shallowEnd: EdgeTotals;
+  deepEnd: EdgeTotals;
+  totalFullPavers: number;
+  totalPartialPavers: number;
+  totalPavers: number;
+  symmetry: {
+    sidesMirror: boolean;
+    endsMirror: boolean;
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// LEGACY TYPES (for backward compatibility with PoolComponent)
+// ──────────────────────────────────────────────────────────────────────────────
 
 export interface CopingPaver {
   x: number;
@@ -74,275 +120,362 @@ export interface CopingCalculation {
   totalArea: number;
 }
 
-// Corner-first strategy: calculate pavers from both corners inward with grout lines
-const calculatePavers = (
-  dimension: number, 
-  paverSize: number
-): { 
-  fullPavers: number; 
-  paversPerCorner: number;
-  middleFullPavers: number;
-  middleGap: number; 
-  groutLines: number;
-  effectiveUnit: number;
-} => {
-  // Effective unit includes paver size + grout line
-  const effectiveUnit = paverSize + GROUT_LINE_WIDTH;
-  
-  // Work from each corner inward (half the dimension per corner)
-  const paversPerCorner = Math.floor((dimension / 2) / effectiveUnit);
-  
-  // Total full pavers from both corners
-  let fullPavers = paversPerCorner * 2;
-  
-  // Calculate space used by pavers and grout lines
-  let groutLines = fullPavers > 0 ? fullPavers - 1 : 0;
-  let spaceUsed = (fullPavers * paverSize) + (groutLines * GROUT_LINE_WIDTH);
-  
-  // Calculate initial middle gap
-  let middleGap = dimension - spaceUsed;
-  
-  // Check if we can fit more full pavers in the middle gap
-  let middleFullPavers = 0;
-  while (middleGap >= paverSize) {
-    middleFullPavers++;
-    fullPavers++;
-    groutLines++; // Add grout line for the new paver
-    middleGap -= paverSize + GROUT_LINE_WIDTH;
-  }
-  
-  // CRITICAL: If cut pavers would be too small (< 200mm each), remove one full paver
-  // to create properly sized cut pavers instead of tiny slivers
-  const MIN_CUT_PAVER_SIZE = 200; // Minimum 200mm per cut paver
-  // Keep removing middle pavers until cuts are at least 200mm each
-  // Corner pavers are NEVER removed - they must stay full size for symmetry
-  const minRequired = MIN_CUT_PAVER_SIZE * 2 + GROUT_LINE_WIDTH; // 405mm total
-  while (middleGap > 0 && middleGap < minRequired && middleFullPavers > 0) {
-    middleFullPavers--;
-    fullPavers--;
-    groutLines--;
-    middleGap += paverSize + GROUT_LINE_WIDTH;
-  }
-  
-  return { 
-    fullPavers, 
-    paversPerCorner,
-    middleFullPavers,
-    middleGap, 
-    groutLines,
-    effectiveUnit
-  };
-};
+// ──────────────────────────────────────────────────────────────────────────────
+// CORE MATH (corner-first, centre-only cuts, mirrored)
+// ──────────────────────────────────────────────────────────────────────────────
 
-// Corner-first strategy: generate paver positions from corners inward with grout lines
+/**
+ * Plan a single axis (one edge, then mirrored to the opposite).
+ *
+ * Key definitions:
+ * - A = tileAlong
+ * - G = grout
+ * - U = A + G
+ * - p = number of full pavers placed from EACH corner towards centre
+ *
+ * We first place p full pavers from both corners (including the p-1 interior joints per side).
+ * The remaining central free space BEFORE any centre pieces is:
+ *   g0 = L - [2*p*A + 2*(p-1)*G] = L - 2*p*U + 2*G
+ *
+ * Centre requirements:
+ *   • perfect fit:          needs exactly 1 joint → g0 = 1*G
+ *   • single centred cut:   needs 2 joints + 1 cut → g0 = 2*G + c,  c ≥ MIN_CUT
+ *   • two equal centred cuts: needs 3 joints + 2 cuts → g0 = 3*G + 2*c,  c ≥ MIN_CUT
+ */
+export function planAxis(
+  edgeLength: number,
+  tileAlong: number,
+  grout: number = GROUT_MM,
+  minCut: number = MIN_CUT_MM
+): AxisPlan {
+  const A = tileAlong;
+  const G = grout;
+  const U = A + G;
+
+  const eps = 1; // 1 mm tolerance for "perfect" comparisons
+
+  // Choose p so that at least one centre joint (G) is always possible
+  const pInitial = Math.floor((edgeLength + G) / (2 * U));
+
+  let p = Math.max(0, pInitial);
+  let g0 = edgeLength - 2 * p * U + 2 * G;
+  let removed = 0;
+
+  // If g0 is too small to host a single cut, increase by removing pavers symmetrically
+  while (g0 > 0 && g0 < (2 * G + minCut) && p > 0) {
+    p -= 1;
+    removed += 1;
+    g0 += 2 * U;
+  }
+
+  // Decide centre strategy
+  let centreMode: CentreStrategy;
+  let cutSizes: number[] = [];
+  let centreJoints = 0;
+  let meetsMinCut = true;
+
+  if (Math.abs(g0 - G) <= eps) {
+    centreMode = 'perfect';
+    centreJoints = 1;
+    cutSizes = [];
+  } else if (g0 >= (3 * G + 2 * minCut)) {
+    // Two equal cuts
+    const c = (g0 - 3 * G) / 2;
+    const cLeft = Math.floor(c);
+    const cRight = Math.round(g0 - 3 * G - cLeft);
+    centreMode = 'double_cut';
+    centreJoints = 3;
+    cutSizes = [cLeft, cRight];
+    meetsMinCut = (cLeft >= minCut && cRight >= minCut);
+  } else if (g0 >= (2 * G + minCut)) {
+    // One centred cut
+    const c = g0 - 2 * G;
+    centreMode = 'single_cut';
+    centreJoints = 2;
+    cutSizes = [Math.round(c)];
+    meetsMinCut = (cutSizes[0] >= minCut);
+  } else {
+    // Edge case: fall back to single cut
+    const c = Math.max(0, g0 - 2 * G);
+    centreMode = 'single_cut';
+    centreJoints = 2;
+    cutSizes = [Math.round(c)];
+    meetsMinCut = (cutSizes[0] >= minCut);
+  }
+
+  const fullPaversTotal = 2 * p;
+  const partialPaversTotal = cutSizes.length;
+  const paversTotal = fullPaversTotal + partialPaversTotal;
+
+  return {
+    edgeLength,
+    tileAlong: A,
+    grout: G,
+    minCut,
+    paversPerCorner: p,
+    centreMode,
+    cutSizes,
+    centreJoints,
+    removedFromEachSide: removed,
+    gapBeforeCuts: Math.round(g0),
+    meetsMinCut,
+    fullPaversTotal,
+    partialPaversTotal,
+    paversTotal,
+  };
+}
+
+/**
+ * High-level planner for a rectangular pool with corner-first, centre-only cuts,
+ * mirrored left/right and shallow/deep.
+ */
+export function planPoolCoping(pool: Pool, config: CopingConfig): CopingPlan {
+  const { tile, rows } = config;
+  const { along: A, inward: I } = tile;
+
+  const cornerExtension = rows.sides * I;
+  const endEdgeLength = pool.width + 2 * cornerExtension;
+
+  const lengthAxis = planAxis(pool.length, A, GROUT_MM, MIN_CUT_MM);
+  const widthAxis = planAxis(endEdgeLength, A, GROUT_MM, MIN_CUT_MM);
+
+  const leftSide: EdgeTotals = {
+    rows: rows.sides,
+    fullPavers: lengthAxis.fullPaversTotal * rows.sides,
+    partialPavers: lengthAxis.partialPaversTotal * rows.sides,
+    pavers: lengthAxis.paversTotal * rows.sides,
+  };
+
+  const rightSide: EdgeTotals = {
+    rows: rows.sides,
+    fullPavers: lengthAxis.fullPaversTotal * rows.sides,
+    partialPavers: lengthAxis.partialPaversTotal * rows.sides,
+    pavers: lengthAxis.paversTotal * rows.sides,
+  };
+
+  const shallowEnd: EdgeTotals = {
+    rows: rows.shallow,
+    fullPavers: widthAxis.fullPaversTotal * rows.shallow,
+    partialPavers: widthAxis.partialPaversTotal * rows.shallow,
+    pavers: widthAxis.paversTotal * rows.shallow,
+  };
+
+  const deepEnd: EdgeTotals = {
+    rows: rows.deep,
+    fullPavers: widthAxis.fullPaversTotal * rows.deep,
+    partialPavers: widthAxis.partialPaversTotal * rows.deep,
+    pavers: widthAxis.paversTotal * rows.deep,
+  };
+
+  const totalFullPavers =
+    leftSide.fullPavers + rightSide.fullPavers + shallowEnd.fullPavers + deepEnd.fullPavers;
+
+  const totalPartialPavers =
+    leftSide.partialPavers + rightSide.partialPavers + shallowEnd.partialPavers + deepEnd.partialPavers;
+
+  const totalPavers = totalFullPavers + totalPartialPavers;
+
+  return {
+    lengthAxis,
+    widthAxis,
+    leftSide,
+    rightSide,
+    shallowEnd,
+    deepEnd,
+    totalFullPavers,
+    totalPartialPavers,
+    totalPavers,
+    symmetry: {
+      sidesMirror: true,
+      endsMirror: true,
+    },
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// POSITION GENERATION (for visual rendering)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Generate paver positions using the new AxisPlan approach.
+ */
 const generatePaverPositions = (
   startX: number,
   startY: number,
-  length: number,
-  paverSize: number,
+  axisPlan: AxisPlan,
   paverWidth: number,
   isHorizontal: boolean,
   rows: number
 ): CopingPaver[] => {
   const positions: CopingPaver[] = [];
-  const { fullPavers, paversPerCorner, middleFullPavers, middleGap, effectiveUnit } = calculatePavers(length, paverSize);
-  
+  const A = axisPlan.tileAlong;
+  const G = axisPlan.grout;
+  const U = A + G;
+  const p = axisPlan.paversPerCorner;
+
   for (let row = 0; row < rows; row++) {
-    // Place pavers from LEFT/TOP corner working inward
-    for (let i = 0; i < paversPerCorner; i++) {
-      // Position accounts for grout lines: each paver starts at i * effectiveUnit
-      const offset = i * effectiveUnit;
-      
+    // Place pavers from LEFT/TOP corner
+    for (let i = 0; i < p; i++) {
+      const offset = i * U;
       positions.push({
         x: startX + (isHorizontal ? offset : row * paverWidth),
         y: startY + (isHorizontal ? row * paverWidth : offset),
-        width: isHorizontal ? paverSize : paverWidth,
-        height: isHorizontal ? paverWidth : paverSize,
+        width: isHorizontal ? A : paverWidth,
+        height: isHorizontal ? paverWidth : A,
         isPartial: false,
       });
     }
-    
-    // Place full pavers in the middle (if any fit)
-    let middleStart = paversPerCorner * effectiveUnit;
-    for (let i = 0; i < middleFullPavers; i++) {
-      positions.push({
-        x: startX + (isHorizontal ? middleStart : row * paverWidth),
-        y: startY + (isHorizontal ? row * paverWidth : middleStart),
-        width: isHorizontal ? paverSize : paverWidth,
-        height: isHorizontal ? paverWidth : paverSize,
-        isPartial: false,
-      });
-      middleStart += effectiveUnit;
-    }
-    
-    // Place pavers from RIGHT/BOTTOM corner working inward
-    for (let i = 0; i < paversPerCorner; i++) {
-      // Start from the far end and work backwards
-      const offset = length - (i + 1) * effectiveUnit + GROUT_LINE_WIDTH;
-      
+
+    // Place pavers from RIGHT/BOTTOM corner
+    for (let i = 0; i < p; i++) {
+      const offset = axisPlan.edgeLength - (i + 1) * U + G;
       positions.push({
         x: startX + (isHorizontal ? offset : row * paverWidth),
         y: startY + (isHorizontal ? row * paverWidth : offset),
-        width: isHorizontal ? paverSize : paverWidth,
-        height: isHorizontal ? paverWidth : paverSize,
+        width: isHorizontal ? A : paverWidth,
+        height: isHorizontal ? paverWidth : A,
         isPartial: false,
       });
     }
-    
-    // Split remaining middle gap into TWO equal cut pavers if gap exists
-    if (middleGap > 0) {
-      const halfGap = middleGap / 2;
+
+    // Place centre cuts based on strategy
+    const centreStart = p * U;
+
+    if (axisPlan.centreMode === 'single_cut') {
+      const cutSize = axisPlan.cutSizes[0];
+      const cutPosition = centreStart + G;
+      positions.push({
+        x: startX + (isHorizontal ? cutPosition : row * paverWidth),
+        y: startY + (isHorizontal ? row * paverWidth : cutPosition),
+        width: isHorizontal ? cutSize : paverWidth,
+        height: isHorizontal ? paverWidth : cutSize,
+        isPartial: true,
+      });
+    } else if (axisPlan.centreMode === 'double_cut') {
+      const [cLeft, cRight] = axisPlan.cutSizes;
       
-      // First cut paver (left/top side)
-      const leftCutPosition = paversPerCorner * effectiveUnit;
+      // First cut (left/top)
+      const leftCutPosition = centreStart + G;
       positions.push({
         x: startX + (isHorizontal ? leftCutPosition : row * paverWidth),
         y: startY + (isHorizontal ? row * paverWidth : leftCutPosition),
-        width: isHorizontal ? halfGap : paverWidth,
-        height: isHorizontal ? paverWidth : halfGap,
+        width: isHorizontal ? cLeft : paverWidth,
+        height: isHorizontal ? paverWidth : cLeft,
         isPartial: true,
       });
-      
-      // Second cut paver (right/bottom side) - placed before right corner pavers
-      const rightCutPosition = length - (paversPerCorner * effectiveUnit) - halfGap;
+
+      // Second cut (right/bottom) with grout line between
+      const rightCutPosition = leftCutPosition + cLeft + G;
       positions.push({
         x: startX + (isHorizontal ? rightCutPosition : row * paverWidth),
         y: startY + (isHorizontal ? row * paverWidth : rightCutPosition),
-        width: isHorizontal ? halfGap : paverWidth,
-        height: isHorizontal ? paverWidth : halfGap,
+        width: isHorizontal ? cRight : paverWidth,
+        height: isHorizontal ? paverWidth : cRight,
         isPartial: true,
       });
     }
+    // If centreMode === 'perfect', no cuts needed
   }
-  
+
   return positions;
 };
 
+// ──────────────────────────────────────────────────────────────────────────────
+// BRIDGE FUNCTION (maintains backward compatibility)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Legacy API for PoolComponent - wraps the new algorithm
+ */
 export const calculatePoolCoping = (pool: Pool, config?: CopingConfig): CopingCalculation => {
-  // Use default 400x400 config if not provided (backward compatibility)
   const copingConfig = config || DEFAULT_COPING_OPTIONS[0];
   
-  const paverAlong = copingConfig.tile.along;
+  // Use new algorithm
+  const plan = planPoolCoping(pool, copingConfig);
+  
   const paverInward = copingConfig.tile.inward;
-  const rowsDeep = copingConfig.rows.deep;
-  const rowsShallow = copingConfig.rows.shallow;
-  const rowsSides = copingConfig.rows.sides;
-  const balanceCuts = copingConfig.balanceCuts;
-  
-  // Corner extension = width of top/bottom coping
-  const cornerExtension = rowsSides * paverInward;
-  
-  // Deep End (RIGHT side - configurable rows, extends top and bottom to cover corners)
-  const deWidth = pool.width + (cornerExtension * 2); // Add both corners
-  const deCalc = calculatePavers(deWidth, paverAlong);
+  const cornerExtension = copingConfig.rows.sides * paverInward;
+
+  // Generate positions for each side using the new approach
   const deepEnd: CopingSide = {
-    rows: rowsDeep,
-    width: paverInward * rowsDeep,
-    length: deWidth,
-    fullPavers: deCalc.fullPavers * rowsDeep,
-    partialPaver: deCalc.middleGap > 0 ? deCalc.middleGap : null,
+    rows: copingConfig.rows.deep,
+    width: paverInward * copingConfig.rows.deep,
+    length: plan.widthAxis.edgeLength,
+    fullPavers: plan.deepEnd.fullPavers,
+    partialPaver: plan.widthAxis.cutSizes.length > 0 ? plan.widthAxis.gapBeforeCuts : null,
     paverPositions: generatePaverPositions(
-      pool.length, // Start at right edge of pool
-      -cornerExtension, // Start above pool (corner extension matches top/bottom width)
-      deWidth,
-      paverAlong,
+      pool.length,
+      -cornerExtension,
+      plan.widthAxis,
       paverInward,
-      false, // vertical (running up/down on right side)
-      rowsDeep
+      false,
+      copingConfig.rows.deep
     ),
   };
 
-  // Shallow End (LEFT side - configurable rows, extends top and bottom to cover corners)
-  const seWidth = pool.width + (cornerExtension * 2);
-  const seCalc = calculatePavers(seWidth, paverAlong);
   const shallowEnd: CopingSide = {
-    rows: rowsShallow,
-    width: paverInward * rowsShallow,
-    length: seWidth,
-    fullPavers: seCalc.fullPavers * rowsShallow,
-    partialPaver: seCalc.middleGap > 0 ? seCalc.middleGap : null,
+    rows: copingConfig.rows.shallow,
+    width: paverInward * copingConfig.rows.shallow,
+    length: plan.widthAxis.edgeLength,
+    fullPavers: plan.shallowEnd.fullPavers,
+    partialPaver: plan.widthAxis.cutSizes.length > 0 ? plan.widthAxis.gapBeforeCuts : null,
     paverPositions: generatePaverPositions(
-      -paverInward * rowsShallow, // Left of pool
-      -cornerExtension, // Start above pool (corner extension matches top/bottom width)
-      seWidth,
-      paverAlong,
+      -paverInward * copingConfig.rows.shallow,
+      -cornerExtension,
+      plan.widthAxis,
       paverInward,
-      false, // vertical (running up/down on left side)
-      rowsShallow
+      false,
+      copingConfig.rows.shallow
     ),
   };
 
-  // Top Side (configurable rows, between SE and DE - no corner extension)
-  const topLength = pool.length;
-  const topCalc = calculatePavers(topLength, paverAlong);
   const leftSide: CopingSide = {
-    rows: rowsSides,
-    width: paverInward * rowsSides,
-    length: topLength,
-    fullPavers: topCalc.fullPavers * rowsSides,
-    partialPaver: topCalc.middleGap > 0 ? topCalc.middleGap : null,
+    rows: copingConfig.rows.sides,
+    width: paverInward * copingConfig.rows.sides,
+    length: pool.length,
+    fullPavers: plan.leftSide.fullPavers,
+    partialPaver: plan.lengthAxis.cutSizes.length > 0 ? plan.lengthAxis.gapBeforeCuts : null,
     paverPositions: generatePaverPositions(
-      0, // Start at left edge of pool
-      -paverInward * rowsSides, // Above pool
-      topLength,
-      paverAlong,
+      0,
+      -paverInward * copingConfig.rows.sides,
+      plan.lengthAxis,
       paverInward,
-      true, // horizontal (running left/right on top)
-      rowsSides
+      true,
+      copingConfig.rows.sides
     ),
   };
 
-  // Bottom Side (configurable rows, between SE and DE - no corner extension)
-  const bottomLength = pool.length;
-  const bottomCalc = calculatePavers(bottomLength, paverAlong);
   const rightSide: CopingSide = {
-    rows: rowsSides,
-    width: paverInward * rowsSides,
-    length: bottomLength,
-    fullPavers: bottomCalc.fullPavers * rowsSides,
-    partialPaver: bottomCalc.middleGap > 0 ? bottomCalc.middleGap : null,
+    rows: copingConfig.rows.sides,
+    width: paverInward * copingConfig.rows.sides,
+    length: pool.length,
+    fullPavers: plan.rightSide.fullPavers,
+    partialPaver: plan.lengthAxis.cutSizes.length > 0 ? plan.lengthAxis.gapBeforeCuts : null,
     paverPositions: generatePaverPositions(
-      0, // Start at left edge of pool
-      pool.width, // Below pool
-      bottomLength,
-      paverAlong,
+      0,
+      pool.width,
+      plan.lengthAxis,
       paverInward,
-      true, // horizontal (running left/right on bottom)
-      rowsSides
+      true,
+      copingConfig.rows.sides
     ),
   };
 
-  // Totals
-  const totalFullPavers = 
-    deepEnd.fullPavers + 
-    shallowEnd.fullPavers + 
-    leftSide.fullPavers + 
-    rightSide.fullPavers;
-  
-  // Each side with a gap gets TWO equal cut pavers per row
-  const totalPartialPavers = 
-    (deepEnd.partialPaver ? rowsDeep * 2 : 0) +
-    (shallowEnd.partialPaver ? rowsShallow * 2 : 0) +
-    (leftSide.partialPaver ? rowsSides * 2 : 0) +
-    (rightSide.partialPaver ? rowsSides * 2 : 0);
-  
-  const totalPavers = totalFullPavers + totalPartialPavers;
-  
   const totalArea = (
-    (deWidth * paverInward * rowsDeep) + // Deep End
-    (seWidth * paverInward * rowsShallow) + // Shallow End
-    (topLength * paverInward * rowsSides) + // Top
-    (bottomLength * paverInward * rowsSides) // Bottom
-  ) / 1000000; // mm² to m²
+    (plan.widthAxis.edgeLength * paverInward * copingConfig.rows.deep) +
+    (plan.widthAxis.edgeLength * paverInward * copingConfig.rows.shallow) +
+    (pool.length * paverInward * copingConfig.rows.sides) +
+    (pool.length * paverInward * copingConfig.rows.sides)
+  ) / 1000000;
 
   return {
     deepEnd,
     shallowEnd,
     leftSide,
     rightSide,
-    totalFullPavers,
-    totalPartialPavers,
-    totalPavers,
+    totalFullPavers: plan.totalFullPavers,
+    totalPartialPavers: plan.totalPartialPavers,
+    totalPavers: plan.totalPavers,
     totalArea,
   };
 };
