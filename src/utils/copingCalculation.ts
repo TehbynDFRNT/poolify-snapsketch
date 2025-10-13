@@ -168,8 +168,11 @@ export const calculatePoolCoping = (pool: Pool, config?: CopingConfig): CopingCa
   const rowsSides = copingConfig.rows.sides;
   const balanceCuts = copingConfig.balanceCuts;
   
-  // Deep End (RIGHT side - configurable rows, extends top and bottom by inward amount for corners)
-  const deWidth = pool.width + (paverInward * 2); // Add both corners
+  // Corner extension = width of top/bottom coping
+  const cornerExtension = rowsSides * paverInward;
+  
+  // Deep End (RIGHT side - configurable rows, extends top and bottom to cover corners)
+  const deWidth = pool.width + (cornerExtension * 2); // Add both corners
   const deCalc = calculatePavers(deWidth, paverAlong, balanceCuts);
   const deepEnd: CopingSide = {
     rows: rowsDeep,
@@ -179,7 +182,7 @@ export const calculatePoolCoping = (pool: Pool, config?: CopingConfig): CopingCa
     partialPaver: deCalc.partialPaver,
     paverPositions: generatePaverPositions(
       pool.length, // Start at right edge of pool
-      -paverInward, // Start above pool (corner extension)
+      -cornerExtension, // Start above pool (corner extension matches top/bottom width)
       deWidth,
       paverAlong,
       paverInward,
@@ -189,8 +192,8 @@ export const calculatePoolCoping = (pool: Pool, config?: CopingConfig): CopingCa
     ),
   };
 
-  // Shallow End (LEFT side - configurable rows, extends top and bottom)
-  const seWidth = pool.width + (paverInward * 2);
+  // Shallow End (LEFT side - configurable rows, extends top and bottom to cover corners)
+  const seWidth = pool.width + (cornerExtension * 2);
   const seCalc = calculatePavers(seWidth, paverAlong, balanceCuts);
   const shallowEnd: CopingSide = {
     rows: rowsShallow,
@@ -200,7 +203,7 @@ export const calculatePoolCoping = (pool: Pool, config?: CopingConfig): CopingCa
     partialPaver: seCalc.partialPaver,
     paverPositions: generatePaverPositions(
       -paverInward * rowsShallow, // Left of pool
-      -paverInward, // Start above pool (corner extension)
+      -cornerExtension, // Start above pool (corner extension matches top/bottom width)
       seWidth,
       paverAlong,
       paverInward,
