@@ -85,6 +85,7 @@ export interface CopingCalculation {
 export interface ComponentProperties {
   // Pool
   poolId?: string;
+  pool?: any; // embedded pool geometry
   showCoping?: boolean;
   copingConfig?: any;
   copingCalculation?: CopingCalculation;

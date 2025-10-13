@@ -17,8 +17,10 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   const groupRef = useRef<any>(null);
   const allComponents = useDesignStore(state => state.components);
 
-  // Find the pool from the library
-  const poolData = POOL_LIBRARY.find(p => p.id === component.properties.poolId) || POOL_LIBRARY[0];
+  // Prefer embedded pool geometry to avoid library mismatches
+  const poolData = (component.properties as any).pool ||
+    POOL_LIBRARY.find(p => p.id === component.properties.poolId) ||
+    POOL_LIBRARY[0];
   
   // Scale down from mm to canvas units (1 unit = 10mm for better display)
   const scale = 0.1;
