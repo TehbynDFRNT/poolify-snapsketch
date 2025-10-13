@@ -247,7 +247,7 @@ const drawImageMaterialsSummary = (
 
       if (pool.coping) {
         summaryParts.push(
-          `Coping: ${pool.coping.totalPavers} pavers (400×400mm) - ` +
+          `Coping: ${pool.coping.totalPavers} pavers (${pool.coping.paverSize}) - ` +
           `${pool.coping.fullPavers} full + ${pool.coping.partialPavers} partial = ${formatArea(pool.coping.area)}`
         );
       }

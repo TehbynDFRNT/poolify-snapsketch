@@ -1,6 +1,7 @@
 import { Component, Summary } from '@/types';
 import { PAVER_SIZES, DRAINAGE_TYPES, FENCE_TYPES, WALL_MATERIALS } from '@/constants/components';
 import { POOL_LIBRARY } from '@/constants/pools';
+import { calculatePoolCoping } from '@/utils/copingCalculation';
 
 export const calculateMeasurements = (components: Component[]): Summary => {
   const summary: Summary = {
@@ -22,16 +23,23 @@ export const calculateMeasurements = (components: Component[]): Summary => {
             ? `${copingConfig.tile.along}×${copingConfig.tile.inward}mm`
             : '400×400mm';
           
+          // Calculate live coping if showCoping is enabled
+          let copingData = undefined;
+          if (component.properties.showCoping) {
+            const calc = calculatePoolCoping(pool, copingConfig);
+            copingData = {
+              totalPavers: calc.totalPavers,
+              fullPavers: calc.totalFullPavers,
+              partialPavers: calc.totalPartialPavers,
+              area: calc.totalArea,
+              paverSize,
+            };
+          }
+          
           summary.pools.push({
             type: pool.name,
             dimensions: `${pool.length}×${pool.width}mm`,
-            coping: component.properties.showCoping && component.properties.copingCalculation ? {
-              totalPavers: component.properties.copingCalculation.totalPavers,
-              fullPavers: component.properties.copingCalculation.totalFullPavers,
-              partialPavers: component.properties.copingCalculation.totalPartialPavers,
-              area: component.properties.copingCalculation.totalArea,
-              paverSize,
-            } : undefined,
+            coping: copingData,
           });
         }
         break;

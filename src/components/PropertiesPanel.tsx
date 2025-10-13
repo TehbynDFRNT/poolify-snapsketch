@@ -152,6 +152,11 @@ export const PropertiesPanel = () => {
     ? POOL_LIBRARY.find(p => p.id === selectedComponent.properties.poolId)
     : null;
 
+  // Calculate live coping for display
+  const currentCopingCalc = selectedComponent?.type === 'pool' && selectedComponent.properties.showCoping && poolData
+    ? calculatePoolCoping(poolData, selectedComponent.properties.copingConfig)
+    : undefined;
+
   return (
     <ScrollArea className="h-full">
       <div className="p-4 space-y-6">
@@ -470,50 +475,52 @@ export const PropertiesPanel = () => {
                           />
                         </div>
                         
-                        {selectedComponent.properties.showCoping && selectedComponent.properties.copingCalculation && (
+                        {currentCopingCalc && (
                           <div className="text-xs space-y-1 bg-muted p-3 rounded-lg">
-                            <div className="font-medium mb-2">Coping Details (400×400mm pavers):</div>
+                            <div className="font-medium mb-2">
+                              Coping Details ({selectedComponent.properties.copingConfig?.tile.along || 400}×{selectedComponent.properties.copingConfig?.tile.inward || 400}mm pavers):
+                            </div>
                             <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
                               <div>Deep End (2 rows):</div>
                               <div className="text-right font-mono">
-                                {selectedComponent.properties.copingCalculation.deepEnd.fullPavers} full
-                                {selectedComponent.properties.copingCalculation.deepEnd.partialPaver && 
-                                  ` + 2×${selectedComponent.properties.copingCalculation.deepEnd.partialPaver}mm`
+                                {currentCopingCalc.deepEnd.fullPavers} full
+                                {currentCopingCalc.deepEnd.partialPaver && 
+                                  ` + 2×${currentCopingCalc.deepEnd.partialPaver}mm`
                                 }
                               </div>
                               
                               <div>Shallow End:</div>
                               <div className="text-right font-mono">
-                                {selectedComponent.properties.copingCalculation.shallowEnd.fullPavers} full
-                                {selectedComponent.properties.copingCalculation.shallowEnd.partialPaver && 
-                                  ` + ${selectedComponent.properties.copingCalculation.shallowEnd.partialPaver}mm`
+                                {currentCopingCalc.shallowEnd.fullPavers} full
+                                {currentCopingCalc.shallowEnd.partialPaver && 
+                                  ` + ${currentCopingCalc.shallowEnd.partialPaver}mm`
                                 }
                               </div>
                               
                               <div>Left Side:</div>
                               <div className="text-right font-mono">
-                                {selectedComponent.properties.copingCalculation.leftSide.fullPavers} full
-                                {selectedComponent.properties.copingCalculation.leftSide.partialPaver && 
-                                  ` + ${selectedComponent.properties.copingCalculation.leftSide.partialPaver}mm`
+                                {currentCopingCalc.leftSide.fullPavers} full
+                                {currentCopingCalc.leftSide.partialPaver && 
+                                  ` + ${currentCopingCalc.leftSide.partialPaver}mm`
                                 }
                               </div>
                               
                               <div>Right Side:</div>
                               <div className="text-right font-mono">
-                                {selectedComponent.properties.copingCalculation.rightSide.fullPavers} full
-                                {selectedComponent.properties.copingCalculation.rightSide.partialPaver && 
-                                  ` + ${selectedComponent.properties.copingCalculation.rightSide.partialPaver}mm`
+                                {currentCopingCalc.rightSide.fullPavers} full
+                                {currentCopingCalc.rightSide.partialPaver && 
+                                  ` + ${currentCopingCalc.rightSide.partialPaver}mm`
                                 }
                               </div>
                               
                               <div className="font-semibold pt-2 border-t mt-1">Total:</div>
                               <div className="text-right font-mono font-semibold pt-2 border-t mt-1">
-                                {selectedComponent.properties.copingCalculation.totalPavers} pavers
+                                {currentCopingCalc.totalPavers} pavers
                               </div>
                               
-                              <div className="text-muted-foreground">({selectedComponent.properties.copingCalculation.totalFullPavers} full + {selectedComponent.properties.copingCalculation.totalPartialPavers} partial)</div>
+                              <div className="text-muted-foreground">({currentCopingCalc.totalFullPavers} full + {currentCopingCalc.totalPartialPavers} partial)</div>
                               <div className="text-right font-mono col-start-2">
-                                {selectedComponent.properties.copingCalculation.totalArea.toFixed(2)} m²
+                                {currentCopingCalc.totalArea.toFixed(2)} m²
                               </div>
                             </div>
                           </div>
