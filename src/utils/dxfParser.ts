@@ -12,7 +12,7 @@ export interface DXFPoolData {
 /**
  * Parse a DXF file and extract pool geometry
  * @param file - The DXF file to parse
- * @param scale - Scale multiplier (default 100 for 1:100 scale)
+ * @param scale - Scale divider (default 100 for 1:100 scale DXF in mm)
  * @returns Parsed pool data
  */
 export async function parseDXFPool(
@@ -83,20 +83,20 @@ export function extractLayerGeometry(
       // Extract vertices from polyline
       entity.vertices?.forEach((vertex: any) => {
         points.push({
-          x: Math.round(vertex.x * scale),
-          y: Math.round(vertex.y * scale),
+          x: Math.round(vertex.x / scale),
+          y: Math.round(vertex.y / scale),
         });
       });
     } else if (entity.type === 'LINE') {
       // Extract start and end points from line
       points.push(
         {
-          x: Math.round(entity.vertices[0].x * scale),
-          y: Math.round(entity.vertices[0].y * scale),
+          x: Math.round(entity.vertices[0].x / scale),
+          y: Math.round(entity.vertices[0].y / scale),
         },
         {
-          x: Math.round(entity.vertices[1].x * scale),
-          y: Math.round(entity.vertices[1].y * scale),
+          x: Math.round(entity.vertices[1].x / scale),
+          y: Math.round(entity.vertices[1].y / scale),
         }
       );
     } else if (entity.type === 'ARC') {
@@ -121,8 +121,8 @@ function sampleArc(arc: any, scale: number, segments: number = 20): Array<{ x: n
   for (let i = 0; i <= segments; i++) {
     const angle = startAngle + angleStep * i;
     points.push({
-      x: Math.round((arc.center.x + arc.radius * Math.cos(angle)) * scale),
-      y: Math.round((arc.center.y + arc.radius * Math.sin(angle)) * scale),
+      x: Math.round((arc.center.x + arc.radius * Math.cos(angle)) / scale),
+      y: Math.round((arc.center.y + arc.radius * Math.sin(angle)) / scale),
     });
   }
 
@@ -168,13 +168,13 @@ function extractEndPositions(
     
     if (text.includes('DEEP') || text.includes('DE')) {
       deepEnd = {
-        x: Math.round(entity.startPoint.x * scale),
-        y: Math.round(entity.startPoint.y * scale),
+        x: Math.round(entity.startPoint.x / scale),
+        y: Math.round(entity.startPoint.y / scale),
       };
     } else if (text.includes('SHALLOW') || text.includes('SE')) {
       shallowEnd = {
-        x: Math.round(entity.startPoint.x * scale),
-        y: Math.round(entity.startPoint.y * scale),
+        x: Math.round(entity.startPoint.x / scale),
+        y: Math.round(entity.startPoint.y / scale),
       };
     }
   });
