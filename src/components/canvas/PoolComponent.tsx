@@ -31,7 +31,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   const showCoping = component.properties.showCoping ?? false;
   const copingConfig = component.properties.copingConfig;
   const copingCalc = showCoping && poolData 
-    ? (component.properties.copingCalculation || calculatePoolCoping(poolData, copingConfig))
+    ? calculatePoolCoping(poolData, copingConfig)
     : null;
 
   const handleDragEnd = (e: any) => {
@@ -81,7 +81,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
               fill={paver.isPartial ? "#FCD34D" : "#9CA3AF"}
               stroke="#374151"
               strokeWidth={2}
-              dash={paver.isPartial ? [2, 2] : undefined}
+              dash={paver.isPartial ? [5, 5] : undefined}
               opacity={paver.isPartial ? 0.8 : 1}
             />
           ))}
