@@ -861,7 +861,7 @@ const MaterialsSummary = ({
                   </div>
                   {pool.coping && (
                     <div className="text-xs text-blue-600 dark:text-blue-400 ml-4 mt-1 space-y-0.5">
-                      <div className="font-medium">Coping: {pool.coping.totalPavers} pavers (400×400mm)</div>
+                      <div className="font-medium">Coping: {pool.coping.totalPavers} pavers ({pool.coping.paverSize})</div>
                       <div>
                         {pool.coping.fullPavers} full + {pool.coping.partialPavers} partial
                       </div>

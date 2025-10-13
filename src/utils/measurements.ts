@@ -15,8 +15,13 @@ export const calculateMeasurements = (components: Component[]): Summary => {
     switch (component.type) {
       case 'pool':
         const poolId = component.properties.poolId;
-        const pool = POOL_LIBRARY.find(p => p.id === poolId);
+        const pool = POOL_LIBRARY.find(p => p.id === poolId) || (component.properties as any).pool;
         if (pool) {
+          const copingConfig = component.properties.copingConfig;
+          const paverSize = copingConfig 
+            ? `${copingConfig.tile.along}×${copingConfig.tile.inward}mm`
+            : '400×400mm';
+          
           summary.pools.push({
             type: pool.name,
             dimensions: `${pool.length}×${pool.width}mm`,
@@ -25,6 +30,7 @@ export const calculateMeasurements = (components: Component[]): Summary => {
               fullPavers: component.properties.copingCalculation.totalFullPavers,
               partialPavers: component.properties.copingCalculation.totalPartialPavers,
               area: component.properties.copingCalculation.totalArea,
+              paverSize,
             } : undefined,
           });
         }

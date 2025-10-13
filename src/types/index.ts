@@ -166,6 +166,7 @@ export interface Summary {
       fullPavers: number;
       partialPavers: number;
       area: number;
+      paverSize: string;
     };
   }>;
   paving: Array<{
