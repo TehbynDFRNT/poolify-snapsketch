@@ -12,7 +12,7 @@ import { NewProjectModal } from './NewProjectModal';
 import { ShareProjectDialog } from './ShareProjectDialog';
 import { MigrationDialog } from './MigrationDialog';
 import { toast } from '@/hooks/use-toast';
-import { Plus, Search, MoreVertical, Share2, Trash2, User, Settings, LogOut } from 'lucide-react';
+import { Plus, Search, MoreVertical, Share2, Trash2, User, Settings, LogOut, Database } from 'lucide-react';
 
 interface CloudProject {
   id: string;
@@ -290,10 +290,16 @@ export function CloudHomePage() {
                 Profile Settings
               </DropdownMenuItem>
               {userProfile?.role === 'admin' && (
-                <DropdownMenuItem onClick={() => navigate('/settings/team')}>
-                  <User className="w-4 h-4 mr-2" />
-                  Team Management
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem onClick={() => navigate('/settings/team')}>
+                    <User className="w-4 h-4 mr-2" />
+                    Team Management
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/settings/pools')}>
+                    <Database className="w-4 h-4 mr-2" />
+                    Pool Management
+                  </DropdownMenuItem>
+                </>
               )}
               <DropdownMenuItem onClick={handleSignOut}>
                 <LogOut className="w-4 h-4 mr-2" />

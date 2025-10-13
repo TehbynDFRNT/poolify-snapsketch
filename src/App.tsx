@@ -15,6 +15,7 @@ import { ForgotPassword } from "./pages/ForgotPassword";
 import { ResetPassword } from "./pages/ResetPassword";
 import { ProfileSettings } from "./pages/ProfileSettings";
 import { TeamManagement } from "./pages/TeamManagement";
+import { PoolManagement } from "./pages/PoolManagement";
 import { LandingPage } from "./pages/LandingPage";
 import NotFound from "./pages/NotFound";
 
@@ -54,6 +55,11 @@ const App = () => (
             <Route path="/settings/team" element={
               <ProtectedRoute>
                 <TeamManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings/pools" element={
+              <ProtectedRoute>
+                <PoolManagement />
               </ProtectedRoute>
             } />
             
