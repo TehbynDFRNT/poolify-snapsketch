@@ -206,19 +206,21 @@ export function planAxis(edgeLength: number, along: number, grout = GROUT_MM): A
 export function planPoolCopingGlobal(pool: Pool, config: CopingConfig): CopingPlan {
   const { tile, rows } = config;
 
-  // Per‑edge row depths (perpendicular to that edge) under global orientation:
-  // - Sides (long edges, horizontal): rows project in Y → depth = tile.y
-  // - Ends  (short edges, vertical) : rows project in X → depth = tile.x
-  const sideRowDepth = tile.y;
-  const endRowDepth  = tile.x;
+  // For uniform tiling, determine the long edge (runs along pool edges)
+  // and short edge (projects inward) from the tile dimensions
+  const along = Math.max(tile.x, tile.y);   // e.g., 600mm for both 600×400 and 400×600
+  const inward = Math.min(tile.x, tile.y);  // e.g., 400mm for both
 
-  // Ends span pool.width + "corner returns" created by side rows on both ends
-  const cornerExtension = rows.sides * sideRowDepth;
+  // Row depths (how far each row projects perpendicular to the edge)
+  const rowDepth = inward;  // same depth for all edges
+
+  // Corner extension for ends
+  const cornerExtension = rows.sides * rowDepth;
   const widthEdgeLength = pool.width + 2 * cornerExtension;
 
-  // Axis plans (reused for mirrored edges)
-  const lengthAxis = planAxis(pool.length, /*along*/ tile.x, GROUT_MM); // top & bottom
-  const widthAxis  = planAxis(widthEdgeLength, /*along*/ tile.y, GROUT_MM); // shallow & deep
+  // Calculate axis plans using the SAME 'along' dimension for all edges
+  const lengthAxis = planAxis(pool.length, along, GROUT_MM);
+  const widthAxis = planAxis(widthEdgeLength, along, GROUT_MM);
 
   // Totals per edge (apply rows)
   const leftSide: EdgeTotals = {
