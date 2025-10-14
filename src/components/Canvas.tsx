@@ -21,6 +21,7 @@ import { PAVER_SIZES } from '@/constants/components';
 import { PoolSelector } from './PoolSelector';
 import { Pool } from '@/constants/pools';
 import { lockToAxis, detectAxisLock, calculateDistance } from '@/utils/canvas';
+import { initialCopingEdgesState } from '@/interaction/CopingExtendController';
 
 export const Canvas = ({ 
   activeTool = 'select',
@@ -514,6 +515,11 @@ export const Canvas = ({
 
   const handlePoolSelected = (pool: Pool, copingOptions: { showCoping: boolean; copingConfig?: any; copingCalculation?: any }) => {
     if (pendingPoolPosition) {
+      // Initialize copingEdges state for interactive mode
+      const copingEdges = copingOptions.copingConfig 
+        ? initialCopingEdgesState(copingOptions.copingConfig)
+        : undefined;
+      
       addComponent({
         type: 'pool',
         position: pendingPoolPosition,
@@ -525,6 +531,8 @@ export const Canvas = ({
           showCoping: copingOptions.showCoping,
           copingConfig: copingOptions.copingConfig,
           copingCalculation: copingOptions.copingCalculation,
+          copingMode: 'interactive', // Enable interactive mode by default for new pools
+          copingEdges, // Initialize edge state
         },
       });
       setPendingPoolPosition(null);

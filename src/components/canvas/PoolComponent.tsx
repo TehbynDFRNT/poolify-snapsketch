@@ -23,6 +23,32 @@ interface PoolComponentProps {
   onDragEnd: (pos: { x: number; y: number }) => void;
 }
 
+/**
+ * Normalize coping config to ensure consistent tile format
+ * Converts legacy {along, inward} to new {x, y} format
+ */
+function normalizeCopingConfig(config: any): any {
+  if (!config?.tile) return null;
+  
+  // Already in new format
+  if ('x' in config.tile && 'y' in config.tile) {
+    return config;
+  }
+  
+  // Convert legacy format to new format
+  if ('along' in config.tile && 'inward' in config.tile) {
+    return {
+      ...config,
+      tile: {
+        x: config.tile.along,
+        y: config.tile.inward
+      }
+    };
+  }
+  
+  return null;
+}
+
 export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: PoolComponentProps) => {
   const groupRef = useRef<any>(null);
   const { components: allComponents, updateComponent } = useDesignStore();
@@ -41,14 +67,41 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
 
   // Calculate coping if enabled
   const showCoping = component.properties.showCoping ?? false;
-  const copingConfig = component.properties.copingConfig;
-  const copingCalc = showCoping && poolData 
+  const rawCopingConfig = component.properties.copingConfig;
+  const copingConfig = normalizeCopingConfig(rawCopingConfig);
+  
+  // Debug logging
+  if (showCoping && !copingConfig) {
+    console.warn('Pool has coping enabled but config normalization failed:', rawCopingConfig);
+  }
+  
+  const copingCalc = showCoping && poolData && copingConfig
     ? calculatePoolCoping(poolData, copingConfig)
     : null;
 
   // Interactive coping mode
   const interactiveMode = component.properties.copingMode === 'interactive';
-  const copingEdges = component.properties.copingEdges || (copingConfig ? initialCopingEdgesState(copingConfig) : null);
+  // Initialize copingEdges if in interactive mode but not yet initialized
+  let copingEdges = component.properties.copingEdges;
+  if (interactiveMode && !copingEdges && copingConfig) {
+    copingEdges = initialCopingEdgesState(copingConfig);
+    // Update component with initialized state
+    updateComponent(component.id, {
+      properties: {
+        ...component.properties,
+        copingEdges
+      }
+    });
+  }
+  
+  // Debug logging for interactive mode
+  if (interactiveMode && copingConfig && isSelected) {
+    console.log('Interactive coping state:', {
+      copingConfig: copingConfig.tile,
+      copingEdges,
+      hasHandles: !!copingEdges
+    });
+  }
 
   const handleDragEnd = (e: any) => {
     const newPos = { x: e.target.x(), y: e.target.y() };
@@ -273,16 +326,31 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
 
           {/* Edge drag handles when selected - positioned at outer edge of coping */}
           {isSelected && copingConfig && copingEdges && (() => {
+            // Calculate row depths for each edge using normalized config
             const leftRowDepth = getAlongAndDepthForEdge('leftSide', copingConfig).rowDepth;
             const rightRowDepth = getAlongAndDepthForEdge('rightSide', copingConfig).rowDepth;
             const shallowRowDepth = getAlongAndDepthForEdge('shallowEnd', copingConfig).rowDepth;
             const deepRowDepth = getAlongAndDepthForEdge('deepEnd', copingConfig).rowDepth;
+            
+            // Debug: Log handle positions
+            const leftX = -((getBaseRowsForEdge('leftSide', copingConfig) + copingEdges.leftSide.currentRows) * leftRowDepth + 20) * scale;
+            const rightX = (poolData.length + (getBaseRowsForEdge('rightSide', copingConfig) + copingEdges.rightSide.currentRows) * rightRowDepth) * scale;
+            const shallowY = -((getBaseRowsForEdge('shallowEnd', copingConfig) + copingEdges.shallowEnd.currentRows) * shallowRowDepth + 20) * scale;
+            const deepY = (poolData.width + (getBaseRowsForEdge('deepEnd', copingConfig) + copingEdges.deepEnd.currentRows) * deepRowDepth) * scale;
+            
+            console.log('Handle positions:', {
+              leftX, rightX, shallowY, deepY,
+              leftRowDepth, rightRowDepth, shallowRowDepth, deepRowDepth,
+              poolLength: poolData.length,
+              poolWidth: poolData.width,
+              scale
+            });
 
             return (
             <>
               {/* Left side handle - at true outer edge (base + extension) */}
               <Rect
-                x={-( (getBaseRowsForEdge('leftSide', copingConfig) + copingEdges.leftSide.currentRows) * leftRowDepth + 20) * scale}
+                x={leftX}
                 y={poolData.width * scale / 2 - 20}
                 width={20}
                 height={40}
