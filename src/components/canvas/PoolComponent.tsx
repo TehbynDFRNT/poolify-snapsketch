@@ -13,7 +13,7 @@ import {
   type DragSession
 } from '@/interaction/CopingExtendController';
 import type { CopingEdgeId, PaverRect } from '@/types/copingInteractive';
-import { getBaseRowsForEdge, getAlongAndDepthForEdge } from '@/utils/copingInteractiveExtend';
+import { getBaseRowsForEdge, getAlongAndDepthForEdge, buildExtensionRowsForEdge } from '@/utils/copingInteractiveExtend';
 import Konva from 'konva';
 
 interface PoolComponentProps {
@@ -188,7 +188,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     );
     
     // Generate preview pavers for visual feedback
-    const { buildExtensionRowsForEdge } = require('@/utils/copingInteractiveExtend');
     const newPreviewPavers = buildExtensionRowsForEdge(
       dragSession.edge,
       poolData,
