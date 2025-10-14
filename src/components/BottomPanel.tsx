@@ -452,13 +452,13 @@ const PropertiesContent = ({
                       <Label className="text-xs font-medium">Coping Mode</Label>
                       <div className="flex gap-2">
                         <Button
-                          variant={component.properties.copingMode !== 'extensible' ? 'default' : 'outline'}
+                          variant={component.properties.copingMode !== 'interactive' ? 'default' : 'outline'}
                           size="sm"
                           onClick={() => onUpdate(component.id, {
                             properties: {
                               ...component.properties,
                               copingMode: 'fixed',
-                              copingExtensions: undefined
+                              copingEdges: undefined
                             }
                           })}
                           className="flex-1"
@@ -466,124 +466,32 @@ const PropertiesContent = ({
                           Fixed
                         </Button>
                         <Button
-                          variant={component.properties.copingMode === 'extensible' ? 'default' : 'outline'}
+                          variant={component.properties.copingMode === 'interactive' ? 'default' : 'outline'}
                           size="sm"
                           onClick={() => onUpdate(component.id, {
                             properties: {
                               ...component.properties,
-                              copingMode: 'extensible',
-                              copingExtensions: {
-                                deepEnd: { enabled: false, maxDistance: null, targetBoundaryId: null },
-                                shallowEnd: { enabled: false, maxDistance: null, targetBoundaryId: null },
-                                leftSide: { enabled: false, maxDistance: null, targetBoundaryId: null },
-                                rightSide: { enabled: false, maxDistance: null, targetBoundaryId: null },
-                              }
+                              copingMode: 'interactive'
                             }
                           })}
                           className="flex-1"
                         >
-                          Extensible
+                          Drag to Extend
                         </Button>
                       </div>
                     </div>
 
-                    {/* Extensible Mode Controls */}
-                    {component.properties.copingMode === 'extensible' && (
+                    {/* Interactive Mode Info */}
+                    {component.properties.copingMode === 'interactive' && (
                       <div className="space-y-2 pt-2">
                         <p className="text-xs text-muted-foreground">
-                          Enable extensions to fill coping to boundaries
+                          Select the pool and drag the blue handles on each edge to extend coping to boundaries
                         </p>
-                        
-                        {(['deepEnd', 'shallowEnd', 'leftSide', 'rightSide'] as const).map(direction => {
-                          const extension = component.properties.copingExtensions?.[direction];
-                          const enabled = extension?.enabled ?? false;
-                          const stats = extension?.statistics;
-                          
-                          return (
-                            <div key={direction} className="border rounded p-2 space-y-1">
-                              <div className="flex items-center justify-between">
-                                <Label className="text-xs font-medium">
-                                  {direction === 'deepEnd' ? 'Deep End' :
-                                   direction === 'shallowEnd' ? 'Shallow End' :
-                                   direction === 'leftSide' ? 'Left Side' : 'Right Side'}
-                                </Label>
-                                <input
-                                  type="checkbox"
-                                  checked={enabled}
-                                  onChange={async (e) => {
-                                    const poolData = POOL_LIBRARY.find(p => p.id === component.properties.poolId);
-                                    if (!poolData) return;
-
-                                    // Get all components from store
-                                    const { components: allComponents } = useDesignStore.getState();
-                                    
-                                    // Import calculateAllExtensions dynamically
-                                    const { calculateAllExtensions } = await import('@/utils/copingExtension');
-                                    
-                                    // Update enabled state
-                                    const updatedExtensions = {
-                                      ...component.properties.copingExtensions,
-                                      [direction]: {
-                                        enabled: e.target.checked,
-                                        maxDistance: null,
-                                        targetBoundaryId: null
-                                      }
-                                    };
-
-                                    // Create temp component with updated state
-                                    const tempComponent = {
-                                      ...component,
-                                      properties: {
-                                        ...component.properties,
-                                        copingExtensions: updatedExtensions
-                                      }
-                                    };
-
-                                    // Calculate extensions if enabling
-                                    if (e.target.checked) {
-                                      const calculatedExtensions = calculateAllExtensions(
-                                        tempComponent,
-                                        poolData,
-                                        allComponents
-                                      );
-
-                                      if (calculatedExtensions) {
-                                        onUpdate(component.id, {
-                                          properties: {
-                                            ...component.properties,
-                                            copingExtensions: calculatedExtensions
-                                          }
-                                        });
-                                      }
-                                    } else {
-                                      // Just disable
-                                      onUpdate(component.id, {
-                                        properties: {
-                                          ...component.properties,
-                                          copingExtensions: updatedExtensions
-                                        }
-                                      });
-                                    }
-                                  }}
-                                  className="w-4 h-4"
-                                />
-                              </div>
-                              
-                              {enabled && stats && (
-                                <div className="text-xs space-y-0.5 text-muted-foreground pl-1">
-                                  <div>Full: {stats.fullPavers}</div>
-                                  <div>Edge: {stats.edgePavers}</div>
-                                  <div>Area: {stats.totalArea.toFixed(2)}m²</div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
                       </div>
                     )}
 
                     {/* Fixed Mode - Show coping stats */}
-                    {component.properties.copingMode !== 'extensible' && component.properties.copingCalculation && (
+                    {component.properties.copingMode !== 'interactive' && component.properties.copingCalculation && (
                       <div className="text-xs bg-muted p-2 rounded space-y-1">
                         <div className="font-medium">
                           Coping: {component.properties.copingCalculation.totalPavers} pavers

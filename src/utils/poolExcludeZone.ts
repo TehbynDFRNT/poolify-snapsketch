@@ -20,10 +20,10 @@ export const getPoolExcludeZone = (pool: Component): PoolExcludeZone | null => {
 
   const pxPerMm = GRID_CONFIG.spacing / 100; // 0.1 px/mm
 
-  // If extensible coping enabled, use outer edge of extensions
-  if (pool.properties.copingMode === 'extensible' && pool.properties.copingExtensions) {
+  // If interactive coping enabled, use outer edge of extensions
+  if (pool.properties.copingMode === 'interactive' && pool.properties.copingEdges) {
     return {
-      outline: getCombinedExtensionOutline(pool, poolData, pxPerMm),
+      outline: getCombinedInteractiveOutline(pool, poolData, pxPerMm),
       componentId: pool.id
     };
   }
@@ -113,45 +113,27 @@ const transformPoolOutline = (
 };
 
 /**
- * Calculate outer boundary encompassing all enabled extensions
+ * Calculate outer boundary encompassing all interactive extensions
  */
-const getCombinedExtensionOutline = (
+const getCombinedInteractiveOutline = (
   pool: Component,
   poolData: any,
   pxPerMm: number
 ): Array<{x: number, y: number}> => {
-  // Start with coping outer boundary
+  // Use coping outer boundary as base
   const copingExtension = 400 * pxPerMm;
   const poolLength = poolData.length * pxPerMm;
   const poolWidth = poolData.width * pxPerMm;
   
-  // Get max extension distances for each direction
-  const extensions = pool.properties.copingExtensions!;
-  const deepEndExt = extensions.deepEnd.enabled && extensions.deepEnd.pavers?.length 
-    ? Math.max(...extensions.deepEnd.pavers.map(p => p.position.x + p.width)) - pool.position.x
-    : poolLength + copingExtension * 2;
-  
-  const shallowEndExt = extensions.shallowEnd.enabled && extensions.shallowEnd.pavers?.length
-    ? pool.position.x - Math.min(...extensions.shallowEnd.pavers.map(p => p.position.x))
-    : copingExtension;
-  
-  const topExt = extensions.leftSide.enabled && extensions.leftSide.pavers?.length
-    ? pool.position.y - Math.min(...extensions.leftSide.pavers.map(p => p.position.y))
-    : copingExtension;
-  
-  const bottomExt = extensions.rightSide.enabled && extensions.rightSide.pavers?.length
-    ? Math.max(...extensions.rightSide.pavers.map(p => p.position.y + p.height)) - pool.position.y
-    : poolWidth + copingExtension;
-
-  // Create outline in pool-local space
+  // For now, use standard coping boundary
+  // TODO: Calculate actual extension boundaries from copingEdges state
   const outline = [
-    { x: -shallowEndExt, y: -topExt },
-    { x: deepEndExt, y: -topExt },
-    { x: deepEndExt, y: bottomExt },
-    { x: -shallowEndExt, y: bottomExt }
+    { x: -copingExtension, y: -copingExtension },
+    { x: poolLength + copingExtension * 2, y: -copingExtension },
+    { x: poolLength + copingExtension * 2, y: poolWidth + copingExtension },
+    { x: -copingExtension, y: poolWidth + copingExtension }
   ];
 
-  // Apply rotation and translation
   return transformPoints(outline, pool.position, pool.rotation);
 };
 

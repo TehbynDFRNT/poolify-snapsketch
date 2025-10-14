@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Group, Line, Text, Circle, Rect } from 'react-konva';
 import { Component } from '@/types';
 import { POOL_LIBRARY } from '@/constants/pools';
 import { calculatePoolCoping } from '@/utils/copingCalculation';
 import { useDesignStore } from '@/store/designStore';
 import { snapPoolToPaverGrid } from '@/utils/snap';
-import { calculateAllExtensions } from '@/utils/copingExtension';
 import { 
   initialCopingEdgesState,
   onDragStart,
@@ -46,48 +45,9 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     ? calculatePoolCoping(poolData, copingConfig)
     : null;
 
-  // Calculate extensions if in extensible mode
-  const extensionsEnabled = component.properties.copingMode === 'extensible';
-  const extensionPavers = extensionsEnabled && component.properties.copingExtensions
-    ? getAllExtensionPavers(component)
-    : [];
-
   // Interactive coping mode
   const interactiveMode = component.properties.copingMode === 'interactive';
   const copingEdges = component.properties.copingEdges || (copingConfig ? initialCopingEdgesState(copingConfig) : null);
-
-  // Auto-update extensions when pool moves or rotates
-  useEffect(() => {
-    if (extensionsEnabled && component.properties.copingExtensions && poolData) {
-      const hasEnabledExtensions = Object.values(component.properties.copingExtensions)
-        .some(ext => ext.enabled);
-      
-      if (hasEnabledExtensions) {
-        const updatedExtensions = calculateAllExtensions(component, poolData, allComponents);
-        if (updatedExtensions) {
-          updateComponent(component.id, {
-            properties: {
-              ...component.properties,
-              copingExtensions: updatedExtensions
-            }
-          });
-        }
-      }
-    }
-  }, [component.position.x, component.position.y, component.rotation, extensionsEnabled]);
-
-  // Helper to gather all extension pavers
-  function getAllExtensionPavers(pool: Component) {
-    const extensions = pool.properties.copingExtensions;
-    if (!extensions) return [];
-    
-    return [
-      ...(extensions.deepEnd.pavers || []),
-      ...(extensions.shallowEnd.pavers || []),
-      ...(extensions.leftSide.pavers || []),
-      ...(extensions.rightSide.pavers || []),
-    ];
-  }
 
   const handleDragEnd = (e: any) => {
     const newPos = { x: e.target.x(), y: e.target.y() };
@@ -204,26 +164,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
 
   return (
     <>
-      {/* Render extension pavers in world space (outside pool group) */}
-      {extensionsEnabled && extensionPavers.length > 0 && (
-        <Group>
-          {extensionPavers.map((paver) => (
-            <Rect
-              key={paver.id}
-              x={paver.position.x}
-              y={paver.position.y}
-              width={paver.width}
-              height={paver.height}
-              fill={paver.isEdgePaver ? "#FEF3C7" : "#FFF7ED"}
-              stroke={paver.isEdgePaver ? "#F59E0B" : "#FB923C"}
-              strokeWidth={paver.isEdgePaver ? 2 : 1}
-              dash={paver.isEdgePaver ? [5, 5] : undefined}
-              opacity={paver.isEdgePaver ? 0.8 : 0.9}
-            />
-          ))}
-        </Group>
-      )}
-
       {/* Pool group with local coordinates */}
       <Group
         ref={groupRef}
