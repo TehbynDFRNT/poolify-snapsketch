@@ -11,9 +11,10 @@ import { useDesignStore } from '@/store/designStore';
 import { fillAreaWithPavers, calculateStatistics } from '@/utils/pavingFill';
 import { calculateMeasurements } from '@/utils/measurements';
 import { POOL_LIBRARY } from '@/constants/pools';
-import { calculatePoolCoping } from '@/utils/copingCalculation';
+import { calculatePoolCoping, COPING_OPTIONS } from '@/utils/copingCalculation';
 import { toast } from 'sonner';
 import { calculateDistance } from '@/utils/canvas';
+import { initialCopingEdgesState } from '@/interaction/CopingExtendController';
 
 interface BottomPanelProps {
   height: number;
@@ -468,12 +469,22 @@ const PropertiesContent = ({
                         <Button
                           variant={component.properties.copingMode === 'interactive' ? 'default' : 'outline'}
                           size="sm"
-                          onClick={() => onUpdate(component.id, {
-                            properties: {
-                              ...component.properties,
-                              copingMode: 'interactive'
-                            }
-                          })}
+                          onClick={() => {
+                            const copingConfig = component.properties.copingConfig || COPING_OPTIONS[0];
+                            const copingEdges = initialCopingEdgesState(copingConfig);
+                            const pool = component.properties.pool || POOL_LIBRARY.find(p => p.id === component.properties.poolId);
+                            const copingCalculation = pool ? calculatePoolCoping(pool, copingConfig) : undefined;
+                            
+                            onUpdate(component.id, {
+                              properties: {
+                                ...component.properties,
+                                copingMode: 'interactive',
+                                copingConfig,
+                                copingEdges,
+                                copingCalculation
+                              }
+                            });
+                          }}
                           className="flex-1"
                         >
                           Drag to Extend
