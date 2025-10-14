@@ -274,9 +274,9 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
           {/* Edge drag handles when selected - positioned at outer edge of coping */}
           {isSelected && copingConfig && copingEdges && (
             <>
-              {/* Left side handle - at outer edge */}
+              {/* Left side handle - at true outer edge (base + extension) */}
               <Rect
-                x={-(copingEdges.leftSide.currentRows * copingConfig.depth + 20) * scale}
+                x={-( (getBaseRowsForEdge('leftSide', copingConfig) + copingEdges.leftSide.currentRows) * copingConfig.depth + 20) * scale}
                 y={poolData.width * scale / 2 - 20}
                 width={20}
                 height={40}
@@ -285,31 +285,15 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                 cornerRadius={4}
                 strokeWidth={2}
                 stroke="#1D4ED8"
-                onMouseEnter={(e) => {
-                  const container = e.target.getStage()?.container();
-                  if (container) container.style.cursor = 'ew-resize';
-                }}
-                onMouseLeave={(e) => {
-                  const container = e.target.getStage()?.container();
-                  if (container) container.style.cursor = 'default';
-                }}
+                draggable
                 onMouseDown={(e) => {
                   e.cancelBubble = true;
                   handleEdgeDragStart('leftSide', e);
                 }}
-                listening
-              />
-              {/* Right side handle - at outer edge */}
-              <Rect
-                x={(poolData.length + copingEdges.rightSide.currentRows * copingConfig.depth) * scale}
-                y={poolData.width * scale / 2 - 20}
-                width={20}
-                height={40}
-                fill="#3B82F6"
-                opacity={0.8}
-                cornerRadius={4}
-                strokeWidth={2}
-                stroke="#1D4ED8"
+                onDragStart={(e) => handleEdgeDragStart('leftSide', e as any)}
+                onDragMove={handleEdgeDragMove}
+                onDragEnd={handleEdgeDragEnd}
+                onMouseUp={handleEdgeDragEnd}
                 onMouseEnter={(e) => {
                   const container = e.target.getStage()?.container();
                   if (container) container.style.cursor = 'ew-resize';
@@ -318,16 +302,42 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                   const container = e.target.getStage()?.container();
                   if (container) container.style.cursor = 'default';
                 }}
+                listening
+              />
+              {/* Right side handle - at true outer edge (base + extension) */}
+              <Rect
+                x={(poolData.length + (getBaseRowsForEdge('rightSide', copingConfig) + copingEdges.rightSide.currentRows) * copingConfig.depth) * scale}
+                y={poolData.width * scale / 2 - 20}
+                width={20}
+                height={40}
+                fill="#3B82F6"
+                opacity={0.8}
+                cornerRadius={4}
+                strokeWidth={2}
+                stroke="#1D4ED8"
+                draggable
                 onMouseDown={(e) => {
                   e.cancelBubble = true;
                   handleEdgeDragStart('rightSide', e);
                 }}
+                onDragStart={(e) => handleEdgeDragStart('rightSide', e as any)}
+                onDragMove={handleEdgeDragMove}
+                onDragEnd={handleEdgeDragEnd}
+                onMouseUp={handleEdgeDragEnd}
+                onMouseEnter={(e) => {
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = 'ew-resize';
+                }}
+                onMouseLeave={(e) => {
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = 'default';
+                }}
                 listening
               />
-              {/* Shallow end handle - at outer edge */}
+              {/* Shallow end handle - at true outer edge (base + extension) */}
               <Rect
                 x={poolData.length * scale / 2 - 20}
-                y={-(copingEdges.shallowEnd.currentRows * copingConfig.depth + 20) * scale}
+                y={-( (getBaseRowsForEdge('shallowEnd', copingConfig) + copingEdges.shallowEnd.currentRows) * copingConfig.depth + 20) * scale}
                 width={40}
                 height={20}
                 fill="#3B82F6"
@@ -335,31 +345,15 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                 cornerRadius={4}
                 strokeWidth={2}
                 stroke="#1D4ED8"
-                onMouseEnter={(e) => {
-                  const container = e.target.getStage()?.container();
-                  if (container) container.style.cursor = 'ns-resize';
-                }}
-                onMouseLeave={(e) => {
-                  const container = e.target.getStage()?.container();
-                  if (container) container.style.cursor = 'default';
-                }}
+                draggable
                 onMouseDown={(e) => {
                   e.cancelBubble = true;
                   handleEdgeDragStart('shallowEnd', e);
                 }}
-                listening
-              />
-              {/* Deep end handle - at outer edge */}
-              <Rect
-                x={poolData.length * scale / 2 - 20}
-                y={(poolData.width + copingEdges.deepEnd.currentRows * copingConfig.depth) * scale}
-                width={40}
-                height={20}
-                fill="#3B82F6"
-                opacity={0.8}
-                cornerRadius={4}
-                strokeWidth={2}
-                stroke="#1D4ED8"
+                onDragStart={(e) => handleEdgeDragStart('shallowEnd', e as any)}
+                onDragMove={handleEdgeDragMove}
+                onDragEnd={handleEdgeDragEnd}
+                onMouseUp={handleEdgeDragEnd}
                 onMouseEnter={(e) => {
                   const container = e.target.getStage()?.container();
                   if (container) container.style.cursor = 'ns-resize';
@@ -368,9 +362,35 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                   const container = e.target.getStage()?.container();
                   if (container) container.style.cursor = 'default';
                 }}
+                listening
+              />
+              {/* Deep end handle - at true outer edge (base + extension) */}
+              <Rect
+                x={poolData.length * scale / 2 - 20}
+                y={(poolData.width + (getBaseRowsForEdge('deepEnd', copingConfig) + copingEdges.deepEnd.currentRows) * copingConfig.depth) * scale}
+                width={40}
+                height={20}
+                fill="#3B82F6"
+                opacity={0.8}
+                cornerRadius={4}
+                strokeWidth={2}
+                stroke="#1D4ED8"
+                draggable
                 onMouseDown={(e) => {
                   e.cancelBubble = true;
                   handleEdgeDragStart('deepEnd', e);
+                }}
+                onDragStart={(e) => handleEdgeDragStart('deepEnd', e as any)}
+                onDragMove={handleEdgeDragMove}
+                onDragEnd={handleEdgeDragEnd}
+                onMouseUp={handleEdgeDragEnd}
+                onMouseEnter={(e) => {
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = 'ns-resize';
+                }}
+                onMouseLeave={(e) => {
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = 'default';
                 }}
                 listening
               />
