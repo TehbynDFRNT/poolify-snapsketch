@@ -107,18 +107,57 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   };
 
   // Interactive edge extension handlers
+  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
+
   const handleEdgeDragStart = (edge: CopingEdgeId, e: Konva.KonvaEventObject<MouseEvent>) => {
     if (!copingEdges || !copingConfig) return;
     e.cancelBubble = true;
+    
+    const stage = e.target.getStage();
+    if (!stage) return;
+    
+    const pointerPos = stage.getPointerPosition();
+    if (!pointerPos) return;
+    
+    setDragStartPos(pointerPos);
     const session = onDragStart(edge, copingEdges);
     setDragSession(session);
   };
 
   const handleEdgeDragMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (!dragSession || !copingEdges || !copingConfig) return;
-    // Calculate drag distance from mouse position
-    // This is simplified - you'll need proper projection based on edge orientation
-    const dragDistance = 100; // TODO: Calculate actual distance
+    if (!dragSession || !copingEdges || !copingConfig || !dragStartPos) return;
+    
+    const stage = e.target.getStage();
+    if (!stage) return;
+    
+    const pointerPos = stage.getPointerPosition();
+    if (!pointerPos) return;
+    
+    // Calculate drag delta in world space (canvas units)
+    const deltaX = pointerPos.x - dragStartPos.x;
+    const deltaY = pointerPos.y - dragStartPos.y;
+    
+    // Project delta onto edge's outward normal in pool space
+    const rotation = (component.rotation * Math.PI) / 180;
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+    
+    // Determine edge normal in pool-local space
+    let localNormalX = 0, localNormalY = 0;
+    if (dragSession.edge === 'leftSide') { localNormalX = -1; localNormalY = 0; }
+    else if (dragSession.edge === 'rightSide') { localNormalX = 1; localNormalY = 0; }
+    else if (dragSession.edge === 'shallowEnd') { localNormalX = 0; localNormalY = -1; }
+    else { localNormalX = 0; localNormalY = 1; }
+    
+    // Transform normal to world space
+    const worldNormalX = localNormalX * cos - localNormalY * sin;
+    const worldNormalY = localNormalX * sin + localNormalY * cos;
+    
+    // Project delta onto normal
+    const dragDistance = (deltaX * worldNormalX + deltaY * worldNormalY) / scale * 10; // Convert to mm
+    
+    if (dragDistance < 0) return; // Only allow outward dragging
+    
     const preview = onDragMove(
       dragSession, 
       dragDistance, 
@@ -128,11 +167,29 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       copingEdges,
       allComponents
     );
-    // TODO: Generate preview pavers for visual feedback
+    
+    // Generate preview pavers for visual feedback
+    const { buildExtensionRowsForEdge } = require('@/utils/copingInteractiveExtend');
+    const newPreviewPavers = buildExtensionRowsForEdge(
+      dragSession.edge,
+      poolData,
+      copingConfig,
+      copingEdges,
+      preview.fullRowsToAdd,
+      preview.hasCutRow,
+      preview.cutRowDepth
+    );
+    setPreviewPavers(newPreviewPavers);
   };
 
   const handleEdgeDragEnd = () => {
-    if (!dragSession || !copingEdges || !copingConfig) return;
+    if (!dragSession || !copingEdges || !copingConfig) {
+      setDragSession(null);
+      setPreviewPavers([]);
+      setDragStartPos(null);
+      return;
+    }
+    
     const { newEdgesState, newPavers } = copingDragEnd(dragSession, poolData, copingConfig, copingEdges);
     updateComponent(component.id, {
       properties: {
@@ -142,6 +199,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     });
     setDragSession(null);
     setPreviewPavers([]);
+    setDragStartPos(null);
   };
 
   return (
@@ -246,6 +304,22 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
             ))
           )}
 
+          {/* Preview pavers during drag */}
+          {previewPavers.map((paver, i) => (
+            <Rect
+              key={`preview-${i}`}
+              x={paver.x * scale}
+              y={paver.y * scale}
+              width={paver.width * scale}
+              height={paver.height * scale}
+              fill={paver.isPartial ? "#FCD34D" : "#93C5FD"}
+              stroke="#3B82F6"
+              strokeWidth={2}
+              dash={[5, 5]}
+              opacity={0.7}
+            />
+          ))}
+
           {/* Edge drag handles when selected */}
           {isSelected && (
             <>
@@ -259,9 +333,9 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                 opacity={0.7}
                 cornerRadius={3}
                 onMouseDown={(e) => handleEdgeDragStart('leftSide', e)}
-                onMouseMove={handleEdgeDragMove}
                 onMouseUp={handleEdgeDragEnd}
-                draggable={false}
+                onMouseLeave={handleEdgeDragEnd}
+                listening
               />
               {/* Right side handle */}
               <Rect
@@ -273,9 +347,9 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                 opacity={0.7}
                 cornerRadius={3}
                 onMouseDown={(e) => handleEdgeDragStart('rightSide', e)}
-                onMouseMove={handleEdgeDragMove}
                 onMouseUp={handleEdgeDragEnd}
-                draggable={false}
+                onMouseLeave={handleEdgeDragEnd}
+                listening
               />
               {/* Shallow end handle */}
               <Rect
@@ -287,9 +361,9 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                 opacity={0.7}
                 cornerRadius={3}
                 onMouseDown={(e) => handleEdgeDragStart('shallowEnd', e)}
-                onMouseMove={handleEdgeDragMove}
                 onMouseUp={handleEdgeDragEnd}
-                draggable={false}
+                onMouseLeave={handleEdgeDragEnd}
+                listening
               />
               {/* Deep end handle */}
               <Rect
@@ -301,11 +375,25 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                 opacity={0.7}
                 cornerRadius={3}
                 onMouseDown={(e) => handleEdgeDragStart('deepEnd', e)}
-                onMouseMove={handleEdgeDragMove}
                 onMouseUp={handleEdgeDragEnd}
-                draggable={false}
+                onMouseLeave={handleEdgeDragEnd}
+                listening
               />
             </>
+          )}
+
+          {/* Global mouse move handler when dragging */}
+          {dragSession && (
+            <Rect
+              x={-10000}
+              y={-10000}
+              width={20000}
+              height={20000}
+              fill="transparent"
+              onMouseMove={handleEdgeDragMove}
+              onMouseUp={handleEdgeDragEnd}
+              listening
+            />
           )}
         </Group>
       )}
