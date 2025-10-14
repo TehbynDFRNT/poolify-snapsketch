@@ -13,6 +13,7 @@ import {
   type DragSession
 } from '@/interaction/CopingExtendController';
 import type { CopingEdgeId, PaverRect } from '@/types/copingInteractive';
+import { getBaseRowsForEdge } from '@/utils/copingInteractiveExtend';
 import Konva from 'konva';
 
 interface PoolComponentProps {
@@ -72,6 +73,11 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   const handleEdgeDragStart = (edge: CopingEdgeId, e: Konva.KonvaEventObject<MouseEvent>) => {
     if (!copingEdges || !copingConfig) return;
     e.cancelBubble = true;
+
+    // Disable dragging of the whole pool while resizing via handle
+    if (groupRef.current) {
+      try { groupRef.current.draggable(false); } catch {}
+    }
     
     const stage = e.target.getStage();
     if (!stage) return;
@@ -114,7 +120,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     const worldNormalY = localNormalX * sin + localNormalY * cos;
     
     // Project delta onto normal
-    const dragDistance = (deltaX * worldNormalX + deltaY * worldNormalY) / scale * 10; // Convert to mm
+    const dragDistance = (deltaX * worldNormalX + deltaY * worldNormalY) / scale; // Convert canvas units to mm
     
     if (dragDistance < 0) return; // Only allow outward dragging
     
@@ -143,6 +149,11 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   };
 
   const handleEdgeDragEnd = () => {
+    // Re-enable dragging of the whole pool after handle interaction
+    if (groupRef.current) {
+      try { groupRef.current.draggable(true); } catch {}
+    }
+
     if (!dragSession || !copingEdges || !copingConfig) {
       setDragSession(null);
       setPreviewPavers([]);
@@ -150,7 +161,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       return;
     }
     
-    const { newEdgesState, newPavers } = copingDragEnd(dragSession, poolData, copingConfig, copingEdges);
+    const { newEdgesState } = copingDragEnd(dragSession, poolData, copingConfig, copingEdges);
     updateComponent(component.id, {
       properties: {
         ...component.properties,
