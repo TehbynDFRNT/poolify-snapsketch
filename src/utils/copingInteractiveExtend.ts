@@ -282,7 +282,7 @@ export function buildRowPavers(
     if (isLengthAxis) {
       pushRect(a0, edge === 'leftSide' ? -startOffset - rowDepth : startOffset, along, rowDepth, false);
     } else {
-      pushRect(edge === 'shallowEnd' ? -startOffset - rowDepth : startOffset, a0, rowDepth, along, false);
+      pushRect(a0, edge === 'shallowEnd' ? -startOffset - rowDepth : startOffset, along, rowDepth, false);
     }
   }
 
@@ -304,7 +304,7 @@ export function buildRowPavers(
       pushRect(x, edge === 'leftSide' ? -startOffset - rowDepth : startOffset, cut, rowDepth, true);
     } else {
       const y = centreStart + GROUT_MM;
-      pushRect(edge === 'shallowEnd' ? -startOffset - rowDepth : startOffset, y, rowDepth, cut, true);
+      pushRect(y, edge === 'shallowEnd' ? -startOffset - rowDepth : startOffset, cut, rowDepth, true);
     }
   } else if (plan.centreMode === 'double_cut') {
     const cL = plan.cutSizes[0];
@@ -317,8 +317,8 @@ export function buildRowPavers(
     } else {
       const yL = centreStart + GROUT_MM;
       const yR = centreStart + GROUT_MM + cL + GROUT_MM;
-      pushRect(edge === 'shallowEnd' ? -startOffset - rowDepth : startOffset, yL, rowDepth, cL, true);
-      pushRect(edge === 'shallowEnd' ? -startOffset - rowDepth : startOffset, yR, rowDepth, cR, true);
+      pushRect(yL, edge === 'shallowEnd' ? -startOffset - rowDepth : startOffset, cL, rowDepth, true);
+      pushRect(yR, edge === 'shallowEnd' ? -startOffset - rowDepth : startOffset, cR, rowDepth, true);
     }
   }
 
@@ -328,7 +328,7 @@ export function buildRowPavers(
     if (isLengthAxis) {
       pushRect(a1, edge === 'leftSide' ? -startOffset - rowDepth : startOffset, along, rowDepth, false);
     } else {
-      pushRect(edge === 'shallowEnd' ? -startOffset - rowDepth : startOffset, a1, rowDepth, along, false);
+      pushRect(a1, edge === 'shallowEnd' ? -startOffset - rowDepth : startOffset, along, rowDepth, false);
     }
   }
 
