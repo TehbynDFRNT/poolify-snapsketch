@@ -93,15 +93,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       }
     });
   }
-  
-  // Debug logging for interactive mode
-  if (interactiveMode && copingConfig && isSelected) {
-    console.log('Interactive coping state:', {
-      copingConfig: copingConfig.tile,
-      copingEdges,
-      hasHandles: !!copingEdges
-    });
-  }
 
   const handleDragEnd = (e: any) => {
     const newPos = { x: e.target.x(), y: e.target.y() };
@@ -347,14 +338,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
             const rightX = (poolData.length + (getBaseRowsForEdge('rightSide', copingConfig) + copingEdges.rightSide.currentRows) * rightRowDepth) * scale;
             const shallowY = -((getBaseRowsForEdge('shallowEnd', copingConfig) + copingEdges.shallowEnd.currentRows) * shallowRowDepth + 20) * scale;
             const deepY = (poolData.width + (getBaseRowsForEdge('deepEnd', copingConfig) + copingEdges.deepEnd.currentRows) * deepRowDepth) * scale;
-            
-            console.log('Handle positions:', {
-              leftX, rightX, shallowY, deepY,
-              leftRowDepth, rightRowDepth, shallowRowDepth, deepRowDepth,
-              poolLength: poolData.length,
-              poolWidth: poolData.width,
-              scale
-            });
 
             return (
             <>
