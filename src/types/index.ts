@@ -108,13 +108,14 @@ export interface ComponentProperties {
   showCoping?: boolean;
   copingConfig?: any;
   copingCalculation?: CopingCalculation;
-  copingMode?: 'fixed' | 'extensible';
+  copingMode?: 'fixed' | 'extensible' | 'interactive';
   copingExtensions?: {
     deepEnd: ExtensionConfig;
     shallowEnd: ExtensionConfig;
     leftSide: ExtensionConfig;
     rightSide: ExtensionConfig;
   };
+  copingEdges?: any; // CopingEdgesState from interactive system
   
   // Paver
   paverSize?: '400x400' | '400x600';

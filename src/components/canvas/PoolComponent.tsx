@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Group, Line, Text, Circle, Rect } from 'react-konva';
 import { Component } from '@/types';
 import { POOL_LIBRARY } from '@/constants/pools';
@@ -6,6 +6,15 @@ import { calculatePoolCoping } from '@/utils/copingCalculation';
 import { useDesignStore } from '@/store/designStore';
 import { snapPoolToPaverGrid } from '@/utils/snap';
 import { calculateAllExtensions } from '@/utils/copingExtension';
+import { 
+  initialCopingEdgesState,
+  onDragStart,
+  onDragMove,
+  onDragEnd as copingDragEnd,
+  type DragSession
+} from '@/interaction/CopingExtendController';
+import type { CopingEdgeId, PaverRect } from '@/types/copingInteractive';
+import Konva from 'konva';
 
 interface PoolComponentProps {
   component: Component;
@@ -17,6 +26,8 @@ interface PoolComponentProps {
 export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: PoolComponentProps) => {
   const groupRef = useRef<any>(null);
   const { components: allComponents, updateComponent } = useDesignStore();
+  const [dragSession, setDragSession] = useState<DragSession | null>(null);
+  const [previewPavers, setPreviewPavers] = useState<PaverRect[]>([]);
 
   // Prefer embedded pool geometry to avoid library mismatches
   const poolData = (component.properties as any).pool ||
@@ -40,6 +51,10 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   const extensionPavers = extensionsEnabled && component.properties.copingExtensions
     ? getAllExtensionPavers(component)
     : [];
+
+  // Interactive coping mode
+  const interactiveMode = component.properties.copingMode === 'interactive';
+  const copingEdges = component.properties.copingEdges || (copingConfig ? initialCopingEdgesState(copingConfig) : null);
 
   // Auto-update extensions when pool moves or rotates
   useEffect(() => {
@@ -91,6 +106,44 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     onDragEnd(snappedPos);
   };
 
+  // Interactive edge extension handlers
+  const handleEdgeDragStart = (edge: CopingEdgeId, e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (!copingEdges || !copingConfig) return;
+    e.cancelBubble = true;
+    const session = onDragStart(edge, copingEdges);
+    setDragSession(session);
+  };
+
+  const handleEdgeDragMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (!dragSession || !copingEdges || !copingConfig) return;
+    // Calculate drag distance from mouse position
+    // This is simplified - you'll need proper projection based on edge orientation
+    const dragDistance = 100; // TODO: Calculate actual distance
+    const preview = onDragMove(
+      dragSession, 
+      dragDistance, 
+      poolData, 
+      component,
+      copingConfig, 
+      copingEdges,
+      allComponents
+    );
+    // TODO: Generate preview pavers for visual feedback
+  };
+
+  const handleEdgeDragEnd = () => {
+    if (!dragSession || !copingEdges || !copingConfig) return;
+    const { newEdgesState, newPavers } = copingDragEnd(dragSession, poolData, copingConfig, copingEdges);
+    updateComponent(component.id, {
+      properties: {
+        ...component.properties,
+        copingEdges: newEdgesState,
+      }
+    });
+    setDragSession(null);
+    setPreviewPavers([]);
+  };
+
   return (
     <>
       {/* Render extension pavers in world space (outside pool group) */}
@@ -126,7 +179,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       >
 
       {/* Render coping (always when enabled) */}
-      {showCoping && copingCalc && (
+      {showCoping && copingCalc && !interactiveMode && (
         <Group>
           {/* Render all coping pavers */}
           {[
@@ -148,6 +201,112 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
               opacity={paver.isPartial ? 0.8 : 1}
             />
           ))}
+        </Group>
+      )}
+
+      {/* Interactive coping mode */}
+      {interactiveMode && copingEdges && copingCalc && (
+        <Group>
+          {/* Base coping from calculation */}
+          {[
+            ...copingCalc.deepEnd.paverPositions,
+            ...copingCalc.shallowEnd.paverPositions,
+            ...copingCalc.leftSide.paverPositions,
+            ...copingCalc.rightSide.paverPositions,
+          ].map((paver, index) => (
+            <Rect
+              key={`base-coping-${index}`}
+              x={paver.x * scale}
+              y={paver.y * scale}
+              width={paver.width * scale}
+              height={paver.height * scale}
+              fill={paver.isPartial ? "#FCD34D" : "#9CA3AF"}
+              stroke="#374151"
+              strokeWidth={2}
+              dash={paver.isPartial ? [5, 5] : undefined}
+              opacity={paver.isPartial ? 0.8 : 1}
+            />
+          ))}
+          
+          {/* Extension pavers from edges */}
+          {Object.entries(copingEdges).map(([edge, state]: [string, any]) => 
+            ((state.pavers || []) as PaverRect[]).map((paver, i) => (
+              <Rect
+                key={`ext-${edge}-${i}`}
+                x={paver.x * scale}
+                y={paver.y * scale}
+                width={paver.width * scale}
+                height={paver.height * scale}
+                fill={paver.isPartial ? "#FCD34D" : "#D1D5DB"}
+                stroke="#374151"
+                strokeWidth={2}
+                dash={paver.isPartial ? [5, 5] : undefined}
+                opacity={0.9}
+              />
+            ))
+          )}
+
+          {/* Edge drag handles when selected */}
+          {isSelected && (
+            <>
+              {/* Left side handle */}
+              <Rect
+                x={-20}
+                y={poolData.width * scale / 2 - 15}
+                width={15}
+                height={30}
+                fill="#3B82F6"
+                opacity={0.7}
+                cornerRadius={3}
+                onMouseDown={(e) => handleEdgeDragStart('leftSide', e)}
+                onMouseMove={handleEdgeDragMove}
+                onMouseUp={handleEdgeDragEnd}
+                draggable={false}
+              />
+              {/* Right side handle */}
+              <Rect
+                x={poolData.length * scale + 5}
+                y={poolData.width * scale / 2 - 15}
+                width={15}
+                height={30}
+                fill="#3B82F6"
+                opacity={0.7}
+                cornerRadius={3}
+                onMouseDown={(e) => handleEdgeDragStart('rightSide', e)}
+                onMouseMove={handleEdgeDragMove}
+                onMouseUp={handleEdgeDragEnd}
+                draggable={false}
+              />
+              {/* Shallow end handle */}
+              <Rect
+                x={poolData.length * scale / 2 - 15}
+                y={-20}
+                width={30}
+                height={15}
+                fill="#3B82F6"
+                opacity={0.7}
+                cornerRadius={3}
+                onMouseDown={(e) => handleEdgeDragStart('shallowEnd', e)}
+                onMouseMove={handleEdgeDragMove}
+                onMouseUp={handleEdgeDragEnd}
+                draggable={false}
+              />
+              {/* Deep end handle */}
+              <Rect
+                x={poolData.length * scale / 2 - 15}
+                y={poolData.width * scale + 5}
+                width={30}
+                height={15}
+                fill="#3B82F6"
+                opacity={0.7}
+                cornerRadius={3}
+                onMouseDown={(e) => handleEdgeDragStart('deepEnd', e)}
+                onMouseMove={handleEdgeDragMove}
+                onMouseUp={handleEdgeDragEnd}
+                draggable={false}
+              />
+            </>
+          )}
         </Group>
       )}
 
