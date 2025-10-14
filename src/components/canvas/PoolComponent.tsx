@@ -125,8 +125,8 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
         onDragEnd={handleDragEnd}
       >
 
-      {/* Render coping (if fixed mode and enabled) */}
-      {showCoping && !extensionsEnabled && copingCalc && (
+      {/* Render coping (always when enabled) */}
+      {showCoping && copingCalc && (
         <Group>
           {/* Render all coping pavers */}
           {[
