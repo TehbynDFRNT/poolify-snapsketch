@@ -260,63 +260,107 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
             />
           ))}
 
-          {/* Edge drag handles when selected */}
-          {isSelected && (
+          {/* Edge drag handles when selected - positioned at outer edge of coping */}
+          {isSelected && copingConfig && copingEdges && (
             <>
-              {/* Left side handle */}
+              {/* Left side handle - at outer edge */}
               <Rect
-                x={-20}
-                y={poolData.width * scale / 2 - 15}
-                width={15}
-                height={30}
+                x={-(copingEdges.leftSide.currentRows * copingConfig.depth + 20) * scale}
+                y={poolData.width * scale / 2 - 20}
+                width={20}
+                height={40}
                 fill="#3B82F6"
-                opacity={0.7}
-                cornerRadius={3}
-                onMouseDown={(e) => handleEdgeDragStart('leftSide', e)}
-                onMouseUp={handleEdgeDragEnd}
-                onMouseLeave={handleEdgeDragEnd}
+                opacity={0.8}
+                cornerRadius={4}
+                strokeWidth={2}
+                stroke="#1D4ED8"
+                onMouseEnter={(e) => {
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = 'ew-resize';
+                }}
+                onMouseLeave={(e) => {
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = 'default';
+                }}
+                onMouseDown={(e) => {
+                  e.cancelBubble = true;
+                  handleEdgeDragStart('leftSide', e);
+                }}
                 listening
               />
-              {/* Right side handle */}
+              {/* Right side handle - at outer edge */}
               <Rect
-                x={poolData.length * scale + 5}
-                y={poolData.width * scale / 2 - 15}
-                width={15}
-                height={30}
+                x={(poolData.length + copingEdges.rightSide.currentRows * copingConfig.depth) * scale}
+                y={poolData.width * scale / 2 - 20}
+                width={20}
+                height={40}
                 fill="#3B82F6"
-                opacity={0.7}
-                cornerRadius={3}
-                onMouseDown={(e) => handleEdgeDragStart('rightSide', e)}
-                onMouseUp={handleEdgeDragEnd}
-                onMouseLeave={handleEdgeDragEnd}
+                opacity={0.8}
+                cornerRadius={4}
+                strokeWidth={2}
+                stroke="#1D4ED8"
+                onMouseEnter={(e) => {
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = 'ew-resize';
+                }}
+                onMouseLeave={(e) => {
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = 'default';
+                }}
+                onMouseDown={(e) => {
+                  e.cancelBubble = true;
+                  handleEdgeDragStart('rightSide', e);
+                }}
                 listening
               />
-              {/* Shallow end handle */}
+              {/* Shallow end handle - at outer edge */}
               <Rect
-                x={poolData.length * scale / 2 - 15}
-                y={-20}
-                width={30}
-                height={15}
+                x={poolData.length * scale / 2 - 20}
+                y={-(copingEdges.shallowEnd.currentRows * copingConfig.depth + 20) * scale}
+                width={40}
+                height={20}
                 fill="#3B82F6"
-                opacity={0.7}
-                cornerRadius={3}
-                onMouseDown={(e) => handleEdgeDragStart('shallowEnd', e)}
-                onMouseUp={handleEdgeDragEnd}
-                onMouseLeave={handleEdgeDragEnd}
+                opacity={0.8}
+                cornerRadius={4}
+                strokeWidth={2}
+                stroke="#1D4ED8"
+                onMouseEnter={(e) => {
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = 'ns-resize';
+                }}
+                onMouseLeave={(e) => {
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = 'default';
+                }}
+                onMouseDown={(e) => {
+                  e.cancelBubble = true;
+                  handleEdgeDragStart('shallowEnd', e);
+                }}
                 listening
               />
-              {/* Deep end handle */}
+              {/* Deep end handle - at outer edge */}
               <Rect
-                x={poolData.length * scale / 2 - 15}
-                y={poolData.width * scale + 5}
-                width={30}
-                height={15}
+                x={poolData.length * scale / 2 - 20}
+                y={(poolData.width + copingEdges.deepEnd.currentRows * copingConfig.depth) * scale}
+                width={40}
+                height={20}
                 fill="#3B82F6"
-                opacity={0.7}
-                cornerRadius={3}
-                onMouseDown={(e) => handleEdgeDragStart('deepEnd', e)}
-                onMouseUp={handleEdgeDragEnd}
-                onMouseLeave={handleEdgeDragEnd}
+                opacity={0.8}
+                cornerRadius={4}
+                strokeWidth={2}
+                stroke="#1D4ED8"
+                onMouseEnter={(e) => {
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = 'ns-resize';
+                }}
+                onMouseLeave={(e) => {
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = 'default';
+                }}
+                onMouseDown={(e) => {
+                  e.cancelBubble = true;
+                  handleEdgeDragStart('deepEnd', e);
+                }}
                 listening
               />
             </>
