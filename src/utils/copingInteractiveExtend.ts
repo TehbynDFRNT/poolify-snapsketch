@@ -18,7 +18,8 @@ export const MIN_BOUNDARY_CUT_ROW_MM = 100;
 // ──────────────────────────────────────────────────────────────────────────────
 
 export function edgeIsLengthAxis(edge: CopingEdgeId): boolean {
-  return edge === 'leftSide' || edge === 'rightSide';
+  // Shallow and deep ends are now the horizontal edges (along X-axis)
+  return edge === 'shallowEnd' || edge === 'deepEnd';
 }
 
 export function getAlongAndDepthForEdge(edge: CopingEdgeId, config: CopingConfig) {
@@ -29,13 +30,15 @@ export function getAlongAndDepthForEdge(edge: CopingEdgeId, config: CopingConfig
 }
 
 export function getBaseRowsForEdge(edge: CopingEdgeId, config: CopingConfig) {
-  if (edge === 'leftSide' || edge === 'rightSide') return config.rows.sides;
+  // Shallow/deep ends are horizontal, sides are vertical
   if (edge === 'shallowEnd') return config.rows.shallow;
-  return config.rows.deep;
+  if (edge === 'deepEnd') return config.rows.deep;
+  return config.rows.sides; // leftSide and rightSide
 }
 
 export function getCornerExtensionFromSides(currentSidesRows: number, config: CopingConfig) {
-  const sideRowDepth = config.tile.y;
+  // Sides are now vertical, so they extend along X (tile.x is row depth)
+  const sideRowDepth = config.tile.x;
   return currentSidesRows * sideRowDepth;
 }
 
@@ -45,12 +48,14 @@ export function getDynamicEdgeLength(
   config: CopingConfig,
   edgesState: CopingEdgesState,
 ) {
+  // Shallow/deep ends are horizontal (use pool.length)
   if (edgeIsLengthAxis(edge)) return pool.length;
 
-  const currentSideRows =
-    Math.max(getBaseRowsForEdge('leftSide', config), edgesState.leftSide.currentRows ?? 0) ||
-    getBaseRowsForEdge('leftSide', config);
-  const cornerExt = getCornerExtensionFromSides(currentSideRows, config);
+  // Sides are vertical (use pool.width + corner extensions from shallow/deep ends)
+  const currentEndRows =
+    Math.max(getBaseRowsForEdge('shallowEnd', config), edgesState.shallowEnd.currentRows ?? 0) ||
+    getBaseRowsForEdge('shallowEnd', config);
+  const cornerExt = getCornerExtensionFromSides(currentEndRows, config);
   return pool.width + 2 * cornerExt;
 }
 
@@ -100,7 +105,7 @@ export function getNearestBoundaryDistanceFromEdgeOuter(
   const sin = Math.sin(rotation);
   
   if (edge === 'leftSide') {
-    // Left side: offset in -Y direction (local), outward is also -Y
+    // Left side (top edge): offset in -Y direction (local), outward is also -Y
     const localX = 0;
     const localY = -outerOffset;
     rayOrigin = {
@@ -112,7 +117,7 @@ export function getNearestBoundaryDistanceFromEdgeOuter(
       y: cos
     };
   } else if (edge === 'rightSide') {
-    // Right side: offset in +Y direction (local), outward is +Y
+    // Right side (bottom edge): offset in +Y direction (local), outward is +Y
     const localX = 0;
     const localY = outerOffset;
     rayOrigin = {
@@ -124,7 +129,7 @@ export function getNearestBoundaryDistanceFromEdgeOuter(
       y: -cos
     };
   } else if (edge === 'shallowEnd') {
-    // Shallow end: offset in -X direction (local), outward is -X
+    // Shallow end (left edge): offset in -X direction (local), outward is -X
     const localX = -outerOffset;
     const localY = 0;
     rayOrigin = {
@@ -136,7 +141,7 @@ export function getNearestBoundaryDistanceFromEdgeOuter(
       y: -sin
     };
   } else {
-    // Deep end: offset in +X direction (local), outward is +X
+    // Deep end (right edge): offset in +X direction (local), outward is +X
     const localX = outerOffset;
     const localY = 0;
     rayOrigin = {
