@@ -122,7 +122,7 @@ export const PoolSelector = ({ onSelect, onClose }: PoolSelectorProps) => {
                 
                 {selectedCoping && (
                   <div className="text-xs text-muted-foreground mt-2">
-                    Tile: {selectedCoping.tile.along}×{selectedCoping.tile.inward}mm | 
+                    Tile: {(selectedCoping.tile as any).along || selectedCoping.tile.x}×{(selectedCoping.tile as any).inward || selectedCoping.tile.y}mm | 
                     Rows: SE={selectedCoping.rows.shallow}, Sides={selectedCoping.rows.sides}, DE={selectedCoping.rows.deep}
                   </div>
                 )}
