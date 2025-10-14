@@ -206,21 +206,19 @@ export function planAxis(edgeLength: number, along: number, grout = GROUT_MM): A
 export function planPoolCopingGlobal(pool: Pool, config: CopingConfig): CopingPlan {
   const { tile, rows } = config;
 
-  // For uniform tiling, determine the long edge (runs along pool edges)
-  // and short edge (projects inward) from the tile dimensions
-  const along = Math.max(tile.x, tile.y);   // e.g., 600mm for both 600×400 and 400×600
-  const inward = Math.min(tile.x, tile.y);  // e.g., 400mm for both
+  // Per‑edge row depths (perpendicular to that edge) under global orientation:
+  // - Sides (long edges, horizontal): rows project in Y → depth = tile.y
+  // - Ends  (short edges, vertical) : rows project in X → depth = tile.x
+  const sideRowDepth = tile.y;
+  const endRowDepth  = tile.x;
 
-  // Row depths (how far each row projects perpendicular to the edge)
-  const rowDepth = inward;  // same depth for all edges
-
-  // Corner extension for ends
-  const cornerExtension = rows.sides * rowDepth;
+  // Ends span pool.width + "corner returns" created by side rows on both ends
+  const cornerExtension = rows.sides * sideRowDepth;
   const widthEdgeLength = pool.width + 2 * cornerExtension;
 
-  // Calculate axis plans using the SAME 'along' dimension for all edges
-  const lengthAxis = planAxis(pool.length, along, GROUT_MM);
-  const widthAxis = planAxis(widthEdgeLength, along, GROUT_MM);
+  // Axis plans (reused for mirrored edges)
+  const lengthAxis = planAxis(pool.length, /*along*/ tile.x, GROUT_MM); // top & bottom
+  const widthAxis  = planAxis(widthEdgeLength, /*along*/ tile.y, GROUT_MM); // shallow & deep
 
   // Totals per edge (apply rows)
   const leftSide: EdgeTotals = {
@@ -439,7 +437,6 @@ export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | Co
   const isLegacy = 'along' in (copingConfig.tile as any);
   
   let globalConfig: CopingConfig;
-  let paverInward: number;
   
   if (isLegacy) {
     const legacyConfig = copingConfig as LegacyCopingConfig;
@@ -450,21 +447,22 @@ export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | Co
       tile: { x: legacyConfig.tile.along, y: legacyConfig.tile.inward },
       rows: legacyConfig.rows,
     };
-    paverInward = legacyConfig.tile.inward;
   } else {
     globalConfig = copingConfig as CopingConfig;
-    // For new config, inward dimension is tile.y for sides
-    paverInward = globalConfig.tile.y;
   }
   
   // Use new algorithm
   const plan = planPoolCopingGlobal(pool, globalConfig);
-  const cornerExtension = copingConfig.rows.sides * paverInward;
+  
+  // Row depths per edge type (same as in planPoolCopingGlobal)
+  const sideRowDepth = globalConfig.tile.y;
+  const endRowDepth  = globalConfig.tile.x;
+  const cornerExtension = copingConfig.rows.sides * sideRowDepth;
 
   // Generate positions for each side using the new approach
   const deepEnd: CopingSide = {
     rows: copingConfig.rows.deep,
-    width: paverInward * copingConfig.rows.deep,
+    width: endRowDepth * copingConfig.rows.deep,
     length: plan.widthAxis.edgeLength,
     fullPavers: plan.deepEnd.fullPavers,
     partialPaver: plan.widthAxis.cutSizes.length > 0 ? plan.widthAxis.gapBeforeCentre : null,
@@ -472,7 +470,7 @@ export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | Co
       pool.length,
       -cornerExtension,
       plan.widthAxis,
-      paverInward,
+      endRowDepth,
       false,
       copingConfig.rows.deep
     ),
@@ -480,15 +478,15 @@ export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | Co
 
   const shallowEnd: CopingSide = {
     rows: copingConfig.rows.shallow,
-    width: paverInward * copingConfig.rows.shallow,
+    width: endRowDepth * copingConfig.rows.shallow,
     length: plan.widthAxis.edgeLength,
     fullPavers: plan.shallowEnd.fullPavers,
     partialPaver: plan.widthAxis.cutSizes.length > 0 ? plan.widthAxis.gapBeforeCentre : null,
     paverPositions: generatePaverPositions(
-      -paverInward * copingConfig.rows.shallow,
+      -endRowDepth * copingConfig.rows.shallow,
       -cornerExtension,
       plan.widthAxis,
-      paverInward,
+      endRowDepth,
       false,
       copingConfig.rows.shallow
     ),
@@ -496,15 +494,15 @@ export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | Co
 
   const leftSide: CopingSide = {
     rows: copingConfig.rows.sides,
-    width: paverInward * copingConfig.rows.sides,
+    width: sideRowDepth * copingConfig.rows.sides,
     length: pool.length,
     fullPavers: plan.leftSide.fullPavers,
     partialPaver: plan.lengthAxis.cutSizes.length > 0 ? plan.lengthAxis.gapBeforeCentre : null,
     paverPositions: generatePaverPositions(
       0,
-      -paverInward * copingConfig.rows.sides,
+      -sideRowDepth * copingConfig.rows.sides,
       plan.lengthAxis,
-      paverInward,
+      sideRowDepth,
       true,
       copingConfig.rows.sides
     ),
@@ -512,7 +510,7 @@ export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | Co
 
   const rightSide: CopingSide = {
     rows: copingConfig.rows.sides,
-    width: paverInward * copingConfig.rows.sides,
+    width: sideRowDepth * copingConfig.rows.sides,
     length: pool.length,
     fullPavers: plan.rightSide.fullPavers,
     partialPaver: plan.lengthAxis.cutSizes.length > 0 ? plan.lengthAxis.gapBeforeCentre : null,
@@ -520,17 +518,17 @@ export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | Co
       0,
       pool.width,
       plan.lengthAxis,
-      paverInward,
+      sideRowDepth,
       true,
       copingConfig.rows.sides
     ),
   };
 
   const totalArea = (
-    (plan.widthAxis.edgeLength * paverInward * copingConfig.rows.deep) +
-    (plan.widthAxis.edgeLength * paverInward * copingConfig.rows.shallow) +
-    (pool.length * paverInward * copingConfig.rows.sides) +
-    (pool.length * paverInward * copingConfig.rows.sides)
+    (plan.widthAxis.edgeLength * endRowDepth * copingConfig.rows.deep) +
+    (plan.widthAxis.edgeLength * endRowDepth * copingConfig.rows.shallow) +
+    (pool.length * sideRowDepth * copingConfig.rows.sides) +
+    (pool.length * sideRowDepth * copingConfig.rows.sides)
   ) / 1000000;
 
   return {
