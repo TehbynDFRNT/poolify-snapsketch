@@ -332,7 +332,15 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
             const shallowRowDepth = getAlongAndDepthForEdge('shallowEnd', copingConfig).rowDepth;
             const deepRowDepth = getAlongAndDepthForEdge('deepEnd', copingConfig).rowDepth;
             
-            // Debug: Log handle positions
+            // A) Config normalization - Log runtime config
+            console.log('[CFG]', { 
+              tile: copingConfig?.tile, 
+              rows: copingConfig?.rows 
+            });
+            
+            // A) Edges state - Log before first drag
+            console.log('[EDGES]', structuredClone(copingEdges));
+            
             const leftX = -((getBaseRowsForEdge('leftSide', copingConfig) + copingEdges.leftSide.currentRows) * leftRowDepth + 20) * scale;
             const rightX = (poolData.length + (getBaseRowsForEdge('rightSide', copingConfig) + copingEdges.rightSide.currentRows) * rightRowDepth) * scale;
             const shallowY = -((getBaseRowsForEdge('shallowEnd', copingConfig) + copingEdges.shallowEnd.currentRows) * shallowRowDepth + 20) * scale;

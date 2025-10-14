@@ -266,8 +266,33 @@ export function buildRowPavers(
   const unit = along + GROUT_MM;
 
   const startOffset = rowStartOffset(rowIndex, rowDepth);
+  const isLengthAxis = edgeIsLengthAxis(edge);
+  const alongLen = plan.edgeLength;
+
+  // D) Row placement instrumentation
+  console.log('[ROW]', {
+    edge, rowIndex, isLengthAxis,
+    alongLen: plan.edgeLength,
+    along: plan.along, 
+    grout: GROUT_MM,
+    rowDepth, 
+    startOffset,
+    centreMode: plan.centreMode,
+    cutSizes: plan.cutSizes,
+  });
 
   const pushRect = (x: number, y: number, w: number, h: number, isPartial: boolean) => {
+    // D) Rectangle position logging
+    console.log('[RECT]', { 
+      edge, 
+      rowIndex, 
+      x: Math.round(x), 
+      y: Math.round(y), 
+      w: Math.round(w), 
+      h: Math.round(h), 
+      isPartial 
+    });
+    
     p.push({
       x: Math.round(x),
       y: Math.round(y),
@@ -277,9 +302,6 @@ export function buildRowPavers(
       meta: { edge, rowIndex, isBoundaryCutRow },
     });
   };
-
-  const isLengthAxis = edgeIsLengthAxis(edge);
-  const alongLen = plan.edgeLength;
 
   // 1) From one corner towards centre (left/top side)
   for (let i = 0; i < plan.paversPerCorner; i++) {
