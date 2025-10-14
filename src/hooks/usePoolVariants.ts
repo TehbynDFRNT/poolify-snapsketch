@@ -8,11 +8,6 @@ export interface PoolVariant {
   outline: Array<{x: number, y: number}>;
   shallow_end_position: {x: number, y: number} | null;
   deep_end_position: {x: number, y: number} | null;
-  coping_width: number | null;
-  grout_width: number | null;
-  paver_size: string | null;
-  coping_layout: any | null;
-  coping_options: any[] | null;
   features: any[] | null;
   status: string | null;
   notes: string | null;

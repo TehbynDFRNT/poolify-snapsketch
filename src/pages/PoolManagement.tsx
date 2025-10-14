@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/hooks/use-toast';
-import { ArrowLeft, Upload, Search, Edit, Trash2, CheckCircle2, XCircle } from 'lucide-react';
+import { ArrowLeft, Upload, Search, Edit, Trash2 } from 'lucide-react';
 import { usePoolVariants, useTogglePoolStatus, useDeletePoolVariant, useCreatePoolVariant, PoolVariant } from '@/hooks/usePoolVariants';
 import { PoolEditorDialog } from '@/components/PoolEditorDialog';
 import { DXFImportDialog } from '@/components/DXFImportDialog';
@@ -146,12 +146,7 @@ export function PoolManagement() {
         shallow_end_position: parsedDxfData.shallowEndPosition,
         deep_end_position: parsedDxfData.deepEndPosition,
         status: 'draft',
-        coping_options: null,
         features: null,
-        coping_width: null,
-        grout_width: null,
-        paver_size: null,
-        coping_layout: null,
         notes: null,
         published_at: null,
         sort_order: null,
@@ -252,23 +247,10 @@ export function PoolManagement() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <CardTitle className="text-lg">{pool.pool_name}</CardTitle>
-                        <CardDescription className="mt-1 space-y-1">
-                          <div className="flex items-center gap-4 text-sm">
-                            {pool.coping_layout ? (
-                              <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                                <CheckCircle2 className="w-4 h-4" />
-                                Coping Configured
-                              </span>
-                            ) : (
-                              <span className="flex items-center gap-1 text-muted-foreground">
-                                <XCircle className="w-4 h-4" />
-                                No Coping
-                              </span>
-                            )}
-                            {pool.updated_at && (
-                              <span>Updated: {new Date(pool.updated_at).toLocaleDateString()}</span>
-                            )}
-                          </div>
+                        <CardDescription className="mt-1">
+                          {pool.updated_at && (
+                            <span className="text-sm">Updated: {new Date(pool.updated_at).toLocaleDateString()}</span>
+                          )}
                         </CardDescription>
                       </div>
                       <div className="flex items-center gap-3">

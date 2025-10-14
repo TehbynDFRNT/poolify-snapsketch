@@ -5,11 +5,11 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { X, Loader2 } from 'lucide-react';
-import { calculatePoolCoping, CopingConfig } from '@/utils/copingCalculation';
+import { calculatePoolCoping, CopingConfig, DEFAULT_COPING_OPTIONS, LegacyCopingConfig } from '@/utils/copingCalculation';
 import { usePublishedPools } from '@/hooks/usePoolVariants';
 
 interface PoolSelectorProps {
-  onSelect: (pool: Pool, copingOptions: { showCoping: boolean; copingConfig?: CopingConfig; copingCalculation?: any }) => void;
+  onSelect: (pool: Pool, copingOptions: { showCoping: boolean; copingConfig?: CopingConfig | LegacyCopingConfig; copingCalculation?: any }) => void;
   onClose: () => void;
 }
 
@@ -19,7 +19,7 @@ export const PoolSelector = ({ onSelect, onClose }: PoolSelectorProps) => {
   const [selectedCopingId, setSelectedCopingId] = useState<string>('none');
 
   const selectedPool = publishedPools?.find(p => p.id === selectedPoolId);
-  const copingOptions = (selectedPool?.coping_options as CopingConfig[]) || [];
+  const copingOptions = DEFAULT_COPING_OPTIONS;
   const selectedCoping = copingOptions.find(opt => opt.id === selectedCopingId);
 
   const handleSelect = () => {
@@ -122,7 +122,7 @@ export const PoolSelector = ({ onSelect, onClose }: PoolSelectorProps) => {
                 
                 {selectedCoping && (
                   <div className="text-xs text-muted-foreground mt-2">
-                    Tile: {(selectedCoping.tile as any).along || selectedCoping.tile.x}×{(selectedCoping.tile as any).inward || selectedCoping.tile.y}mm | 
+                    Tile: {(selectedCoping.tile as any).along}×{(selectedCoping.tile as any).inward}mm | 
                     Rows: SE={selectedCoping.rows.shallow}, Sides={selectedCoping.rows.sides}, DE={selectedCoping.rows.deep}
                   </div>
                 )}

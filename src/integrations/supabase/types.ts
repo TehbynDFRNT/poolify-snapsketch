@@ -146,18 +146,13 @@ export type Database = {
       }
       pool_variants: {
         Row: {
-          coping_layout: Json | null
-          coping_options: Json | null
-          coping_width: number | null
           created_at: string | null
           created_by: string | null
           deep_end_position: Json | null
           features: Json | null
-          grout_width: number | null
           id: string
           notes: string | null
           outline: Json
-          paver_size: string | null
           pool_name: string
           published_at: string | null
           published_by: string | null
@@ -168,18 +163,13 @@ export type Database = {
           zone_of_influence: Json | null
         }
         Insert: {
-          coping_layout?: Json | null
-          coping_options?: Json | null
-          coping_width?: number | null
           created_at?: string | null
           created_by?: string | null
           deep_end_position?: Json | null
           features?: Json | null
-          grout_width?: number | null
           id?: string
           notes?: string | null
           outline: Json
-          paver_size?: string | null
           pool_name: string
           published_at?: string | null
           published_by?: string | null
@@ -190,18 +180,13 @@ export type Database = {
           zone_of_influence?: Json | null
         }
         Update: {
-          coping_layout?: Json | null
-          coping_options?: Json | null
-          coping_width?: number | null
           created_at?: string | null
           created_by?: string | null
           deep_end_position?: Json | null
           features?: Json | null
-          grout_width?: number | null
           id?: string
           notes?: string | null
           outline?: Json
-          paver_size?: string | null
           pool_name?: string
           published_at?: string | null
           published_by?: string | null
