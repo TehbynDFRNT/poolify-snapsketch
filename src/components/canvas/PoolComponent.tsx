@@ -13,7 +13,7 @@ import {
   type DragSession
 } from '@/interaction/CopingExtendController';
 import type { CopingEdgeId, PaverRect } from '@/types/copingInteractive';
-import { getBaseRowsForEdge } from '@/utils/copingInteractiveExtend';
+import { getBaseRowsForEdge, getAlongAndDepthForEdge } from '@/utils/copingInteractiveExtend';
 import Konva from 'konva';
 
 interface PoolComponentProps {
@@ -272,11 +272,17 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
           ))}
 
           {/* Edge drag handles when selected - positioned at outer edge of coping */}
-          {isSelected && copingConfig && copingEdges && (
+          {isSelected && copingConfig && copingEdges && (() => {
+            const leftRowDepth = getAlongAndDepthForEdge('leftSide', copingConfig).rowDepth;
+            const rightRowDepth = getAlongAndDepthForEdge('rightSide', copingConfig).rowDepth;
+            const shallowRowDepth = getAlongAndDepthForEdge('shallowEnd', copingConfig).rowDepth;
+            const deepRowDepth = getAlongAndDepthForEdge('deepEnd', copingConfig).rowDepth;
+
+            return (
             <>
               {/* Left side handle - at true outer edge (base + extension) */}
               <Rect
-                x={-( (getBaseRowsForEdge('leftSide', copingConfig) + copingEdges.leftSide.currentRows) * copingConfig.depth + 20) * scale}
+                x={-( (getBaseRowsForEdge('leftSide', copingConfig) + copingEdges.leftSide.currentRows) * leftRowDepth + 20) * scale}
                 y={poolData.width * scale / 2 - 20}
                 width={20}
                 height={40}
@@ -306,7 +312,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
               />
               {/* Right side handle - at true outer edge (base + extension) */}
               <Rect
-                x={(poolData.length + (getBaseRowsForEdge('rightSide', copingConfig) + copingEdges.rightSide.currentRows) * copingConfig.depth) * scale}
+                x={(poolData.length + (getBaseRowsForEdge('rightSide', copingConfig) + copingEdges.rightSide.currentRows) * rightRowDepth) * scale}
                 y={poolData.width * scale / 2 - 20}
                 width={20}
                 height={40}
@@ -337,7 +343,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
               {/* Shallow end handle - at true outer edge (base + extension) */}
               <Rect
                 x={poolData.length * scale / 2 - 20}
-                y={-( (getBaseRowsForEdge('shallowEnd', copingConfig) + copingEdges.shallowEnd.currentRows) * copingConfig.depth + 20) * scale}
+                y={-( (getBaseRowsForEdge('shallowEnd', copingConfig) + copingEdges.shallowEnd.currentRows) * shallowRowDepth + 20) * scale}
                 width={40}
                 height={20}
                 fill="#3B82F6"
@@ -367,7 +373,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
               {/* Deep end handle - at true outer edge (base + extension) */}
               <Rect
                 x={poolData.length * scale / 2 - 20}
-                y={(poolData.width + (getBaseRowsForEdge('deepEnd', copingConfig) + copingEdges.deepEnd.currentRows) * copingConfig.depth) * scale}
+                y={(poolData.width + (getBaseRowsForEdge('deepEnd', copingConfig) + copingEdges.deepEnd.currentRows) * deepRowDepth) * scale}
                 width={40}
                 height={20}
                 fill="#3B82F6"
@@ -395,7 +401,8 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                 listening
               />
             </>
-          )}
+            );
+          })()}
 
           {/* Global mouse move handler when dragging */}
           {dragSession && (
