@@ -850,7 +850,7 @@ export const Canvas = ({
   };
 
   return (
-    <div ref={containerRef} className="relative w-full h-full bg-canvas-bg">
+    <div ref={containerRef} className="relative z-0 w-full h-full bg-canvas-bg">
       <Stage
         ref={stageRef}
         width={dimensions.width}

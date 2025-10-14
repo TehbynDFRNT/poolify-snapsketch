@@ -110,7 +110,7 @@ export const BottomPanel = ({
   const materialsSummary = calculateMeasurements(components);
   return (
     <div
-      className="border-t bg-background flex flex-col flex-shrink-0"
+      className="border-t bg-background flex flex-col flex-shrink-0 relative z-20"
       style={{ height: `${height}px` }}
     >
       {/* Resize Handle */}
