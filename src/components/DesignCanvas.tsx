@@ -174,15 +174,37 @@ export const DesignCanvas = () => {
     }
   };
 
-  // Auto-save to cloud
+  // Auto-save to cloud - use ref to get latest components
+  const componentsRef = useRef(components);
+  useEffect(() => {
+    componentsRef.current = components;
+  }, [components]);
+
   useEffect(() => {
     const interval = setInterval(async () => {
-      if (currentProject && user && id && permission !== 'view') {
-        await handleSave();
+      if (currentProject && user && id && permission !== 'view' && componentsRef.current) {
+        try {
+          const { error } = await supabase
+            .from('projects')
+            .update({
+              customer_name: currentProject.customerName,
+              address: currentProject.address,
+              notes: currentProject.notes,
+              components: componentsRef.current as any,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', id);
+          
+          if (error) throw error;
+          setLastSaved(new Date());
+          setIsDirty(false);
+        } catch (error: any) {
+          console.error('Auto-save failed:', error);
+        }
       }
     }, 30000);
     return () => clearInterval(interval);
-  }, [currentProject, components, user, id, permission]);
+  }, [currentProject, user, id, permission]);
 
   // Track unsaved changes across project fields and components
   useEffect(() => {
@@ -192,6 +214,9 @@ export const DesignCanvas = () => {
 
   const handleSave = async () => {
     if (!currentProject || !user || !id || permission === 'view') return;
+    
+    const latestComponents = componentsRef.current || components;
+    
     try {
       const { error } = await supabase
         .from('projects')
@@ -199,17 +224,18 @@ export const DesignCanvas = () => {
           customer_name: currentProject.customerName,
           address: currentProject.address,
           notes: currentProject.notes,
-          components: components as any,
+          components: latestComponents as any,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id);
+      
       if (error) throw error;
       setLastSaved(new Date());
       setIsDirty(false);
       toast.success('Project saved');
     } catch (error: any) {
       console.error('Save failed:', error);
-      toast.error('Save failed');
+      toast.error('Save failed: ' + error.message);
     }
   };
 
