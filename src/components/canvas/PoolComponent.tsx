@@ -13,7 +13,7 @@ import {
   type DragSession
 } from '@/interaction/CopingExtendController';
 import type { CopingEdgeId, PaverRect } from '@/types/copingInteractive';
-import { getBaseRowsForEdge, getAlongAndDepthForEdge, buildExtensionRowsForEdge } from '@/utils/copingInteractiveExtend';
+import { getBaseRowsForEdge, getAlongAndDepthForEdge } from '@/utils/copingInteractiveExtend';
 import Konva from 'konva';
 
 interface PoolComponentProps {
@@ -21,32 +21,6 @@ interface PoolComponentProps {
   isSelected: boolean;
   onSelect: () => void;
   onDragEnd: (pos: { x: number; y: number }) => void;
-}
-
-/**
- * Normalize coping config to ensure consistent tile format
- * Converts legacy {along, inward} to new {x, y} format
- */
-function normalizeCopingConfig(config: any): any {
-  if (!config?.tile) return null;
-  
-  // Already in new format
-  if ('x' in config.tile && 'y' in config.tile) {
-    return config;
-  }
-  
-  // Convert legacy format to new format
-  if ('along' in config.tile && 'inward' in config.tile) {
-    return {
-      ...config,
-      tile: {
-        x: config.tile.along,
-        y: config.tile.inward
-      }
-    };
-  }
-  
-  return null;
 }
 
 export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: PoolComponentProps) => {
@@ -67,32 +41,14 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
 
   // Calculate coping if enabled
   const showCoping = component.properties.showCoping ?? false;
-  const rawCopingConfig = component.properties.copingConfig;
-  const copingConfig = normalizeCopingConfig(rawCopingConfig);
-  
-  // Debug logging
-  if (showCoping && !copingConfig) {
-    console.warn('Pool has coping enabled but config normalization failed:', rawCopingConfig);
-  }
-  
-  const copingCalc = showCoping && poolData && copingConfig
+  const copingConfig = component.properties.copingConfig;
+  const copingCalc = showCoping && poolData 
     ? calculatePoolCoping(poolData, copingConfig)
     : null;
 
   // Interactive coping mode
   const interactiveMode = component.properties.copingMode === 'interactive';
-  // Initialize copingEdges if in interactive mode but not yet initialized
-  let copingEdges = component.properties.copingEdges;
-  if (interactiveMode && !copingEdges && copingConfig) {
-    copingEdges = initialCopingEdgesState(copingConfig);
-    // Update component with initialized state
-    updateComponent(component.id, {
-      properties: {
-        ...component.properties,
-        copingEdges
-      }
-    });
-  }
+  const copingEdges = component.properties.copingEdges || (copingConfig ? initialCopingEdgesState(copingConfig) : null);
 
   const handleDragEnd = (e: any) => {
     const newPos = { x: e.target.x(), y: e.target.y() };
@@ -152,12 +108,12 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     const cos = Math.cos(rotation);
     const sin = Math.sin(rotation);
     
-    // Determine edge normal in pool-local space (remapped to visual layout)
+    // Determine edge normal in pool-local space
     let localNormalX = 0, localNormalY = 0;
-    if (dragSession.edge === 'leftSide') { localNormalX = 0; localNormalY = -1; } // Top edge, extends up (-Y)
-    else if (dragSession.edge === 'rightSide') { localNormalX = 0; localNormalY = 1; } // Bottom edge, extends down (+Y)
-    else if (dragSession.edge === 'shallowEnd') { localNormalX = -1; localNormalY = 0; } // Left edge, extends left (-X)
-    else { localNormalX = 1; localNormalY = 0; } // Deep end: right edge, extends right (+X)
+    if (dragSession.edge === 'leftSide') { localNormalX = -1; localNormalY = 0; }
+    else if (dragSession.edge === 'rightSide') { localNormalX = 1; localNormalY = 0; }
+    else if (dragSession.edge === 'shallowEnd') { localNormalX = 0; localNormalY = -1; }
+    else { localNormalX = 0; localNormalY = 1; }
     
     // Transform normal to world space
     const worldNormalX = localNormalX * cos - localNormalY * sin;
@@ -179,6 +135,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     );
     
     // Generate preview pavers for visual feedback
+    const { buildExtensionRowsForEdge } = require('@/utils/copingInteractiveExtend');
     const newPreviewPavers = buildExtensionRowsForEdge(
       dragSession.edge,
       poolData,
@@ -186,8 +143,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       copingEdges,
       preview.fullRowsToAdd,
       preview.hasCutRow,
-      preview.cutRowDepth,
-      (preview as any).profile
+      preview.cutRowDepth
     );
     setPreviewPavers(newPreviewPavers);
   };
@@ -317,37 +273,19 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
 
           {/* Edge drag handles when selected - positioned at outer edge of coping */}
           {isSelected && copingConfig && copingEdges && (() => {
-            // Calculate row depths for each edge using normalized config
             const leftRowDepth = getAlongAndDepthForEdge('leftSide', copingConfig).rowDepth;
             const rightRowDepth = getAlongAndDepthForEdge('rightSide', copingConfig).rowDepth;
             const shallowRowDepth = getAlongAndDepthForEdge('shallowEnd', copingConfig).rowDepth;
             const deepRowDepth = getAlongAndDepthForEdge('deepEnd', copingConfig).rowDepth;
-            
-            // A) Config normalization - Log runtime config (DEBUG)
-            const DEBUG_COPING = false;
-            if (DEBUG_COPING) {
-              console.log('[CFG]', { 
-                tile: copingConfig?.tile, 
-                rows: copingConfig?.rows 
-              });
-              
-              // A) Edges state - Log before first drag
-              console.log('[EDGES]', structuredClone(copingEdges));
-            }
-            
-            const leftX = -((getBaseRowsForEdge('leftSide', copingConfig) + copingEdges.leftSide.currentRows) * leftRowDepth + 20) * scale;
-            const rightX = (poolData.length + (getBaseRowsForEdge('rightSide', copingConfig) + copingEdges.rightSide.currentRows) * rightRowDepth) * scale;
-            const shallowY = -((getBaseRowsForEdge('shallowEnd', copingConfig) + copingEdges.shallowEnd.currentRows) * shallowRowDepth + 20) * scale;
-            const deepY = (poolData.width + (getBaseRowsForEdge('deepEnd', copingConfig) + copingEdges.deepEnd.currentRows) * deepRowDepth) * scale;
 
             return (
             <>
-              {/* Left Side (Top Edge) - extends up */}
+              {/* Left side handle - at true outer edge (base + extension) */}
               <Rect
-                x={poolData.length * scale / 2 - 20}
-                y={-((getBaseRowsForEdge('leftSide', copingConfig) + copingEdges.leftSide.currentRows) * leftRowDepth + 20) * scale}
-                width={40}
-                height={20}
+                x={-( (getBaseRowsForEdge('leftSide', copingConfig) + copingEdges.leftSide.currentRows) * leftRowDepth + 20) * scale}
+                y={poolData.width * scale / 2 - 20}
+                width={20}
+                height={40}
                 fill="#3B82F6"
                 opacity={0.8}
                 cornerRadius={4}
@@ -364,7 +302,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                 onMouseUp={handleEdgeDragEnd}
                 onMouseEnter={(e) => {
                   const container = e.target.getStage()?.container();
-                  if (container) container.style.cursor = 'ns-resize';
+                  if (container) container.style.cursor = 'ew-resize';
                 }}
                 onMouseLeave={(e) => {
                   const container = e.target.getStage()?.container();
@@ -372,12 +310,12 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                 }}
                 listening
               />
-              {/* Right Side (Bottom Edge) - extends down */}
+              {/* Right side handle - at true outer edge (base + extension) */}
               <Rect
-                x={poolData.length * scale / 2 - 20}
-                y={(poolData.width + (getBaseRowsForEdge('rightSide', copingConfig) + copingEdges.rightSide.currentRows) * rightRowDepth) * scale}
-                width={40}
-                height={20}
+                x={(poolData.length + (getBaseRowsForEdge('rightSide', copingConfig) + copingEdges.rightSide.currentRows) * rightRowDepth) * scale}
+                y={poolData.width * scale / 2 - 20}
+                width={20}
+                height={40}
                 fill="#3B82F6"
                 opacity={0.8}
                 cornerRadius={4}
@@ -394,7 +332,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                 onMouseUp={handleEdgeDragEnd}
                 onMouseEnter={(e) => {
                   const container = e.target.getStage()?.container();
-                  if (container) container.style.cursor = 'ns-resize';
+                  if (container) container.style.cursor = 'ew-resize';
                 }}
                 onMouseLeave={(e) => {
                   const container = e.target.getStage()?.container();
@@ -402,12 +340,12 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                 }}
                 listening
               />
-              {/* Shallow End (Left Edge) - extends left */}
+              {/* Shallow end handle - at true outer edge (base + extension) */}
               <Rect
-                x={-((getBaseRowsForEdge('shallowEnd', copingConfig) + copingEdges.shallowEnd.currentRows) * shallowRowDepth + 20) * scale}
-                y={poolData.width * scale / 2 - 20}
-                width={20}
-                height={40}
+                x={poolData.length * scale / 2 - 20}
+                y={-( (getBaseRowsForEdge('shallowEnd', copingConfig) + copingEdges.shallowEnd.currentRows) * shallowRowDepth + 20) * scale}
+                width={40}
+                height={20}
                 fill="#3B82F6"
                 opacity={0.8}
                 cornerRadius={4}
@@ -424,7 +362,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                 onMouseUp={handleEdgeDragEnd}
                 onMouseEnter={(e) => {
                   const container = e.target.getStage()?.container();
-                  if (container) container.style.cursor = 'ew-resize';
+                  if (container) container.style.cursor = 'ns-resize';
                 }}
                 onMouseLeave={(e) => {
                   const container = e.target.getStage()?.container();
@@ -432,12 +370,12 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                 }}
                 listening
               />
-              {/* Deep End (Right Edge) - extends right */}
+              {/* Deep end handle - at true outer edge (base + extension) */}
               <Rect
-                x={(poolData.length + (getBaseRowsForEdge('deepEnd', copingConfig) + copingEdges.deepEnd.currentRows) * deepRowDepth) * scale}
-                y={poolData.width * scale / 2 - 20}
-                width={20}
-                height={40}
+                x={poolData.length * scale / 2 - 20}
+                y={(poolData.width + (getBaseRowsForEdge('deepEnd', copingConfig) + copingEdges.deepEnd.currentRows) * deepRowDepth) * scale}
+                width={40}
+                height={20}
                 fill="#3B82F6"
                 opacity={0.8}
                 cornerRadius={4}
@@ -454,7 +392,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                 onMouseUp={handleEdgeDragEnd}
                 onMouseEnter={(e) => {
                   const container = e.target.getStage()?.container();
-                  if (container) container.style.cursor = 'ew-resize';
+                  if (container) container.style.cursor = 'ns-resize';
                 }}
                 onMouseLeave={(e) => {
                   const container = e.target.getStage()?.container();

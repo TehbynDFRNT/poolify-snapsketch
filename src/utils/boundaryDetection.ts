@@ -12,18 +12,6 @@ export interface BoundaryIntersection {
   };
 }
 
-export interface BoundaryProfile {
-  samples: Array<{
-    position: number;
-    distance: number;
-    componentId: string;
-    intersectionPoint: { x: number; y: number };
-  }>;
-  minDistance: number;
-  maxDistance: number;
-  hasVariation: boolean;
-}
-
 /**
  * Find nearest boundary component in a given direction from pool edge
  */
@@ -139,68 +127,4 @@ function rayLineIntersection(
   }
 
   return null;
-}
-
-/**
- * Find boundary profile along an edge by casting multiple rays
- * This detects non-parallel boundaries that vary in distance along the edge
- */
-export function findBoundaryProfile(
-  edgeStart: { x: number; y: number },
-  edgeEnd: { x: number; y: number },
-  rayDirection: { x: number; y: number },
-  allComponents: Component[],
-  excludePoolId: string,
-  numSamples: number = 10
-): BoundaryProfile | null {
-  const samples: Array<{
-    position: number;
-    distance: number;
-    componentId: string;
-    intersectionPoint: { x: number; y: number };
-  }> = [];
-
-  const edgeVectorX = edgeEnd.x - edgeStart.x;
-  const edgeVectorY = edgeEnd.y - edgeStart.y;
-  const edgeLength = Math.sqrt(edgeVectorX * edgeVectorX + edgeVectorY * edgeVectorY);
-
-  for (let i = 0; i < numSamples; i++) {
-    const t = i / (numSamples - 1);
-    const rayOrigin = {
-      x: edgeStart.x + edgeVectorX * t,
-      y: edgeStart.y + edgeVectorY * t
-    };
-
-    const intersection = findNearestBoundary(
-      rayOrigin,
-      rayDirection,
-      allComponents,
-      excludePoolId
-    );
-
-    if (intersection) {
-      samples.push({
-        position: t * edgeLength,
-        distance: intersection.distance,
-        componentId: intersection.componentId,
-        intersectionPoint: intersection.intersectionPoint
-      });
-    }
-  }
-
-  if (samples.length === 0) {
-    return null;
-  }
-
-  const distances = samples.map(s => s.distance);
-  const minDistance = Math.min(...distances);
-  const maxDistance = Math.max(...distances);
-  const hasVariation = (maxDistance - minDistance) > 50;
-
-  return {
-    samples,
-    minDistance,
-    maxDistance,
-    hasVariation
-  };
 }

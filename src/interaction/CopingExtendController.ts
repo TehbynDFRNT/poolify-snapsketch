@@ -40,39 +40,9 @@ export function onDragMove(
   const boundaryHit = getNearestBoundaryDistanceFromEdgeOuter(
     session.edge, pool, poolComponent, config, edgesState, allComponents
   );
-  const DEBUG_COPING = false;
-  
-  // G) Boundary hit logging
-  if (DEBUG_COPING && boundaryHit) {
-    console.log('[BOUNDARY]', {
-      edge: session.edge,
-      distance: Math.round(boundaryHit.distance),
-      componentId: boundaryHit.componentId,
-      intersection: {
-        x: Math.round(boundaryHit.intersection.x),
-        y: Math.round(boundaryHit.intersection.y)
-      }
-    });
-  }
-  
   const preview = makeDragPreview(
     session.edge, dragDistance, pool, config, edgesState, boundaryHit
   );
-  
-  // C) Drag preview instrumentation
-  if (DEBUG_COPING) {
-    console.table({
-      edge: preview.edge,
-      dragDistance: Math.round(preview.dragDistance),
-      maxDistance: Math.round(preview.maxDistance),
-      fullRowsToAdd: preview.fullRowsToAdd,
-      hasCutRow: preview.hasCutRow,
-      cutRowDepth: preview.cutRowDepth ?? 0,
-      reachedBoundary: preview.reachedBoundary,
-      boundaryId: preview.boundaryId ?? null,
-    });
-  }
-  
   session.preview = preview;
   return preview;
 }
@@ -84,10 +54,10 @@ export function onDragEnd(
   edgesState: CopingEdgesState
 ): { newEdgesState: CopingEdgesState; newPavers: PaverRect[] } {
   if (!session.preview) return { newEdgesState: edgesState, newPavers: [] };
-  const { edge, fullRowsToAdd, hasCutRow, cutRowDepth, reachedBoundary, boundaryId, profile } = session.preview as any;
+  const { edge, fullRowsToAdd, hasCutRow, cutRowDepth, reachedBoundary, boundaryId } = session.preview;
 
   const newPavers = buildExtensionRowsForEdge(
-    edge, pool, config, edgesState, fullRowsToAdd, hasCutRow, cutRowDepth, profile
+    edge, pool, config, edgesState, fullRowsToAdd, hasCutRow, cutRowDepth
   );
 
   const updated: CopingEdgesState = structuredClone(edgesState);
