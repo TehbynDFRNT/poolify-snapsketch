@@ -84,10 +84,10 @@ export function onDragEnd(
   edgesState: CopingEdgesState
 ): { newEdgesState: CopingEdgesState; newPavers: PaverRect[] } {
   if (!session.preview) return { newEdgesState: edgesState, newPavers: [] };
-  const { edge, fullRowsToAdd, hasCutRow, cutRowDepth, reachedBoundary, boundaryId } = session.preview;
+  const { edge, fullRowsToAdd, hasCutRow, cutRowDepth, reachedBoundary, boundaryId, profile } = session.preview as any;
 
   const newPavers = buildExtensionRowsForEdge(
-    edge, pool, config, edgesState, fullRowsToAdd, hasCutRow, cutRowDepth
+    edge, pool, config, edgesState, fullRowsToAdd, hasCutRow, cutRowDepth, profile
   );
 
   const updated: CopingEdgesState = structuredClone(edgesState);

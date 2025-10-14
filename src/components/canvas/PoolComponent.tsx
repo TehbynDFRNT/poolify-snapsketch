@@ -186,7 +186,8 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       copingEdges,
       preview.fullRowsToAdd,
       preview.hasCutRow,
-      preview.cutRowDepth
+      preview.cutRowDepth,
+      (preview as any).profile
     );
     setPreviewPavers(newPreviewPavers);
   };

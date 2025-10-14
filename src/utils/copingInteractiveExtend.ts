@@ -1,6 +1,7 @@
 import { planAxis } from './copingCalculation';
 import type { Pool, GlobalTile, CopingConfig, AxisPlan } from './copingCalculation';
-import { findNearestBoundary } from './boundaryDetection';
+import { findNearestBoundary, findBoundaryProfile } from './boundaryDetection';
+import type { BoundaryProfile } from './boundaryDetection';
 import type { Component } from '@/types';
 import type {
   CopingEdgeId,
@@ -85,6 +86,7 @@ export interface BoundaryHit {
   distance: number;
   intersection: { x: number; y: number };
   segment: { a: { x: number; y: number }; b: { x: number; y: number } };
+  profile?: BoundaryProfile;
 }
 
 export function rowStartOffset(r: number, rowDepth: number) {
@@ -101,82 +103,99 @@ export function getNearestBoundaryDistanceFromEdgeOuter(
 ): BoundaryHit | null {
   const { rowDepth } = getAlongAndDepthForEdge(edge, config);
   const currentRows = edgesState[edge].currentRows;
-  
-  // Calculate current outer edge position
+
   const outerOffset = rowStartOffset(currentRows, rowDepth);
-  
-  // Pool center in world coordinates
+
   const poolX = poolComponent.position.x;
   const poolY = poolComponent.position.y;
   const rotation = (poolComponent.rotation * Math.PI) / 180;
-  
-  // Determine ray origin and direction based on edge
-  let rayOrigin: { x: number; y: number };
+
+  let edgeStart: { x: number; y: number };
+  let edgeEnd: { x: number; y: number };
   let rayDirection: { x: number; y: number };
-  
+
   const cos = Math.cos(rotation);
   const sin = Math.sin(rotation);
-  
+
+  const edgeLen = getDynamicEdgeLength(edge, pool, config, edgesState);
+
   if (edge === 'leftSide') {
-    // Left side (top edge): offset in -Y direction (local), outward is also -Y
-    const localX = 0;
     const localY = -outerOffset;
-    rayOrigin = {
-      x: poolX + localX * cos - localY * sin,
-      y: poolY + localX * sin + localY * cos
+    edgeStart = {
+      x: poolX + 0 * cos - localY * sin,
+      y: poolY + 0 * sin + localY * cos
     };
-    rayDirection = {
-      x: -sin,
-      y: cos
+    edgeEnd = {
+      x: poolX + pool.length * cos - localY * sin,
+      y: poolY + pool.length * sin + localY * cos
     };
+    rayDirection = { x: -sin, y: cos };
   } else if (edge === 'rightSide') {
-    // Right side (bottom edge): offset in +Y direction (local), outward is +Y
-    const localX = 0;
     const localY = outerOffset;
-    rayOrigin = {
-      x: poolX + localX * cos - localY * sin,
-      y: poolY + localX * sin + localY * cos
+    edgeStart = {
+      x: poolX + 0 * cos - localY * sin,
+      y: poolY + 0 * sin + localY * cos
     };
-    rayDirection = {
-      x: sin,
-      y: -cos
+    edgeEnd = {
+      x: poolX + pool.length * cos - localY * sin,
+      y: poolY + pool.length * sin + localY * cos
     };
+    rayDirection = { x: sin, y: -cos };
   } else if (edge === 'shallowEnd') {
-    // Shallow end (left edge): offset in -X direction (local), outward is -X
     const localX = -outerOffset;
-    const localY = 0;
-    rayOrigin = {
-      x: poolX + localX * cos - localY * sin,
-      y: poolY + localX * sin + localY * cos
+    const cornerExt = getCornerExtensionFromSides(
+      edgesState.leftSide.currentRows,
+      config
+    );
+    edgeStart = {
+      x: poolX + localX * cos - (-cornerExt) * sin,
+      y: poolY + localX * sin + (-cornerExt) * cos
     };
-    rayDirection = {
-      x: -cos,
-      y: -sin
+    edgeEnd = {
+      x: poolX + localX * cos - (pool.width + cornerExt) * sin,
+      y: poolY + localX * sin + (pool.width + cornerExt) * cos
     };
+    rayDirection = { x: -cos, y: -sin };
   } else {
-    // Deep end (right edge): offset in +X direction (local), outward is +X
     const localX = outerOffset;
-    const localY = 0;
-    rayOrigin = {
-      x: poolX + localX * cos - localY * sin,
-      y: poolY + localX * sin + localY * cos
+    const cornerExt = getCornerExtensionFromSides(
+      edgesState.rightSide.currentRows,
+      config
+    );
+    edgeStart = {
+      x: poolX + localX * cos - (-cornerExt) * sin,
+      y: poolY + localX * sin + (-cornerExt) * cos
     };
-    rayDirection = {
-      x: cos,
-      y: sin
+    edgeEnd = {
+      x: poolX + localX * cos - (pool.width + cornerExt) * sin,
+      y: poolY + localX * sin + (pool.width + cornerExt) * cos
     };
+    rayDirection = { x: cos, y: sin };
   }
-  
-  // Find nearest boundary
+
+  const rayOriginCenter = {
+    x: (edgeStart.x + edgeEnd.x) / 2,
+    y: (edgeStart.y + edgeEnd.y) / 2
+  };
+
   const intersection = findNearestBoundary(
-    rayOrigin,
+    rayOriginCenter,
     rayDirection,
     allComponents,
     poolComponent.id
   );
-  
+
   if (!intersection) return null;
-  
+
+  const profile = findBoundaryProfile(
+    edgeStart,
+    edgeEnd,
+    rayDirection,
+    allComponents,
+    poolComponent.id,
+    10
+  );
+
   return {
     componentId: intersection.componentId,
     distance: intersection.distance,
@@ -184,7 +203,8 @@ export function getNearestBoundaryDistanceFromEdgeOuter(
     segment: {
       a: intersection.intersectionSegment.start,
       b: intersection.intersectionSegment.end
-    }
+    },
+    profile: profile || undefined
   };
 }
 
@@ -196,12 +216,17 @@ export function rowsFromDragDistance(
   dragDistance: number,
   reachedBoundary: boolean,
   rowDepth: number,
-  minBoundaryCutRow = MIN_BOUNDARY_CUT_ROW_MM
+  minBoundaryCutRow = MIN_BOUNDARY_CUT_ROW_MM,
+  profile?: BoundaryProfile
 ): { fullRowsToAdd: number; hasCutRow: boolean; cutRowDepth?: number } {
   const unit = rowDepth + GROUT_MM;
 
-  let fullRowsToAdd = Math.floor(dragDistance / unit);
-  let remaining = dragDistance - fullRowsToAdd * unit;
+  const effectiveDistance = profile && profile.hasVariation
+    ? profile.minDistance
+    : dragDistance;
+
+  let fullRowsToAdd = Math.floor(effectiveDistance / unit);
+  let remaining = effectiveDistance - fullRowsToAdd * unit;
 
   if (!reachedBoundary) {
     return { fullRowsToAdd, hasCutRow: false };
@@ -214,7 +239,7 @@ export function rowsFromDragDistance(
 
   if (fullRowsToAdd > 0) {
     fullRowsToAdd -= 1;
-    remaining = dragDistance - fullRowsToAdd * unit;
+    remaining = effectiveDistance - fullRowsToAdd * unit;
     if (remaining >= (GROUT_MM + minBoundaryCutRow)) {
       const cutRowDepth = remaining - GROUT_MM;
       return { fullRowsToAdd, hasCutRow: true, cutRowDepth };
@@ -231,13 +256,13 @@ export function makeDragPreview(
   config: CopingConfig,
   edgesState: CopingEdgesState,
   boundaryHit: BoundaryHit | null,
-): DragPreview {
+): DragPreview & { profile?: BoundaryProfile } {
   const { rowDepth } = getAlongAndDepthForEdge(edge, config);
 
   const reachedBoundary = !!boundaryHit;
   const maxDistance = boundaryHit ? Math.max(0, boundaryHit.distance) : Math.max(0, dragDistance);
   const { fullRowsToAdd, hasCutRow, cutRowDepth } = rowsFromDragDistance(
-    maxDistance, reachedBoundary, rowDepth, MIN_BOUNDARY_CUT_ROW_MM
+    maxDistance, reachedBoundary, rowDepth, MIN_BOUNDARY_CUT_ROW_MM, boundaryHit?.profile
   );
 
   return {
@@ -249,6 +274,7 @@ export function makeDragPreview(
     boundaryId: boundaryHit?.componentId ?? null,
     dragDistance,
     maxDistance,
+    profile: boundaryHit?.profile
   };
 }
 
@@ -384,6 +410,137 @@ export function buildRowPavers(
   return p;
 }
 
+function buildVariableDepthBoundaryRow(
+  edge: CopingEdgeId,
+  plan: AxisPlan,
+  rowIndex: number,
+  profile: BoundaryProfile,
+  baseRowDepth: number
+): PaverRect[] {
+  const p: PaverRect[] = [];
+  const { along } = plan;
+  const unit = along + GROUT_MM;
+  const alongLen = plan.edgeLength;
+
+  const baseOffset = rowStartOffset(rowIndex, baseRowDepth);
+
+  const pushRect = (x: number, y: number, w: number, h: number, isPartial: boolean) => {
+    p.push({
+      x: Math.round(x),
+      y: Math.round(y),
+      width: Math.round(w),
+      height: Math.round(h),
+      isPartial,
+      meta: { edge, rowIndex, isBoundaryCutRow: true },
+    });
+  };
+
+  const getTileDepthAtPosition = (position: number): number => {
+    if (!profile.samples || profile.samples.length === 0) {
+      return profile.minDistance - baseOffset;
+    }
+
+    let closestSample = profile.samples[0];
+    let minDist = Math.abs(profile.samples[0].position - position);
+
+    for (const sample of profile.samples) {
+      const dist = Math.abs(sample.position - position);
+      if (dist < minDist) {
+        minDist = dist;
+        closestSample = sample;
+      }
+    }
+
+    const tileDepth = Math.max(MIN_BOUNDARY_CUT_ROW_MM, closestSample.distance - baseOffset);
+    return Math.min(tileDepth, baseRowDepth);
+  };
+
+  for (let i = 0; i < plan.paversPerCorner; i++) {
+    const a0 = i * unit;
+    const tileDepth = getTileDepthAtPosition(a0 + along / 2);
+
+    if (tileDepth >= MIN_BOUNDARY_CUT_ROW_MM) {
+      if (edgeIsEnd(edge)) {
+        const offsetX = edge === 'shallowEnd' ? -(baseOffset + tileDepth) : baseOffset;
+        pushRect(offsetX, a0, tileDepth, plan.along, true);
+      } else {
+        const offsetY = edge === 'leftSide' ? -(baseOffset + tileDepth) : baseOffset;
+        pushRect(a0, offsetY, plan.along, tileDepth, true);
+      }
+    }
+  }
+
+  let centreWidth = 0;
+  if (plan.centreMode === 'perfect') {
+    centreWidth = GROUT_MM;
+  } else if (plan.centreMode === 'single_cut') {
+    centreWidth = GROUT_MM + plan.cutSizes[0] + GROUT_MM;
+  } else {
+    centreWidth = GROUT_MM + plan.cutSizes[0] + GROUT_MM + plan.cutSizes[1] + GROUT_MM;
+  }
+  const centreStart = (alongLen - centreWidth) / 2;
+
+  if (plan.centreMode === 'single_cut') {
+    const cut = plan.cutSizes[0];
+    const cStart = centreStart + GROUT_MM;
+    const tileDepth = getTileDepthAtPosition(cStart + cut / 2);
+
+    if (tileDepth >= MIN_BOUNDARY_CUT_ROW_MM) {
+      if (edgeIsEnd(edge)) {
+        const offsetX = edge === 'shallowEnd' ? -(baseOffset + tileDepth) : baseOffset;
+        pushRect(offsetX, cStart, tileDepth, cut, true);
+      } else {
+        const offsetY = edge === 'leftSide' ? -(baseOffset + tileDepth) : baseOffset;
+        pushRect(cStart, offsetY, cut, tileDepth, true);
+      }
+    }
+  } else if (plan.centreMode === 'double_cut') {
+    const cL = plan.cutSizes[0];
+    const cR = plan.cutSizes[1];
+    const cStartL = centreStart + GROUT_MM;
+    const cStartR = cStartL + cL + GROUT_MM;
+
+    const tileDepthL = getTileDepthAtPosition(cStartL + cL / 2);
+    if (tileDepthL >= MIN_BOUNDARY_CUT_ROW_MM) {
+      if (edgeIsEnd(edge)) {
+        const offsetX = edge === 'shallowEnd' ? -(baseOffset + tileDepthL) : baseOffset;
+        pushRect(offsetX, cStartL, tileDepthL, cL, true);
+      } else {
+        const offsetY = edge === 'leftSide' ? -(baseOffset + tileDepthL) : baseOffset;
+        pushRect(cStartL, offsetY, cL, tileDepthL, true);
+      }
+    }
+
+    const tileDepthR = getTileDepthAtPosition(cStartR + cR / 2);
+    if (tileDepthR >= MIN_BOUNDARY_CUT_ROW_MM) {
+      if (edgeIsEnd(edge)) {
+        const offsetX = edge === 'shallowEnd' ? -(baseOffset + tileDepthR) : baseOffset;
+        pushRect(offsetX, cStartR, tileDepthR, cR, true);
+      } else {
+        const offsetY = edge === 'leftSide' ? -(baseOffset + tileDepthR) : baseOffset;
+        pushRect(cStartR, offsetY, cR, tileDepthR, true);
+      }
+    }
+  }
+
+  for (let i = 0; i < plan.paversPerCorner; i++) {
+    const a1 = alongLen - (i + 1) * unit + GROUT_MM;
+    const tileDepth = getTileDepthAtPosition(a1 + along / 2);
+
+    if (tileDepth >= MIN_BOUNDARY_CUT_ROW_MM) {
+      if (edgeIsEnd(edge)) {
+        const offsetX = edge === 'shallowEnd' ? -(baseOffset + tileDepth) : baseOffset;
+        pushRect(offsetX, a1, tileDepth, plan.along, true);
+      } else {
+        const offsetY = edge === 'leftSide' ? -(baseOffset + tileDepth) : baseOffset;
+        pushRect(a1, offsetY, plan.along, tileDepth, true);
+      }
+    }
+  }
+
+  return p;
+}
+
 export function buildExtensionRowsForEdge(
   edge: CopingEdgeId,
   pool: Pool,
@@ -391,7 +548,8 @@ export function buildExtensionRowsForEdge(
   edgesState: CopingEdgesState,
   fullRowsToAdd: number,
   hasCutRow: boolean,
-  cutRowDepth?: number
+  cutRowDepth?: number,
+  profile?: BoundaryProfile
 ): PaverRect[] {
   const plan = getAxisPlanForEdge(edge, pool, config, edgesState);
   const { rowDepth } = getAlongAndDepthForEdge(edge, config);
@@ -399,16 +557,19 @@ export function buildExtensionRowsForEdge(
   const startRow = edgesState[edge].currentRows;
   const p: PaverRect[] = [];
 
-  // Full rows
   for (let i = 0; i < fullRowsToAdd; i++) {
     const rowIdx = startRow + i;
     p.push(...buildRowPavers(edge, plan, rowIdx, rowDepth, false));
   }
 
-  // Boundary cut row
   if (hasCutRow && cutRowDepth && cutRowDepth > 0) {
     const rowIdx = startRow + fullRowsToAdd;
-    p.push(...buildRowPavers(edge, plan, rowIdx, cutRowDepth, true));
+
+    if (profile && profile.hasVariation) {
+      p.push(...buildVariableDepthBoundaryRow(edge, plan, rowIdx, profile, rowDepth));
+    } else {
+      p.push(...buildRowPavers(edge, plan, rowIdx, cutRowDepth, true));
+    }
   }
 
   return p;
