@@ -90,8 +90,23 @@ export interface ComponentProperties {
   showCoping?: boolean;
   copingConfig?: any;
   copingCalculation?: CopingCalculation;
-  copingMode?: 'fixed' | 'interactive';
-  copingEdges?: any; // CopingEdgesState from interactive system
+  copingSelection?: {
+    selectedPaverIds: string[];
+    extensionPavers: Array<{
+      id: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      isPartial: boolean;
+      edge: string;
+      rowIndex: number;
+      columnIndex: number;
+      isCorner: boolean;
+      extensionDirection?: string;
+    }>;
+    cornerDirectionOverrides: Array<[string, string]>; // serialized Map
+  };
   
   // Paver
   paverSize?: '400x400' | '400x600';

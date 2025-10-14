@@ -20,14 +20,6 @@ export const getPoolExcludeZone = (pool: Component): PoolExcludeZone | null => {
 
   const pxPerMm = GRID_CONFIG.spacing / 100; // 0.1 px/mm
 
-  // If interactive coping enabled, use outer edge of extensions
-  if (pool.properties.copingMode === 'interactive' && pool.properties.copingEdges) {
-    return {
-      outline: getCombinedInteractiveOutline(pool, poolData, pxPerMm),
-      componentId: pool.id
-    };
-  }
-
   // If pool has coping, use the outer boundary of all coping pavers
   if (pool.properties.showCoping && pool.properties.copingCalculation) {
     const copingOutline = getCopingOuterBoundary(
@@ -110,31 +102,6 @@ const transformPoolOutline = (
 
   // Apply rotation and translation
   return transformPoints(scaledOutline, position, rotation);
-};
-
-/**
- * Calculate outer boundary encompassing all interactive extensions
- */
-const getCombinedInteractiveOutline = (
-  pool: Component,
-  poolData: any,
-  pxPerMm: number
-): Array<{x: number, y: number}> => {
-  // Use coping outer boundary as base
-  const copingExtension = 400 * pxPerMm;
-  const poolLength = poolData.length * pxPerMm;
-  const poolWidth = poolData.width * pxPerMm;
-  
-  // For now, use standard coping boundary
-  // TODO: Calculate actual extension boundaries from copingEdges state
-  const outline = [
-    { x: -copingExtension, y: -copingExtension },
-    { x: poolLength + copingExtension * 2, y: -copingExtension },
-    { x: poolLength + copingExtension * 2, y: poolWidth + copingExtension },
-    { x: -copingExtension, y: poolWidth + copingExtension }
-  ];
-
-  return transformPoints(outline, pool.position, pool.rotation);
 };
 
 /**

@@ -1,20 +1,15 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useMemo } from 'react';
 import { Group, Line, Text, Circle, Rect } from 'react-konva';
 import { Component } from '@/types';
 import { POOL_LIBRARY } from '@/constants/pools';
 import { calculatePoolCoping } from '@/utils/copingCalculation';
 import { useDesignStore } from '@/store/designStore';
 import { snapPoolToPaverGrid } from '@/utils/snap';
-import { 
-  initialCopingEdgesState,
-  onDragStart,
-  onDragMove,
-  onDragEnd as copingDragEnd,
-  type DragSession
-} from '@/interaction/CopingExtendController';
-import type { CopingEdgeId, PaverRect } from '@/types/copingInteractive';
-import { getBaseRowsForEdge, getAlongAndDepthForEdge } from '@/utils/copingInteractiveExtend';
-import Konva from 'konva';
+import { generateCopingPaverData } from '@/utils/copingPaverData';
+import { copingSelectionController } from '@/interaction/CopingPaverSelection';
+import { CopingPaverComponent } from './CopingPaverComponent';
+import { CornerDirectionPicker } from './CornerDirectionPicker';
+import type { CopingPaverData } from '@/types/copingSelection';
 
 interface PoolComponentProps {
   component: Component;
@@ -26,8 +21,6 @@ interface PoolComponentProps {
 export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: PoolComponentProps) => {
   const groupRef = useRef<any>(null);
   const { components: allComponents, updateComponent } = useDesignStore();
-  const [dragSession, setDragSession] = useState<DragSession | null>(null);
-  const [previewPavers, setPreviewPavers] = useState<PaverRect[]>([]);
 
   // Prefer embedded pool geometry to avoid library mismatches
   const poolData = (component.properties as any).pool ||
@@ -46,9 +39,47 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     ? calculatePoolCoping(poolData, copingConfig)
     : null;
 
-  // Interactive coping mode
-  const interactiveMode = component.properties.copingMode === 'interactive';
-  const copingEdges = component.properties.copingEdges || (copingConfig ? initialCopingEdgesState(copingConfig) : null);
+  // Selection state for paver-based extension
+  const [copingSelection, setCopingSelection] = useState<{
+    selectedIds: Set<string>;
+    showCornerPicker: { paverId: string; position: { x: number; y: number } } | null;
+    dragState: { 
+      startPos: { x: number; y: number }; 
+      currentDragDistance: number;
+      previewPavers: CopingPaverData[];
+    } | null;
+  }>({
+    selectedIds: new Set(),
+    showCornerPicker: null,
+    dragState: null,
+  });
+
+  // Generate base coping paver data
+  const baseCopingPavers = useMemo(() => {
+    if (!showCoping || !copingCalc || !poolData || !copingConfig) return [];
+    return generateCopingPaverData(poolData, copingConfig);
+  }, [showCoping, copingCalc, poolData, copingConfig]);
+
+  // Get extension pavers from component properties
+  const extensionPavers: CopingPaverData[] = useMemo(() => {
+    const stored = component.properties.copingSelection?.extensionPavers || [];
+    return stored.map(p => ({
+      ...p,
+      edge: p.edge as 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd',
+      extensionDirection: p.extensionDirection as 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd' | undefined,
+    }));
+  }, [component.properties.copingSelection]);
+
+  // Get corner direction overrides
+  const cornerOverrides = useMemo(() => {
+    const overrides = component.properties.copingSelection?.cornerDirectionOverrides || [];
+    return new Map(overrides as Array<[string, 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd']>);
+  }, [component.properties.copingSelection]);
+
+  // All pavers (base + extensions)
+  const allPavers = useMemo(() => {
+    return [...baseCopingPavers, ...extensionPavers];
+  }, [baseCopingPavers, extensionPavers]);
 
   const handleDragEnd = (e: any) => {
     const newPos = { x: e.target.x(), y: e.target.y() };
@@ -67,110 +98,169 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     onDragEnd(snappedPos);
   };
 
-  // Interactive edge extension handlers
-  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
-
-  const handleEdgeDragStart = (edge: CopingEdgeId, e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (!copingEdges || !copingConfig) return;
-    e.cancelBubble = true;
-
-    // Disable dragging of the whole pool while resizing via handle
-    if (groupRef.current) {
-      try { groupRef.current.draggable(false); } catch {}
-    }
+  // Paver selection handlers
+  const handlePaverSelect = (paverId: string, isMultiSelect: boolean) => {
+    const paver = allPavers.find(p => p.id === paverId);
+    if (!paver) return;
     
-    const stage = e.target.getStage();
-    if (!stage) return;
-    
-    const pointerPos = stage.getPointerPosition();
-    if (!pointerPos) return;
-    
-    setDragStartPos(pointerPos);
-    const session = onDragStart(edge, copingEdges);
-    setDragSession(session);
-  };
-
-  const handleEdgeDragMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (!dragSession || !copingEdges || !copingConfig || !dragStartPos) return;
-    
-    const stage = e.target.getStage();
-    if (!stage) return;
-    
-    const pointerPos = stage.getPointerPosition();
-    if (!pointerPos) return;
-    
-    // Calculate drag delta in world space (canvas units)
-    const deltaX = pointerPos.x - dragStartPos.x;
-    const deltaY = pointerPos.y - dragStartPos.y;
-    
-    // Project delta onto edge's outward normal in pool space
-    const rotation = (component.rotation * Math.PI) / 180;
-    const cos = Math.cos(rotation);
-    const sin = Math.sin(rotation);
-    
-    // Determine edge normal in pool-local space
-    let localNormalX = 0, localNormalY = 0;
-    if (dragSession.edge === 'leftSide') { localNormalX = -1; localNormalY = 0; }
-    else if (dragSession.edge === 'rightSide') { localNormalX = 1; localNormalY = 0; }
-    else if (dragSession.edge === 'shallowEnd') { localNormalX = 0; localNormalY = -1; }
-    else { localNormalX = 0; localNormalY = 1; }
-    
-    // Transform normal to world space
-    const worldNormalX = localNormalX * cos - localNormalY * sin;
-    const worldNormalY = localNormalX * sin + localNormalY * cos;
-    
-    // Project delta onto normal
-    const dragDistance = (deltaX * worldNormalX + deltaY * worldNormalY) / scale; // Convert canvas units to mm
-    
-    if (dragDistance < 0) return; // Only allow outward dragging
-    
-    const preview = onDragMove(
-      dragSession, 
-      dragDistance, 
-      poolData, 
-      component,
-      copingConfig, 
-      copingEdges,
-      allComponents
-    );
-    
-    // Generate preview pavers for visual feedback
-    const { buildExtensionRowsForEdge } = require('@/utils/copingInteractiveExtend');
-    const newPreviewPavers = buildExtensionRowsForEdge(
-      dragSession.edge,
-      poolData,
-      copingConfig,
-      copingEdges,
-      preview.fullRowsToAdd,
-      preview.hasCutRow,
-      preview.cutRowDepth
-    );
-    setPreviewPavers(newPreviewPavers);
-  };
-
-  const handleEdgeDragEnd = () => {
-    // Re-enable dragging of the whole pool after handle interaction
-    if (groupRef.current) {
-      try { groupRef.current.draggable(true); } catch {}
-    }
-
-    if (!dragSession || !copingEdges || !copingConfig) {
-      setDragSession(null);
-      setPreviewPavers([]);
-      setDragStartPos(null);
+    // Handle corner pavers - show direction picker (only for base pavers, not extensions)
+    if (paver.isCorner && !isMultiSelect && !paver.extensionDirection) {
+      // Calculate screen position for picker
+      const stage = groupRef.current?.getStage();
+      if (!stage) return;
+      
+      const transform = groupRef.current.getAbsoluteTransform();
+      const paverCenter = transform.point({
+        x: (paver.x + paver.width / 2) * scale,
+        y: (paver.y + paver.height / 2) * scale,
+      });
+      
+      setCopingSelection(prev => ({
+        ...prev,
+        showCornerPicker: { paverId, position: paverCenter }
+      }));
       return;
     }
     
-    const { newEdgesState } = copingDragEnd(dragSession, poolData, copingConfig, copingEdges);
+    // Toggle selection
+    const newSelected = copingSelectionController.toggleSelection(
+      paverId,
+      copingSelection.selectedIds,
+      isMultiSelect
+    );
+    
+    setCopingSelection(prev => ({
+      ...prev,
+      selectedIds: newSelected,
+    }));
+  };
+
+  // Handle corner direction selection
+  const handleCornerDirectionSelect = (direction: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => {
+    if (!copingSelection.showCornerPicker) return;
+    
+    const paverId = copingSelection.showCornerPicker.paverId;
+    
+    // Update corner overrides
+    const newOverrides = new Map(cornerOverrides);
+    newOverrides.set(paverId, direction);
+    
+    // Save to component properties
     updateComponent(component.id, {
       properties: {
         ...component.properties,
-        copingEdges: newEdgesState,
+        copingSelection: {
+          ...component.properties.copingSelection,
+          selectedPaverIds: [paverId],
+          extensionPavers: extensionPavers,
+          cornerDirectionOverrides: Array.from(newOverrides.entries()),
+        }
       }
     });
-    setDragSession(null);
-    setPreviewPavers([]);
-    setDragStartPos(null);
+    
+    // Select the paver and close picker
+    setCopingSelection({
+      selectedIds: new Set([paverId]),
+      showCornerPicker: null,
+      dragState: null,
+    });
+  };
+
+  // Drag handlers for extension
+  const handlePaverDragStart = (e: any) => {
+    const stage = e.target.getStage();
+    if (!stage) return;
+    
+    const pointerPos = stage.getPointerPosition();
+    if (!pointerPos) return;
+    
+    setCopingSelection(prev => ({
+      ...prev,
+      dragState: { startPos: pointerPos, currentDragDistance: 0, previewPavers: [] }
+    }));
+  };
+
+  const handlePaverDragMove = (e: any) => {
+    if (!copingSelection.dragState || !copingConfig) return;
+    
+    const stage = e.target.getStage();
+    if (!stage) return;
+    
+    const pointerPos = stage.getPointerPosition();
+    if (!pointerPos) return;
+    
+    // Calculate drag distance
+    const deltaX = pointerPos.x - copingSelection.dragState.startPos.x;
+    const deltaY = pointerPos.y - copingSelection.dragState.startPos.y;
+    const dragDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY) / scale; // Convert to mm
+    
+    // Get selected pavers
+    const selectedPavers = copingSelectionController.getSelectedPavers(
+      copingSelection.selectedIds,
+      allPavers
+    );
+    
+    if (!copingSelectionController.canExtend(selectedPavers)) return;
+    
+    // Calculate extension
+    const { newPavers } = copingSelectionController.calculateExtensionRow(
+      selectedPavers,
+      dragDistance,
+      copingConfig,
+      poolData,
+      cornerOverrides
+    );
+    
+    setCopingSelection(prev => ({
+      ...prev,
+      dragState: {
+        ...prev.dragState!,
+        currentDragDistance: dragDistance,
+        previewPavers: newPavers,
+      }
+    }));
+  };
+
+  const handlePaverDragEnd = () => {
+    if (!copingSelection.dragState) return;
+    
+    const { previewPavers } = copingSelection.dragState;
+    
+    if (previewPavers.length > 0) {
+      // Save extension pavers to component properties
+      const newExtensionPavers = [...extensionPavers, ...previewPavers];
+      
+      updateComponent(component.id, {
+        properties: {
+          ...component.properties,
+          copingSelection: {
+            ...component.properties.copingSelection,
+            selectedPaverIds: [],
+            extensionPavers: newExtensionPavers.map(p => ({
+              id: p.id,
+              x: p.x,
+              y: p.y,
+              width: p.width,
+              height: p.height,
+              isPartial: p.isPartial,
+              edge: p.edge,
+              rowIndex: p.rowIndex,
+              columnIndex: p.columnIndex,
+              isCorner: p.isCorner,
+              extensionDirection: p.extensionDirection,
+            })),
+            cornerDirectionOverrides: Array.from(cornerOverrides.entries()),
+          }
+        }
+      });
+    }
+    
+    // Clear selection and drag state
+    setCopingSelection({
+      selectedIds: new Set(),
+      showCornerPicker: null,
+      dragState: null,
+    });
   };
 
   return (
@@ -181,67 +271,50 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
         x={component.position.x}
         y={component.position.y}
         rotation={component.rotation}
-        draggable
+        draggable={!copingSelection.dragState}
         onClick={onSelect}
         onTap={onSelect}
         onDragEnd={handleDragEnd}
       >
+        {/* Render coping pavers with selection capability */}
+        {showCoping && isSelected && allPavers.map(paver => (
+          <CopingPaverComponent
+            key={paver.id}
+            paver={paver}
+            isSelected={copingSelection.selectedIds.has(paver.id)}
+            scale={scale}
+            onSelect={handlePaverSelect}
+          />
+        ))}
 
-      {/* Render coping (always when enabled) */}
-      {showCoping && copingCalc && !interactiveMode && (
-        <Group>
-          {/* Render all coping pavers */}
-          {[
-            ...copingCalc.deepEnd.paverPositions,
-            ...copingCalc.shallowEnd.paverPositions,
-            ...copingCalc.leftSide.paverPositions,
-            ...copingCalc.rightSide.paverPositions,
-          ].map((paver, index) => (
-            <Rect
-              key={`coping-${index}`}
-              x={paver.x * scale}
-              y={paver.y * scale}
-              width={paver.width * scale}
-              height={paver.height * scale}
-              fill={paver.isPartial ? "#FCD34D" : "#9CA3AF"}
-              stroke="#374151"
-              strokeWidth={2}
-              dash={paver.isPartial ? [5, 5] : undefined}
-              opacity={paver.isPartial ? 0.8 : 1}
-            />
-          ))}
-        </Group>
-      )}
-
-      {/* Interactive coping mode */}
-      {interactiveMode && copingEdges && copingCalc && (
-        <Group>
-          {/* Base coping from calculation */}
-          {[
-            ...copingCalc.deepEnd.paverPositions,
-            ...copingCalc.shallowEnd.paverPositions,
-            ...copingCalc.leftSide.paverPositions,
-            ...copingCalc.rightSide.paverPositions,
-          ].map((paver, index) => (
-            <Rect
-              key={`base-coping-${index}`}
-              x={paver.x * scale}
-              y={paver.y * scale}
-              width={paver.width * scale}
-              height={paver.height * scale}
-              fill={paver.isPartial ? "#FCD34D" : "#9CA3AF"}
-              stroke="#374151"
-              strokeWidth={2}
-              dash={paver.isPartial ? [5, 5] : undefined}
-              opacity={paver.isPartial ? 0.8 : 1}
-            />
-          ))}
-          
-          {/* Extension pavers from edges */}
-          {Object.entries(copingEdges).map(([edge, state]: [string, any]) => 
-            ((state.pavers || []) as PaverRect[]).map((paver, i) => (
+        {/* Render coping pavers without selection when not selected */}
+        {showCoping && !isSelected && copingCalc && (
+          <Group>
+            {[
+              ...copingCalc.deepEnd.paverPositions,
+              ...copingCalc.shallowEnd.paverPositions,
+              ...copingCalc.leftSide.paverPositions,
+              ...copingCalc.rightSide.paverPositions,
+            ].map((paver, index) => (
               <Rect
-                key={`ext-${edge}-${i}`}
+                key={`coping-${index}`}
+                x={paver.x * scale}
+                y={paver.y * scale}
+                width={paver.width * scale}
+                height={paver.height * scale}
+                fill={paver.isPartial ? "#FCD34D" : "#9CA3AF"}
+                stroke="#374151"
+                strokeWidth={2}
+                dash={paver.isPartial ? [5, 5] : undefined}
+                opacity={paver.isPartial ? 0.8 : 1}
+                listening={false}
+              />
+            ))}
+            
+            {/* Render extension pavers */}
+            {extensionPavers.map(paver => (
+              <Rect
+                key={paver.id}
                 x={paver.x * scale}
                 y={paver.y * scale}
                 width={paver.width * scale}
@@ -251,224 +324,73 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
                 strokeWidth={2}
                 dash={paver.isPartial ? [5, 5] : undefined}
                 opacity={0.9}
+                listening={false}
               />
-            ))
-          )}
+            ))}
+          </Group>
+        )}
 
-          {/* Preview pavers during drag */}
-          {previewPavers.map((paver, i) => (
-            <Rect
-              key={`preview-${i}`}
-              x={paver.x * scale}
-              y={paver.y * scale}
-              width={paver.width * scale}
-              height={paver.height * scale}
-              fill={paver.isPartial ? "#FCD34D" : "#93C5FD"}
-              stroke="#3B82F6"
-              strokeWidth={2}
-              dash={[5, 5]}
-              opacity={0.7}
-            />
-          ))}
+        {/* Preview pavers during drag */}
+        {copingSelection.dragState?.previewPavers.map(paver => (
+          <CopingPaverComponent
+            key={`preview-${paver.id}`}
+            paver={paver}
+            isSelected={false}
+            scale={scale}
+            onSelect={() => {}}
+            isPreview
+          />
+        ))}
 
-          {/* Edge drag handles when selected - positioned at outer edge of coping */}
-          {isSelected && copingConfig && copingEdges && (() => {
-            const leftRowDepth = getAlongAndDepthForEdge('leftSide', copingConfig).rowDepth;
-            const rightRowDepth = getAlongAndDepthForEdge('rightSide', copingConfig).rowDepth;
-            const shallowRowDepth = getAlongAndDepthForEdge('shallowEnd', copingConfig).rowDepth;
-            const deepRowDepth = getAlongAndDepthForEdge('deepEnd', copingConfig).rowDepth;
-
-            return (
-            <>
-              {/* Left side handle - at true outer edge (base + extension) */}
-              <Rect
-                x={-( (getBaseRowsForEdge('leftSide', copingConfig) + copingEdges.leftSide.currentRows) * leftRowDepth + 20) * scale}
-                y={poolData.width * scale / 2 - 20}
-                width={20}
-                height={40}
-                fill="#3B82F6"
-                opacity={0.8}
-                cornerRadius={4}
-                strokeWidth={2}
-                stroke="#1D4ED8"
-                draggable
-                onMouseDown={(e) => {
-                  e.cancelBubble = true;
-                  handleEdgeDragStart('leftSide', e);
-                }}
-                onDragStart={(e) => handleEdgeDragStart('leftSide', e as any)}
-                onDragMove={handleEdgeDragMove}
-                onDragEnd={handleEdgeDragEnd}
-                onMouseUp={handleEdgeDragEnd}
-                onMouseEnter={(e) => {
-                  const container = e.target.getStage()?.container();
-                  if (container) container.style.cursor = 'ew-resize';
-                }}
-                onMouseLeave={(e) => {
-                  const container = e.target.getStage()?.container();
-                  if (container) container.style.cursor = 'default';
-                }}
-                listening
-              />
-              {/* Right side handle - at true outer edge (base + extension) */}
-              <Rect
-                x={(poolData.length + (getBaseRowsForEdge('rightSide', copingConfig) + copingEdges.rightSide.currentRows) * rightRowDepth) * scale}
-                y={poolData.width * scale / 2 - 20}
-                width={20}
-                height={40}
-                fill="#3B82F6"
-                opacity={0.8}
-                cornerRadius={4}
-                strokeWidth={2}
-                stroke="#1D4ED8"
-                draggable
-                onMouseDown={(e) => {
-                  e.cancelBubble = true;
-                  handleEdgeDragStart('rightSide', e);
-                }}
-                onDragStart={(e) => handleEdgeDragStart('rightSide', e as any)}
-                onDragMove={handleEdgeDragMove}
-                onDragEnd={handleEdgeDragEnd}
-                onMouseUp={handleEdgeDragEnd}
-                onMouseEnter={(e) => {
-                  const container = e.target.getStage()?.container();
-                  if (container) container.style.cursor = 'ew-resize';
-                }}
-                onMouseLeave={(e) => {
-                  const container = e.target.getStage()?.container();
-                  if (container) container.style.cursor = 'default';
-                }}
-                listening
-              />
-              {/* Shallow end handle - at true outer edge (base + extension) */}
-              <Rect
-                x={poolData.length * scale / 2 - 20}
-                y={-( (getBaseRowsForEdge('shallowEnd', copingConfig) + copingEdges.shallowEnd.currentRows) * shallowRowDepth + 20) * scale}
-                width={40}
-                height={20}
-                fill="#3B82F6"
-                opacity={0.8}
-                cornerRadius={4}
-                strokeWidth={2}
-                stroke="#1D4ED8"
-                draggable
-                onMouseDown={(e) => {
-                  e.cancelBubble = true;
-                  handleEdgeDragStart('shallowEnd', e);
-                }}
-                onDragStart={(e) => handleEdgeDragStart('shallowEnd', e as any)}
-                onDragMove={handleEdgeDragMove}
-                onDragEnd={handleEdgeDragEnd}
-                onMouseUp={handleEdgeDragEnd}
-                onMouseEnter={(e) => {
-                  const container = e.target.getStage()?.container();
-                  if (container) container.style.cursor = 'ns-resize';
-                }}
-                onMouseLeave={(e) => {
-                  const container = e.target.getStage()?.container();
-                  if (container) container.style.cursor = 'default';
-                }}
-                listening
-              />
-              {/* Deep end handle - at true outer edge (base + extension) */}
-              <Rect
-                x={poolData.length * scale / 2 - 20}
-                y={(poolData.width + (getBaseRowsForEdge('deepEnd', copingConfig) + copingEdges.deepEnd.currentRows) * deepRowDepth) * scale}
-                width={40}
-                height={20}
-                fill="#3B82F6"
-                opacity={0.8}
-                cornerRadius={4}
-                strokeWidth={2}
-                stroke="#1D4ED8"
-                draggable
-                onMouseDown={(e) => {
-                  e.cancelBubble = true;
-                  handleEdgeDragStart('deepEnd', e);
-                }}
-                onDragStart={(e) => handleEdgeDragStart('deepEnd', e as any)}
-                onDragMove={handleEdgeDragMove}
-                onDragEnd={handleEdgeDragEnd}
-                onMouseUp={handleEdgeDragEnd}
-                onMouseEnter={(e) => {
-                  const container = e.target.getStage()?.container();
-                  if (container) container.style.cursor = 'ns-resize';
-                }}
-                onMouseLeave={(e) => {
-                  const container = e.target.getStage()?.container();
-                  if (container) container.style.cursor = 'default';
-                }}
-                listening
-              />
-            </>
-            );
-          })()}
-
-          {/* Global mouse move handler when dragging */}
-          {dragSession && (
-            <Rect
-              x={-10000}
-              y={-10000}
-              width={20000}
-              height={20000}
-              fill="transparent"
-              onMouseMove={handleEdgeDragMove}
-              onMouseUp={handleEdgeDragEnd}
-              listening
-            />
-          )}
-        </Group>
-      )}
-
-      {/* Pool outline - filled */}
-      <Line
-        points={points}
-        fill="rgba(59, 130, 246, 0.3)"
-        stroke="#3B82F6"
-        strokeWidth={2}
-        closed
-      />
-
-      {/* Deep End label (150mm inset) */}
-      <Text
-        x={poolData.deepEnd.x * scale}
-        y={poolData.deepEnd.y * scale}
-        text="DE"
-        fontSize={10}
-        fontStyle="bold"
-        fill="#1e40af"
-        align="center"
-        offsetX={10}
-        offsetY={5}
-        rotation={-component.rotation}
-      />
-
-      {/* Shallow End label (150mm inset) */}
-      <Text
-        x={poolData.shallowEnd.x * scale}
-        y={poolData.shallowEnd.y * scale}
-        text="SE"
-        fontSize={10}
-        fontStyle="bold"
-        fill="#1e40af"
-        align="center"
-        offsetX={10}
-        offsetY={5}
-        rotation={-component.rotation}
-      />
-
-      {/* Selection border */}
-      {isSelected && (
-        <Rect
-          x={-10}
-          y={-10}
-          width={poolData.length * scale + 20}
-          height={poolData.width * scale + 20}
+        {/* Pool outline - filled */}
+        <Line
+          points={points}
+          fill="rgba(59, 130, 246, 0.3)"
           stroke="#3B82F6"
           strokeWidth={2}
-          dash={[10, 5]}
+          closed
         />
-      )}
+
+        {/* Deep End label (150mm inset) */}
+        <Text
+          x={poolData.deepEnd.x * scale}
+          y={poolData.deepEnd.y * scale}
+          text="DE"
+          fontSize={10}
+          fontStyle="bold"
+          fill="#1e40af"
+          align="center"
+          offsetX={10}
+          offsetY={5}
+          rotation={-component.rotation}
+        />
+
+        {/* Shallow End label (150mm inset) */}
+        <Text
+          x={poolData.shallowEnd.x * scale}
+          y={poolData.shallowEnd.y * scale}
+          text="SE"
+          fontSize={10}
+          fontStyle="bold"
+          fill="#1e40af"
+          align="center"
+          offsetX={10}
+          offsetY={5}
+          rotation={-component.rotation}
+        />
+
+        {/* Selection border */}
+        {isSelected && (
+          <Rect
+            x={-10}
+            y={-10}
+            width={poolData.length * scale + 20}
+            height={poolData.width * scale + 20}
+            stroke="#3B82F6"
+            strokeWidth={2}
+            dash={[10, 5]}
+          />
+        )}
 
         {/* Snap anchor indicator - green dot at origin (snap point) */}
         <Circle
@@ -479,7 +401,40 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
           stroke="#166534"
           strokeWidth={2}
         />
+        
+        {/* Invisible drag area for multi-paver drag */}
+        {copingSelection.selectedIds.size > 0 && isSelected && (
+          <Rect
+            x={-10}
+            y={-10}
+            width={poolData.length * scale + 20}
+            height={poolData.width * scale + 20}
+            fill="transparent"
+            draggable
+            onDragStart={handlePaverDragStart}
+            onDragMove={handlePaverDragMove}
+            onDragEnd={handlePaverDragEnd}
+            onMouseEnter={(e) => {
+              const container = e.target.getStage()?.container();
+              if (container) container.style.cursor = 'move';
+            }}
+            onMouseLeave={(e) => {
+              const container = e.target.getStage()?.container();
+              if (container) container.style.cursor = 'default';
+            }}
+          />
+        )}
       </Group>
+
+      {/* Corner direction picker (outside pool group for proper positioning) */}
+      {copingSelection.showCornerPicker && (
+        <CornerDirectionPicker
+          paver={allPavers.find(p => p.id === copingSelection.showCornerPicker.paverId)!}
+          position={copingSelection.showCornerPicker.position}
+          onSelectDirection={handleCornerDirectionSelect}
+          onCancel={() => setCopingSelection(prev => ({ ...prev, showCornerPicker: null }))}
+        />
+      )}
     </>
   );
 };

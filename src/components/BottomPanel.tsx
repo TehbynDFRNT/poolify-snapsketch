@@ -14,7 +14,7 @@ import { POOL_LIBRARY } from '@/constants/pools';
 import { calculatePoolCoping, COPING_OPTIONS } from '@/utils/copingCalculation';
 import { toast } from 'sonner';
 import { calculateDistance } from '@/utils/canvas';
-import { initialCopingEdgesState } from '@/interaction/CopingExtendController';
+
 
 interface BottomPanelProps {
   height: number;
@@ -446,75 +446,26 @@ const PropertiesContent = ({
                   />
                 </div>
 
-                {component.properties.showCoping && (
+                {component.properties.showCoping && component.properties.copingCalculation && (
                   <>
-                    {/* Coping Mode Toggle */}
-                    <div className="space-y-2">
-                      <Label className="text-xs font-medium">Coping Mode</Label>
-                      <div className="flex gap-2">
-                        <Button
-                          variant={component.properties.copingMode !== 'interactive' ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => onUpdate(component.id, {
-                            properties: {
-                              ...component.properties,
-                              copingMode: 'fixed',
-                              copingEdges: undefined
-                            }
-                          })}
-                          className="flex-1"
-                        >
-                          Fixed
-                        </Button>
-                        <Button
-                          variant={component.properties.copingMode === 'interactive' ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => {
-                            const copingConfig = component.properties.copingConfig || COPING_OPTIONS[0];
-                            const copingEdges = initialCopingEdgesState(copingConfig);
-                            const pool = component.properties.pool || POOL_LIBRARY.find(p => p.id === component.properties.poolId);
-                            const copingCalculation = pool ? calculatePoolCoping(pool, copingConfig) : undefined;
-                            
-                            onUpdate(component.id, {
-                              properties: {
-                                ...component.properties,
-                                copingMode: 'interactive',
-                                copingConfig,
-                                copingEdges,
-                                copingCalculation
-                              }
-                            });
-                          }}
-                          className="flex-1"
-                        >
-                          Drag to Extend
-                        </Button>
+                    {/* Coping Statistics */}
+                    <div className="text-xs bg-muted p-2 rounded space-y-1">
+                      <div className="font-medium">
+                        Coping: {component.properties.copingCalculation.totalPavers} pavers
+                      </div>
+                      <div className="text-muted-foreground">
+                        {component.properties.copingCalculation.totalFullPavers} full + {component.properties.copingCalculation.totalPartialPavers} partial
+                      </div>
+                      <div className="text-muted-foreground">
+                        Area: {component.properties.copingCalculation.totalArea.toFixed(2)} m²
                       </div>
                     </div>
-
-                    {/* Interactive Mode Info */}
-                    {component.properties.copingMode === 'interactive' && (
-                      <div className="space-y-2 pt-2">
-                        <p className="text-xs text-muted-foreground">
-                          Select the pool and drag the blue handles on each edge to extend coping to boundaries
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Fixed Mode - Show coping stats */}
-                    {component.properties.copingMode !== 'interactive' && component.properties.copingCalculation && (
-                      <div className="text-xs bg-muted p-2 rounded space-y-1">
-                        <div className="font-medium">
-                          Coping: {component.properties.copingCalculation.totalPavers} pavers
-                        </div>
-                        <div className="text-muted-foreground">
-                          {component.properties.copingCalculation.totalFullPavers} full + {component.properties.copingCalculation.totalPartialPavers} partial
-                        </div>
-                        <div className="text-muted-foreground">
-                          Area: {component.properties.copingCalculation.totalArea.toFixed(2)} m²
-                        </div>
-                      </div>
-                    )}
+                    
+                    <div className="p-2 bg-blue-50 dark:bg-blue-950/30 rounded-md border border-blue-200 dark:border-blue-800">
+                      <p className="text-[10px] text-blue-700 dark:text-blue-300 leading-tight">
+                        💡 Click individual pavers to select, Ctrl/Cmd+Click for multiple, then drag to extend
+                      </p>
+                    </div>
                   </>
                 )}
               </div>
