@@ -5,6 +5,7 @@ import { POOL_LIBRARY } from '@/constants/pools';
 import { calculatePoolCoping } from '@/utils/copingCalculation';
 import { useDesignStore } from '@/store/designStore';
 import { snapPoolToPaverGrid } from '@/utils/snap';
+import { calculateAllExtensions } from '@/utils/copingExtension';
 
 interface PoolComponentProps {
   component: Component;
@@ -15,7 +16,7 @@ interface PoolComponentProps {
 
 export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: PoolComponentProps) => {
   const groupRef = useRef<any>(null);
-  const allComponents = useDesignStore(state => state.components);
+  const { components: allComponents, updateComponent } = useDesignStore();
 
   // Prefer embedded pool geometry to avoid library mismatches
   const poolData = (component.properties as any).pool ||
@@ -33,6 +34,37 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   const copingCalc = showCoping && poolData 
     ? calculatePoolCoping(poolData, copingConfig)
     : null;
+
+  // Calculate extensions if in extensible mode
+  const extensionsEnabled = component.properties.copingMode === 'extensible';
+  const extensionPavers = extensionsEnabled && component.properties.copingExtensions
+    ? getAllExtensionPavers(component)
+    : [];
+
+  // Auto-update extensions when pool moves or rotates
+  useEffect(() => {
+    if (extensionsEnabled && component.properties.copingExtensions) {
+      const hasEnabledExtensions = Object.values(component.properties.copingExtensions)
+        .some(ext => ext.enabled);
+      
+      if (hasEnabledExtensions) {
+        calculateAllExtensions(component, poolData, allComponents);
+      }
+    }
+  }, [component.position.x, component.position.y, component.rotation]);
+
+  // Helper to gather all extension pavers
+  function getAllExtensionPavers(pool: Component) {
+    const extensions = pool.properties.copingExtensions;
+    if (!extensions) return [];
+    
+    return [
+      ...(extensions.deepEnd.pavers || []),
+      ...(extensions.shallowEnd.pavers || []),
+      ...(extensions.leftSide.pavers || []),
+      ...(extensions.rightSide.pavers || []),
+    ];
+  }
 
   const handleDragEnd = (e: any) => {
     const newPos = { x: e.target.x(), y: e.target.y() };
@@ -52,18 +84,41 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   };
 
   return (
-    <Group
-      ref={groupRef}
-      x={component.position.x}
-      y={component.position.y}
-      rotation={component.rotation}
-      draggable
-      onClick={onSelect}
-      onTap={onSelect}
-      onDragEnd={handleDragEnd}
-    >
-      {/* Render coping FIRST (so it's behind the pool) */}
-      {showCoping && copingCalc && (
+    <>
+      {/* Render extension pavers in world space (outside pool group) */}
+      {extensionsEnabled && extensionPavers.length > 0 && (
+        <Group>
+          {extensionPavers.map((paver) => (
+            <Rect
+              key={paver.id}
+              x={paver.position.x}
+              y={paver.position.y}
+              width={paver.width}
+              height={paver.height}
+              fill={paver.isEdgePaver ? "#FEF3C7" : "#FFF7ED"}
+              stroke={paver.isEdgePaver ? "#F59E0B" : "#FB923C"}
+              strokeWidth={paver.isEdgePaver ? 2 : 1}
+              dash={paver.isEdgePaver ? [5, 5] : undefined}
+              opacity={paver.isEdgePaver ? 0.8 : 0.9}
+            />
+          ))}
+        </Group>
+      )}
+
+      {/* Pool group with local coordinates */}
+      <Group
+        ref={groupRef}
+        x={component.position.x}
+        y={component.position.y}
+        rotation={component.rotation}
+        draggable
+        onClick={onSelect}
+        onTap={onSelect}
+        onDragEnd={handleDragEnd}
+      >
+
+      {/* Render coping (if fixed mode and enabled) */}
+      {showCoping && !extensionsEnabled && copingCalc && (
         <Group>
           {/* Render all coping pavers */}
           {[
@@ -138,15 +193,16 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
         />
       )}
 
-      {/* Snap anchor indicator - green dot at origin (snap point) */}
-      <Circle
-        x={0}
-        y={0}
-        radius={6}
-        fill="#22c55e"
-        stroke="#166534"
-        strokeWidth={2}
-      />
-    </Group>
+        {/* Snap anchor indicator - green dot at origin (snap point) */}
+        <Circle
+          x={0}
+          y={0}
+          radius={6}
+          fill="#22c55e"
+          stroke="#166534"
+          strokeWidth={2}
+        />
+      </Group>
+    </>
   );
 };

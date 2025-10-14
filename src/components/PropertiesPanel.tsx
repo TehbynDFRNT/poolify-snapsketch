@@ -475,7 +475,7 @@ export const PropertiesPanel = () => {
                           />
                         </div>
                         
-                        {currentCopingCalc && (
+                        {currentCopingCalc && selectedComponent.properties.copingMode !== 'extensible' && (
                           <div className="text-xs space-y-1 bg-muted p-3 rounded-lg">
                             <div className="font-medium mb-2">
                               Coping Details ({selectedComponent.properties.copingConfig?.tile.along || 400}×{selectedComponent.properties.copingConfig?.tile.inward || 400}mm pavers):
@@ -524,6 +524,103 @@ export const PropertiesPanel = () => {
                               </div>
                             </div>
                           </div>
+                        )}
+
+                        {/* Coping Mode Toggle */}
+                        {selectedComponent.properties.showCoping && (
+                          <>
+                            <Separator />
+                            <div className="space-y-4">
+                              <Label className="text-sm font-medium">Coping Mode</Label>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant={selectedComponent.properties.copingMode !== 'extensible' ? 'default' : 'outline'}
+                                  size="sm"
+                                  onClick={() => updateComponent(selectedComponent.id, {
+                                    properties: {
+                                      ...selectedComponent.properties,
+                                      copingMode: 'fixed',
+                                      copingExtensions: undefined
+                                    }
+                                  })}
+                                >
+                                  Fixed Width
+                                </Button>
+                                <Button
+                                  variant={selectedComponent.properties.copingMode === 'extensible' ? 'default' : 'outline'}
+                                  size="sm"
+                                  onClick={() => updateComponent(selectedComponent.id, {
+                                    properties: {
+                                      ...selectedComponent.properties,
+                                      copingMode: 'extensible',
+                                      copingExtensions: {
+                                        deepEnd: { enabled: false, maxDistance: null, targetBoundaryId: null },
+                                        shallowEnd: { enabled: false, maxDistance: null, targetBoundaryId: null },
+                                        leftSide: { enabled: false, maxDistance: null, targetBoundaryId: null },
+                                        rightSide: { enabled: false, maxDistance: null, targetBoundaryId: null },
+                                      }
+                                    }
+                                  })}
+                                >
+                                  Extensible
+                                </Button>
+                              </div>
+                              
+                              {/* Extension controls */}
+                              {selectedComponent.properties.copingMode === 'extensible' && (
+                                <div className="space-y-3 pt-2">
+                                  <p className="text-sm text-muted-foreground">
+                                    Enable extensions to fill coping to boundaries. Each edge can be extended independently.
+                                  </p>
+                                  
+                                  {/* Per-edge extension status */}
+                                  {(['deepEnd', 'shallowEnd', 'leftSide', 'rightSide'] as const).map(direction => {
+                                    const extension = selectedComponent.properties.copingExtensions?.[direction];
+                                    const enabled = extension?.enabled ?? false;
+                                    const stats = extension?.statistics;
+                                    
+                                    return (
+                                      <div key={direction} className="border rounded p-3 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <Label className="text-sm font-medium">
+                                            {direction === 'deepEnd' ? 'Deep End' :
+                                             direction === 'shallowEnd' ? 'Shallow End' :
+                                             direction === 'leftSide' ? 'Left Side' : 'Right Side'}
+                                          </Label>
+                                          <Switch
+                                            checked={enabled}
+                                            onCheckedChange={(checked) => {
+                                              updateComponent(selectedComponent.id, {
+                                                properties: {
+                                                  ...selectedComponent.properties,
+                                                  copingExtensions: {
+                                                    ...selectedComponent.properties.copingExtensions,
+                                                    [direction]: {
+                                                      enabled: checked,
+                                                      maxDistance: checked ? null : null,
+                                                      targetBoundaryId: null
+                                                    }
+                                                  }
+                                                }
+                                              });
+                                            }}
+                                          />
+                                        </div>
+                                        
+                                        {enabled && stats && (
+                                          <div className="text-xs space-y-1 text-muted-foreground">
+                                            <div>Full: {stats.fullPavers}</div>
+                                            <div>Edge: {stats.edgePavers}</div>
+                                            <div>Area: {(stats.totalArea).toFixed(2)}m²</div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </>
                         )}
                       </div>
                     )}

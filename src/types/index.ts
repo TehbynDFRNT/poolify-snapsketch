@@ -43,6 +43,25 @@ export interface Component {
   properties: ComponentProperties;
 }
 
+export interface ExtensionConfig {
+  enabled: boolean;
+  maxDistance: number | null; // null = extend to boundary
+  targetBoundaryId: string | null; // ID of component to extend to
+  pavers?: Array<{
+    id: string;
+    position: { x: number; y: number };
+    width: number;
+    height: number;
+    isEdgePaver: boolean;
+    cutPercentage?: number;
+  }>;
+  statistics?: {
+    fullPavers: number;
+    edgePavers: number;
+    totalArea: number;
+  };
+}
+
 export interface CopingCalculation {
   deepEnd: {
     rows: number;
@@ -89,6 +108,13 @@ export interface ComponentProperties {
   showCoping?: boolean;
   copingConfig?: any;
   copingCalculation?: CopingCalculation;
+  copingMode?: 'fixed' | 'extensible';
+  copingExtensions?: {
+    deepEnd: ExtensionConfig;
+    shallowEnd: ExtensionConfig;
+    leftSide: ExtensionConfig;
+    rightSide: ExtensionConfig;
+  };
   
   // Paver
   paverSize?: '400x400' | '400x600';
