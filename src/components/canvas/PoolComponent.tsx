@@ -43,15 +43,23 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
 
   // Auto-update extensions when pool moves or rotates
   useEffect(() => {
-    if (extensionsEnabled && component.properties.copingExtensions) {
+    if (extensionsEnabled && component.properties.copingExtensions && poolData) {
       const hasEnabledExtensions = Object.values(component.properties.copingExtensions)
         .some(ext => ext.enabled);
       
       if (hasEnabledExtensions) {
-        calculateAllExtensions(component, poolData, allComponents);
+        const updatedExtensions = calculateAllExtensions(component, poolData, allComponents);
+        if (updatedExtensions) {
+          updateComponent(component.id, {
+            properties: {
+              ...component.properties,
+              copingExtensions: updatedExtensions
+            }
+          });
+        }
       }
     }
-  }, [component.position.x, component.position.y, component.rotation]);
+  }, [component.position.x, component.position.y, component.rotation, extensionsEnabled]);
 
   // Helper to gather all extension pavers
   function getAllExtensionPavers(pool: Component) {

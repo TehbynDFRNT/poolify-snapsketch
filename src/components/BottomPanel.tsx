@@ -510,20 +510,60 @@ const PropertiesContent = ({
                                 <input
                                   type="checkbox"
                                   checked={enabled}
-                                  onChange={(e) => {
-                                    onUpdate(component.id, {
+                                  onChange={async (e) => {
+                                    const poolData = POOL_LIBRARY.find(p => p.id === component.properties.poolId);
+                                    if (!poolData) return;
+
+                                    // Get all components from store
+                                    const { components: allComponents } = useDesignStore.getState();
+                                    
+                                    // Import calculateAllExtensions dynamically
+                                    const { calculateAllExtensions } = await import('@/utils/copingExtension');
+                                    
+                                    // Update enabled state
+                                    const updatedExtensions = {
+                                      ...component.properties.copingExtensions,
+                                      [direction]: {
+                                        enabled: e.target.checked,
+                                        maxDistance: null,
+                                        targetBoundaryId: null
+                                      }
+                                    };
+
+                                    // Create temp component with updated state
+                                    const tempComponent = {
+                                      ...component,
                                       properties: {
                                         ...component.properties,
-                                        copingExtensions: {
-                                          ...component.properties.copingExtensions,
-                                          [direction]: {
-                                            enabled: e.target.checked,
-                                            maxDistance: e.target.checked ? null : null,
-                                            targetBoundaryId: null
-                                          }
-                                        }
+                                        copingExtensions: updatedExtensions
                                       }
-                                    });
+                                    };
+
+                                    // Calculate extensions if enabling
+                                    if (e.target.checked) {
+                                      const calculatedExtensions = calculateAllExtensions(
+                                        tempComponent,
+                                        poolData,
+                                        allComponents
+                                      );
+
+                                      if (calculatedExtensions) {
+                                        onUpdate(component.id, {
+                                          properties: {
+                                            ...component.properties,
+                                            copingExtensions: calculatedExtensions
+                                          }
+                                        });
+                                      }
+                                    } else {
+                                      // Just disable
+                                      onUpdate(component.id, {
+                                        properties: {
+                                          ...component.properties,
+                                          copingExtensions: updatedExtensions
+                                        }
+                                      });
+                                    }
                                   }}
                                   className="w-4 h-4"
                                 />

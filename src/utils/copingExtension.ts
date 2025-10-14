@@ -116,15 +116,15 @@ export function generateExtensionPavers(
 }
 
 /**
- * Calculate all four extensions for a pool
+ * Calculate all four extensions for a pool and return updated extensions
  */
 export function calculateAllExtensions(
   pool: Component,
   poolData: any,
   allComponents: Component[]
-): void {
+): typeof pool.properties.copingExtensions | undefined {
   if (pool.properties.copingMode !== 'extensible' || !pool.properties.copingExtensions) {
-    return;
+    return undefined;
   }
 
   const copingConfig = pool.properties.copingConfig || {};
@@ -165,8 +165,7 @@ export function calculateAllExtensions(
     }
   }
 
-  // Update component properties
-  pool.properties.copingExtensions = updatedExtensions;
+  return updatedExtensions;
 }
 
 /**
