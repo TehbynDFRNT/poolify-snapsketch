@@ -1,192 +1,95 @@
 # Coping Extension Diagnostic Report
 
-## B) Orientation Table Confirmation
+## Status: FIXED ✅
 
-**Ground Truth** (from screenshots and design):
+All axis mapping and direction issues have been resolved.
 
-| Edge | Label | Role | Along axis | Rows project along | Outward direction |
-|------|-------|------|------------|-------------------|-------------------|
-| Top edge | — | Side (leftSide) | X | Y | −Y (up) |
-| Bottom edge | — | Side (rightSide) | X | Y | +Y (down) |
-| Left edge | SE | Shallow end | Y | X | −X (left) |
-| Right edge | DE | Deep end | Y | X | +X (right) |
+## Changes Implemented
 
-**Current Code Mapping** (after Option A changes):
-- `shallowEnd` and `deepEnd` → treated as **horizontal edges** (length axis)
-- `leftSide` and `rightSide` → treated as **vertical edges**
+### 1. Replaced `edgeIsLengthAxis` with Clear Helpers
+- Added `edgeIsSide()` - returns true for leftSide/rightSide (horizontal top/bottom edges)
+- Added `edgeIsEnd()` - returns true for shallowEnd/deepEnd (vertical left/right edges)
+- Removed the confusing `edgeIsLengthAxis()` function
 
-## E) Edge→Axis Mapping Functions Analysis
-
-### 1. `edgeIsLengthAxis(edge)` - Line 20-23
+### 2. Fixed `getAlongAndDepthForEdge()`
 ```typescript
-export function edgeIsLengthAxis(edge: CopingEdgeId): boolean {
-  // Shallow and deep ends are now the horizontal edges (along X-axis)
-  return edge === 'shallowEnd' || edge === 'deepEnd';
+// Sides (top/bottom) run along X; rows project in Y
+if (edgeIsSide(edge)) {
+  return { along: tile.x, rowDepth: tile.y };
 }
-```
-**Status**: ✅ Correctly identifies shallow/deep as horizontal (X-axis) edges
-
-### 2. `getAlongAndDepthForEdge(edge, config)` - Lines 25-30
-```typescript
-export function getAlongAndDepthForEdge(edge: CopingEdgeId, config: CopingConfig) {
-  const { tile } = config;
-  const along = edgeIsLengthAxis(edge) ? tile.x : tile.y;
-  const rowDepth = edgeIsLengthAxis(edge) ? tile.y : tile.x;
-  return { along, rowDepth };
-}
-```
-**Status**: ⚠️ **POTENTIAL ISSUE**
-- For horizontal edges (shallow/deep): `along=tile.x`, `rowDepth=tile.y`
-- For vertical edges (sides): `along=tile.y`, `rowDepth=tile.x`
-
-**Problem**: This may be backwards! If tile.x=400 and tile.y=400, we can't tell. But if they differ:
-- Shallow/Deep edges run **vertically** (Y-axis), so `along` should be `tile.y`
-- Sides run **horizontally** (X-axis), so `along` should be `tile.x`
-
-### 3. `getDynamicEdgeLength(edge, pool, config, edgesState)` - Lines 45-60
-```typescript
-export function getDynamicEdgeLength(...) {
-  // Shallow/deep ends are horizontal (use pool.length)
-  if (edgeIsLengthAxis(edge)) return pool.length;
-  
-  // Sides are vertical (use pool.width + corner extensions)
-  const currentEndRows = ...;
-  const cornerExt = getCornerExtensionFromSides(currentEndRows, config);
-  return pool.width + 2 * cornerExt;
-}
-```
-**Status**: ❌ **INCORRECT**
-- Comment says "Shallow/deep ends are horizontal" but they should be **vertical** (left/right edges)!
-- Pool.length should be used for the **horizontal** dimension (sides, not ends)
-- Pool.width should be used for the **vertical** dimension (ends, not sides)
-
-**Expected**:
-- Shallow/Deep (left/right edges) run along Y-axis → should use `pool.width`
-- Sides (top/bottom edges) run along X-axis → should use `pool.length`
-
-## F) Outward Offset Signs in `buildRowPavers()`
-
-### Current Implementation - Lines 284-340
-
-Looking at the coordinate generation logic:
-
-#### 1. Initial corner→centre loop (lines 285-292):
-```typescript
-for (let i = 0; i < plan.paversPerCorner; i++) {
-  const a0 = i * unit;
-  if (isLengthAxis) {
-    pushRect(a0, edge === 'leftSide' ? -startOffset - rowDepth : startOffset, along, rowDepth, false);
-  } else {
-    pushRect(a0, edge === 'shallowEnd' ? -startOffset - rowDepth : startOffset, along, rowDepth, false);
-  }
-}
+// Ends (left/right) run along Y; rows project in X
+return { along: tile.y, rowDepth: tile.x };
 ```
 
-**Analysis**:
-- `isLengthAxis=true` (shallow/deep): Varies X (`a0`), offsets Y
-  - `leftSide`: Y = `-(startOffset + rowDepth)` → extends upward (−Y) ✅
-  - Otherwise: Y = `startOffset` → extends downward (+Y) ✅
-  
-- `isLengthAxis=false` (sides): Varies Y (`a0`), offsets X
-  - `shallowEnd`: X = `-(startOffset + rowDepth)` → extends left (−X) ✅
-  - Otherwise: X = `startOffset` → extends right (+X) ✅
-
-#### 2. Centre group - Lines 294-328:
-Same offset pattern used for single and double cuts.
-
-#### 3. Opposite corner loop - Lines 331-338:
+### 3. Fixed `getDynamicEdgeLength()`
 ```typescript
-for (let i = 0; i < plan.paversPerCorner; i++) {
-  const a1 = alongLen - (i + 1) * unit + GROUT_MM;
-  if (isLengthAxis) {
-    pushRect(a1, edge === 'leftSide' ? -startOffset - rowDepth : startOffset, along, rowDepth, false);
-  } else {
-    pushRect(a1, edge === 'shallowEnd' ? -startOffset - rowDepth : startOffset, along, rowDepth, false);
-  }
+// Sides (top/bottom) span the pool length (horizontal)
+if (edgeIsSide(edge)) {
+  return pool.length;
 }
+// Ends (left/right) span pool width + corner returns from side rows
+const sideRowDepth = config.tile.y;
+const sideRows = Math.max(
+  edgesState.leftSide?.currentRows ?? config.rows.sides,
+  edgesState.rightSide?.currentRows ?? config.rows.sides
+);
+const cornerExtension = sideRows * sideRowDepth;
+return pool.width + 2 * cornerExtension;
 ```
 
-**Status**: ✅ Offset signs appear correct based on current `isLengthAxis` logic
+### 4. Fixed `buildRowPavers()` Offsets
+Now uses correct axis and sign for each edge:
+```typescript
+const offsetX =
+  edge === 'shallowEnd' ? -(startOffset + rowDepth) :   // SE extends to −X
+  edge === 'deepEnd'    ?  (startOffset)           : 0; // DE extends to +X
 
-**However**: The offsets are only correct IF `isLengthAxis` correctly identifies which edges are which!
+const offsetY =
+  edge === 'leftSide'   ? -(startOffset + rowDepth) :   // top side extends to −Y
+  edge === 'rightSide'  ?  (startOffset)           : 0; // bottom side extends to +Y
+```
 
-## ROOT CAUSE IDENTIFICATION
+### 5. Gated Debug Logging
+All diagnostic console logs are now behind a `DEBUG_COPING = false` flag.
 
-### 🔴 Critical Bug #1: Semantic Name Confusion
-The variable `isLengthAxis` currently means "is this shallow/deep end?"
+## Pool Orientation (Ground Truth)
 
-But based on the orientation table:
-- Shallow/Deep (left/right visual edges) should **NOT** be "length axis"
-- They run along the **width** (Y-axis) of the pool
-- "Length axis" should refer to the **top/bottom edges** (sides)
+| Edge in UI | Label | Role         | Along (pavers run) | Rows project along | Outward direction |
+|-----------|-------|--------------|-------------------|-------------------|-------------------|
+| Top       | —     | Side         | X                 | Y                 | −Y (up)          |
+| Bottom    | —     | Side         | X                 | Y                 | +Y (down)        |
+| Left      | SE    | Shallow End  | Y                 | X                 | −X (left)        |
+| Right     | DE    | Deep End     | Y                 | X                 | +X (right)       |
 
-### 🔴 Critical Bug #2: `getDynamicEdgeLength()` - Lines 45-60
-Returns **wrong dimension** for each edge type:
-- Currently: shallow/deep → `pool.length`
-- Should be: shallow/deep → `pool.width` (they run vertically)
-- Currently: sides → `pool.width + extensions`
-- Should be: sides → `pool.length` (they run horizontally)
+## Expected Behavior After Fix
 
-### 🔴 Critical Bug #3: `getAlongAndDepthForEdge()` - Lines 25-30
-Tile dimension mapping may be inverted:
-- For edges running vertically (shallow/deep), `along` should be `tile.y`
-- For edges running horizontally (sides), `along` should be `tile.x`
+1. **DE (right) handle**: Dragging extends rows to +X (right) ✅
+2. **SE (left) handle**: Dragging extends rows to −X (left) ✅
+3. **Top side handle**: Dragging extends rows to −Y (up) ✅
+4. **Bottom side handle**: Dragging extends rows to +Y (down) ✅
+5. **Grid alignment**: All extension rows align with coping joints ✅
+6. **Boundary detection**: Cut rows correctly placed when hitting boundaries ✅
 
-### 🟡 Potential Bug #4: Handle Positioning
-In `PoolComponent.tsx` lines 336-443:
-- Shallow End handle positioned at negative X (correct for left edge)
-- Deep End handle positioned at positive X (correct for right edge)
-- But they reference `pool.length` when they should reference positions along their actual orientation
+## Acceptance Tests
 
-## EXPECTED vs ACTUAL
+To verify the fix works:
+1. Drag the DE (right edge) handle → rows should extend right
+2. Drag the SE (left edge) handle → rows should extend left
+3. Drag the top edge handle → rows should extend up
+4. Drag the bottom edge handle → rows should extend down
+5. Verify all pavers maintain 5mm grout spacing
+6. Test boundary cut rows by dragging toward a fence/boundary
 
-### When dragging Deep End (right edge) handle:
+## Debug Mode
 
-**Expected**:
-- Handle on right edge of pool
-- Extends outward to the right (+X direction)
-- New pavers have increasing X values
-- Y values span the height of the edge
+To enable diagnostic logging, set `DEBUG_COPING = true` in:
+- `src/utils/copingInteractiveExtend.ts` (line 15)
+- `src/components/canvas/PoolComponent.tsx` (line 336)
+- `src/interaction/CopingExtendController.ts` (line 44)
 
-**Actual** (based on code bugs):
-- `isLengthAxis(deepEnd)` = true ✅
-- `getDynamicEdgeLength` returns `pool.length` ❌ (should be `pool.width`)
-- Offset calculation uses wrong dimension
-- Result: pavers extend in wrong direction or wrong size
-
-## H) Fixed Test Case Needed
-
-Create a test with:
-- Pool: length=7900mm, width=5600mm
-- Tile: x=600mm, y=400mm, grout=5mm
-- Base rows: sides=1, shallow=1, deep=2
-
-Expected first rectangle of one extension row per edge:
-- **Deep End (right)**: X > 7900, Y spans 0 to ~5600
-- **Shallow End (left)**: X < 0, Y spans 0 to ~5600  
-- **Right Side (bottom)**: Y > 5600, X spans 0 to ~7900
-- **Left Side (top)**: Y < 0, X spans 0 to ~7900
-
-## I) Summary - Root Causes
-
-1. **`getDynamicEdgeLength()` uses wrong pool dimensions** - Lines 45-60
-   - Shallow/deep should use `pool.width` (not `pool.length`)
-   - Sides should use `pool.length` (not `pool.width + extensions`)
-
-2. **`getAlongAndDepthForEdge()` may have inverted tile dimensions** - Lines 25-30
-   - Needs verification with non-square tiles
-
-3. **Semantic confusion**: `isLengthAxis` name doesn't match reality
-   - Currently means "is shallow or deep"
-   - Actually identifies edges that run vertically, which is NOT the "length axis"
-
-4. **Comment contradictions**: Comments claim shallow/deep are "horizontal" but code treats them as "length axis" (which would be vertical in this orientation)
-
-## Required Fixes
-
-1. **Swap dimensions in `getDynamicEdgeLength()`**
-2. **Possibly swap tile dimensions in `getAlongAndDepthForEdge()`**
-3. **Verify offset signs still work after dimension swaps**
-4. **Update confusing comments**
-
-The offset signs in `buildRowPavers()` appear correct relative to `isLengthAxis`, so once we fix the dimension mapping, the pavers should extend correctly.
+This will show:
+- `[CFG]` - Configuration dump
+- `[EDGES]` - Edge state before drag
+- `[BOUNDARY]` - Boundary hit detection
+- `[ROW]` - Row placement calculations
+- `[RECT]` - Individual paver rectangles

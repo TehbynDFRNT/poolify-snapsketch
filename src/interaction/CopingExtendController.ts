@@ -40,9 +40,10 @@ export function onDragMove(
   const boundaryHit = getNearestBoundaryDistanceFromEdgeOuter(
     session.edge, pool, poolComponent, config, edgesState, allComponents
   );
+  const DEBUG_COPING = false;
   
   // G) Boundary hit logging
-  if (boundaryHit) {
+  if (DEBUG_COPING && boundaryHit) {
     console.log('[BOUNDARY]', {
       edge: session.edge,
       distance: Math.round(boundaryHit.distance),
@@ -59,16 +60,18 @@ export function onDragMove(
   );
   
   // C) Drag preview instrumentation
-  console.table({
-    edge: preview.edge,
-    dragDistance: Math.round(preview.dragDistance),
-    maxDistance: Math.round(preview.maxDistance),
-    fullRowsToAdd: preview.fullRowsToAdd,
-    hasCutRow: preview.hasCutRow,
-    cutRowDepth: preview.cutRowDepth ?? 0,
-    reachedBoundary: preview.reachedBoundary,
-    boundaryId: preview.boundaryId ?? null,
-  });
+  if (DEBUG_COPING) {
+    console.table({
+      edge: preview.edge,
+      dragDistance: Math.round(preview.dragDistance),
+      maxDistance: Math.round(preview.maxDistance),
+      fullRowsToAdd: preview.fullRowsToAdd,
+      hasCutRow: preview.hasCutRow,
+      cutRowDepth: preview.cutRowDepth ?? 0,
+      reachedBoundary: preview.reachedBoundary,
+      boundaryId: preview.boundaryId ?? null,
+    });
+  }
   
   session.preview = preview;
   return preview;
