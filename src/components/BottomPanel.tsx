@@ -11,6 +11,7 @@ import { useDesignStore } from '@/store/designStore';
 import { fillAreaWithPavers, calculateStatistics } from '@/utils/pavingFill';
 import { calculateMeasurements } from '@/utils/measurements';
 import { POOL_LIBRARY } from '@/constants/pools';
+import { calculatePoolCoping } from '@/utils/copingCalculation';
 import { toast } from 'sonner';
 import { calculateDistance } from '@/utils/canvas';
 
@@ -411,10 +412,154 @@ const PropertiesContent = ({
           </div>
 
           {component.type === 'pool' && component.properties.poolId && (
-            <div>
-              <Label className="text-xs">Pool Model</Label>
-              <div className="text-sm font-medium">{component.properties.poolId}</div>
-            </div>
+            <>
+              <div>
+                <Label className="text-xs">Pool Model</Label>
+                <div className="text-sm font-medium">{component.properties.poolId}</div>
+              </div>
+
+              {/* Pool Coping Section */}
+              <div className="space-y-2 pt-2 border-t">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium">Pool Coping</Label>
+                  <input
+                    type="checkbox"
+                    checked={component.properties.showCoping ?? false}
+                    onChange={(e) => {
+                      const poolData = POOL_LIBRARY.find(p => p.id === component.properties.poolId);
+                      if (!poolData) return;
+                      
+                      const copingCalculation = e.target.checked 
+                        ? calculatePoolCoping(poolData)
+                        : undefined;
+                      
+                      onUpdate(component.id, {
+                        properties: {
+                          ...component.properties,
+                          showCoping: e.target.checked,
+                          copingCalculation,
+                        },
+                      });
+                    }}
+                    className="w-4 h-4"
+                  />
+                </div>
+
+                {component.properties.showCoping && (
+                  <>
+                    {/* Coping Mode Toggle */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-medium">Coping Mode</Label>
+                      <div className="flex gap-2">
+                        <Button
+                          variant={component.properties.copingMode !== 'extensible' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => onUpdate(component.id, {
+                            properties: {
+                              ...component.properties,
+                              copingMode: 'fixed',
+                              copingExtensions: undefined
+                            }
+                          })}
+                          className="flex-1"
+                        >
+                          Fixed
+                        </Button>
+                        <Button
+                          variant={component.properties.copingMode === 'extensible' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => onUpdate(component.id, {
+                            properties: {
+                              ...component.properties,
+                              copingMode: 'extensible',
+                              copingExtensions: {
+                                deepEnd: { enabled: false, maxDistance: null, targetBoundaryId: null },
+                                shallowEnd: { enabled: false, maxDistance: null, targetBoundaryId: null },
+                                leftSide: { enabled: false, maxDistance: null, targetBoundaryId: null },
+                                rightSide: { enabled: false, maxDistance: null, targetBoundaryId: null },
+                              }
+                            }
+                          })}
+                          className="flex-1"
+                        >
+                          Extensible
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Extensible Mode Controls */}
+                    {component.properties.copingMode === 'extensible' && (
+                      <div className="space-y-2 pt-2">
+                        <p className="text-xs text-muted-foreground">
+                          Enable extensions to fill coping to boundaries
+                        </p>
+                        
+                        {(['deepEnd', 'shallowEnd', 'leftSide', 'rightSide'] as const).map(direction => {
+                          const extension = component.properties.copingExtensions?.[direction];
+                          const enabled = extension?.enabled ?? false;
+                          const stats = extension?.statistics;
+                          
+                          return (
+                            <div key={direction} className="border rounded p-2 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-xs font-medium">
+                                  {direction === 'deepEnd' ? 'Deep End' :
+                                   direction === 'shallowEnd' ? 'Shallow End' :
+                                   direction === 'leftSide' ? 'Left Side' : 'Right Side'}
+                                </Label>
+                                <input
+                                  type="checkbox"
+                                  checked={enabled}
+                                  onChange={(e) => {
+                                    onUpdate(component.id, {
+                                      properties: {
+                                        ...component.properties,
+                                        copingExtensions: {
+                                          ...component.properties.copingExtensions,
+                                          [direction]: {
+                                            enabled: e.target.checked,
+                                            maxDistance: e.target.checked ? null : null,
+                                            targetBoundaryId: null
+                                          }
+                                        }
+                                      }
+                                    });
+                                  }}
+                                  className="w-4 h-4"
+                                />
+                              </div>
+                              
+                              {enabled && stats && (
+                                <div className="text-xs space-y-0.5 text-muted-foreground pl-1">
+                                  <div>Full: {stats.fullPavers}</div>
+                                  <div>Edge: {stats.edgePavers}</div>
+                                  <div>Area: {stats.totalArea.toFixed(2)}m²</div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Fixed Mode - Show coping stats */}
+                    {component.properties.copingMode !== 'extensible' && component.properties.copingCalculation && (
+                      <div className="text-xs bg-muted p-2 rounded space-y-1">
+                        <div className="font-medium">
+                          Coping: {component.properties.copingCalculation.totalPavers} pavers
+                        </div>
+                        <div className="text-muted-foreground">
+                          {component.properties.copingCalculation.totalFullPavers} full + {component.properties.copingCalculation.totalPartialPavers} partial
+                        </div>
+                        <div className="text-muted-foreground">
+                          Area: {component.properties.copingCalculation.totalArea.toFixed(2)} m²
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </>
           )}
 
           {component.type === 'wall' && (
