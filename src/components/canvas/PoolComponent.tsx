@@ -106,48 +106,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     const paver = allPavers.find(p => p.id === paverId);
     if (!paver) return;
     
-    // Handle corner pavers - show direction picker (only for base pavers, not extensions)
-    if (paver.isCorner && !isMultiSelect && !paver.extensionDirection) {
-      // Calculate screen position for picker using stage container
-      const stage = groupRef.current?.getStage();
-      if (!stage) return;
-      
-      const transform = groupRef.current.getAbsoluteTransform();
-      const paverCanvasCenter = transform.point({
-        x: (paver.x + paver.width / 2) * scale,
-        y: (paver.y + paver.height / 2) * scale,
-      });
-      
-      // Get stage container position relative to viewport
-      const containerRect = stage.container().getBoundingClientRect();
-      const stageScale = stage.scaleX();
-      
-      // Convert canvas coordinates to screen coordinates
-      const screenPos = {
-        x: containerRect.left + (paverCanvasCenter.x + stage.x()) * stageScale,
-        y: containerRect.top + (paverCanvasCenter.y + stage.y()) * stageScale,
-      };
-      
-      // Store for external rendering
-      (component as any)._cornerPickerState = {
-        paverId,
-        position: screenPos,
-        paver,
-        onSelectDirection: handleCornerDirectionSelect,
-        onCancel: () => {
-          setCopingSelection(prev => ({ ...prev, showCornerPicker: null }));
-          (component as any)._cornerPickerState = null;
-        }
-      };
-      
-      setCopingSelection(prev => ({
-        ...prev,
-        showCornerPicker: { paverId, position: screenPos }
-      }));
-      return;
-    }
-    
-    // Toggle selection
+    // Toggle selection immediately (including corner pavers)
     const newSelected = copingSelectionController.toggleSelection(
       paverId,
       copingSelection.selectedIds,
@@ -194,6 +153,50 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
 
   // Handle drag handlers for individual paver handles
   const handlePaverHandleDragStart = (paverId: string) => {
+    const paver = allPavers.find(p => p.id === paverId);
+    if (!paver) return;
+    
+    // Show direction picker for corner pavers that don't have a direction set yet
+    if (paver.isCorner && !paver.extensionDirection && !cornerOverrides.has(paverId)) {
+      // Calculate screen position for picker using stage container
+      const stage = groupRef.current?.getStage();
+      if (!stage) return;
+      
+      const transform = groupRef.current.getAbsoluteTransform();
+      const paverCanvasCenter = transform.point({
+        x: (paver.x + paver.width / 2) * scale,
+        y: (paver.y + paver.height / 2) * scale,
+      });
+      
+      // Get stage container position relative to viewport
+      const containerRect = stage.container().getBoundingClientRect();
+      const stageScale = stage.scaleX();
+      
+      // Convert canvas coordinates to screen coordinates
+      const screenPos = {
+        x: containerRect.left + (paverCanvasCenter.x + stage.x()) * stageScale,
+        y: containerRect.top + (paverCanvasCenter.y + stage.y()) * stageScale,
+      };
+      
+      // Store for external rendering
+      (component as any)._cornerPickerState = {
+        paverId,
+        position: screenPos,
+        paver,
+        onSelectDirection: handleCornerDirectionSelect,
+        onCancel: () => {
+          setCopingSelection(prev => ({ ...prev, showCornerPicker: null }));
+          (component as any)._cornerPickerState = null;
+        }
+      };
+      
+      setCopingSelection(prev => ({
+        ...prev,
+        showCornerPicker: { paverId, position: screenPos }
+      }));
+      return; // Don't start drag until direction is selected
+    }
+    
     setCopingSelection(prev => ({
       ...prev,
       dragState: { paverId, currentDragDistance: 0, previewPavers: [] }
