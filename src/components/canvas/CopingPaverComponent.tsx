@@ -131,21 +131,19 @@ export const CopingPaverComponent = ({
           strokeWidth={2}
           draggable
           dragBoundFunc={(pos) => {
-            // Constrain drag to the extension direction
-            const paverScreenX = paver.x * scale;
-            const paverScreenY = paver.y * scale;
+            // Allow bidirectional drag along the extension direction
             const handleScreenX = (paver.x + handlePos.x) * scale;
             const handleScreenY = (paver.y + handlePos.y) * scale;
 
             switch (extensionEdge) {
               case 'shallowEnd':
-                return { x: Math.min(pos.x, handleScreenX), y: handleScreenY }; // only left
+                return { x: pos.x, y: handleScreenY }; // left/right
               case 'deepEnd':
-                return { x: Math.max(pos.x, handleScreenX), y: handleScreenY }; // only right
+                return { x: pos.x, y: handleScreenY }; // left/right
               case 'leftSide':
-                return { x: handleScreenX, y: Math.min(pos.y, handleScreenY) }; // only up
+                return { x: handleScreenX, y: pos.y }; // up/down
               case 'rightSide':
-                return { x: handleScreenX, y: Math.max(pos.y, handleScreenY) }; // only down
+                return { x: handleScreenX, y: pos.y }; // up/down
               default:
                 return pos;
             }
@@ -160,10 +158,10 @@ export const CopingPaverComponent = ({
             e.cancelBubble = true;
             const currentPos = { x: e.target.x(), y: e.target.y() };
             const distance = calculateDragDistance(currentPos);
-            // Convert screen distance back to unscaled units (mm)
+            // Convert screen distance back to unscaled units (mm) - allow negative for inward extension
             const unscaledDistance = distance / scale;
             console.log('Handle drag:', { distance, unscaledDistance, scale, currentPos, handleDragStart });
-            onHandleDragMove(paver.id, Math.max(0, unscaledDistance));
+            onHandleDragMove(paver.id, unscaledDistance);
           }}
           onDragEnd={(e) => {
             e.cancelBubble = true;

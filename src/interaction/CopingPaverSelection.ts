@@ -77,7 +77,7 @@ export class CopingPaverSelectionController {
   
   /**
    * Calculate new row pavers for selected pavers
-   * Returns one new row extending outward from the selected pavers
+   * Supports bidirectional extension (positive = outward, negative = inward)
    */
   calculateExtensionRow(
     selectedPavers: CopingPaverData[],
@@ -106,8 +106,8 @@ export class CopingPaverSelectionController {
       return { fullRowsToAdd: 0, newPavers: [] };
     }
     
-    // Calculate how many full rows can fit
-    const fullRowsToAdd = Math.max(0, Math.floor(dragDistance / rowDepth));
+    // Calculate how many full rows can fit (allow negative for inward extension)
+    const fullRowsToAdd = Math.floor(dragDistance / rowDepth);
     
     console.debug('Extension calculation:', {
       edge,
@@ -121,12 +121,17 @@ export class CopingPaverSelectionController {
       return { fullRowsToAdd: 0, newPavers: [] };
     }
     
-    // Generate new pavers for ALL rows from 1 to fullRowsToAdd
+    // Generate new pavers for ALL rows
     const newPavers: CopingPaverData[] = [];
     const baseRowIndex = firstPaver.rowIndex;
     
+    // Handle both outward (positive) and inward (negative) extension
+    const startRow = fullRowsToAdd > 0 ? 1 : fullRowsToAdd;
+    const endRow = fullRowsToAdd > 0 ? fullRowsToAdd : -1;
+    const step = fullRowsToAdd > 0 ? 1 : -1;
+    
     // Loop through each row offset to create all intermediate rows
-    for (let rowOffset = 1; rowOffset <= fullRowsToAdd; rowOffset++) {
+    for (let rowOffset = startRow; fullRowsToAdd > 0 ? rowOffset <= endRow : rowOffset >= endRow; rowOffset += step) {
       selectedPavers.forEach(paver => {
         const direction = this.getExtensionDirection(paver, cornerOverrides);
         
