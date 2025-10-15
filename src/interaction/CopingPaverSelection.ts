@@ -43,6 +43,9 @@ export class CopingPaverSelectionController {
   canExtend(selectedPavers: CopingPaverData[]): boolean {
     if (selectedPavers.length === 0) return false;
     
+    // Single paver can always be extended
+    if (selectedPavers.length === 1) return true;
+    
     const firstPaver = selectedPavers[0];
     const edge = firstPaver.edge;
     const rowIndex = firstPaver.rowIndex;
@@ -85,13 +88,29 @@ export class CopingPaverSelectionController {
     const firstPaver = selectedPavers[0];
     const edge = firstPaver.edge;
     
-    // Determine row depth based on edge
-    const rowDepth = edge === 'leftSide' || edge === 'rightSide' 
-      ? copingConfig.tile.y 
-      : copingConfig.tile.x;
+    // Determine row depth based on edge - use paver dimensions directly
+    // For sides (leftSide/rightSide), rows stack in Y direction (use height)
+    // For ends (shallowEnd/deepEnd), rows stack in X direction (use width)
+    const rowDepth = (edge === 'leftSide' || edge === 'rightSide') 
+      ? firstPaver.height 
+      : firstPaver.width;
+    
+    // Safety check
+    if (!Number.isFinite(rowDepth) || rowDepth <= 0) {
+      console.warn('Invalid rowDepth:', rowDepth);
+      return { fullRowsToAdd: 0, newPavers: [] };
+    }
     
     // Calculate how many full rows can fit
     const fullRowsToAdd = Math.max(0, Math.floor(dragDistance / rowDepth));
+    
+    console.debug('Extension calculation:', {
+      edge,
+      baseRowIndex: firstPaver.rowIndex,
+      rowDepth,
+      dragDistance,
+      fullRowsToAdd
+    });
     
     if (fullRowsToAdd === 0) {
       return { fullRowsToAdd: 0, newPavers: [] };
@@ -104,29 +123,29 @@ export class CopingPaverSelectionController {
     selectedPavers.forEach(paver => {
       const direction = this.getExtensionDirection(paver, cornerOverrides);
       
-      // Calculate position offset for new row based on direction
-      let offsetX = 0;
-      let offsetY = 0;
+      // Calculate position for new row RELATIVE to existing paver position
+      let newX = paver.x;
+      let newY = paver.y;
       
       switch (direction) {
         case 'leftSide':
-          offsetY = -(baseRowIndex + fullRowsToAdd) * rowDepth;
+          newY = paver.y - fullRowsToAdd * rowDepth;
           break;
         case 'rightSide':
-          offsetY = pool.width + (baseRowIndex + fullRowsToAdd) * rowDepth;
+          newY = paver.y + fullRowsToAdd * rowDepth;
           break;
         case 'shallowEnd':
-          offsetX = -(baseRowIndex + fullRowsToAdd) * rowDepth;
+          newX = paver.x - fullRowsToAdd * rowDepth;
           break;
         case 'deepEnd':
-          offsetX = pool.length + (baseRowIndex + fullRowsToAdd) * rowDepth;
+          newX = paver.x + fullRowsToAdd * rowDepth;
           break;
       }
       
       const newPaver: CopingPaverData = {
         id: `ext-${paver.id}-row${baseRowIndex + fullRowsToAdd}`,
-        x: paver.x + offsetX,
-        y: paver.y + offsetY,
+        x: newX,
+        y: newY,
         width: paver.width,
         height: paver.height,
         isPartial: false,

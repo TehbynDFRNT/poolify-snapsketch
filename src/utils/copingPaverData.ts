@@ -11,6 +11,10 @@ export function generateCopingPaverData(
   const calc = calculatePoolCoping(pool, config);
   const pavers: CopingPaverData[] = [];
   
+  // Normalize config to support both legacy and new formats
+  const tileX = (config.tile as any).x ?? (config.tile as any).along ?? 400;
+  const tileY = (config.tile as any).y ?? (config.tile as any).inward ?? 400;
+  
   // Helper to determine if a paver is at a corner
   const isCornerPaver = (
     edge: string,
@@ -55,13 +59,20 @@ export function generateCopingPaverData(
       let rowIndex = 0;
       if (edge === 'leftSide' || edge === 'rightSide') {
         // Sides: Y position determines row
-        const rowDepth = config.tile.y;
-        rowIndex = Math.floor(Math.abs(paver.y < 0 ? paver.y : paver.y - pool.width) / rowDepth);
+        const rowDepth = tileY;
+        if (Number.isFinite(rowDepth) && rowDepth > 0) {
+          rowIndex = Math.floor(Math.abs(paver.y < 0 ? paver.y : paver.y - pool.width) / rowDepth);
+        }
       } else {
         // Ends: X position determines row
-        const rowDepth = config.tile.x;
-        rowIndex = Math.floor(Math.abs(paver.x < 0 ? paver.x : paver.x - pool.length) / rowDepth);
+        const rowDepth = tileX;
+        if (Number.isFinite(rowDepth) && rowDepth > 0) {
+          rowIndex = Math.floor(Math.abs(paver.x < 0 ? paver.x : paver.x - pool.length) / rowDepth);
+        }
       }
+      
+      // Ensure rowIndex is valid
+      rowIndex = Math.max(0, rowIndex);
       
       const isCorner = isCornerPaver(edge, paver.x, paver.y, paver.width, paver.height);
       
