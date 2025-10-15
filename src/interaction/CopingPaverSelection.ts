@@ -121,48 +121,51 @@ export class CopingPaverSelectionController {
       return { fullRowsToAdd: 0, newPavers: [] };
     }
     
-    // Generate new pavers only for the selected columns
+    // Generate new pavers for ALL rows from 1 to fullRowsToAdd
     const newPavers: CopingPaverData[] = [];
     const baseRowIndex = firstPaver.rowIndex;
     
-    selectedPavers.forEach(paver => {
-      const direction = this.getExtensionDirection(paver, cornerOverrides);
-      
-      // Calculate position for new row RELATIVE to existing paver position
-      let newX = paver.x;
-      let newY = paver.y;
-      
-      switch (direction) {
-        case 'leftSide':
-          newY = paver.y - fullRowsToAdd * rowDepth;
-          break;
-        case 'rightSide':
-          newY = paver.y + fullRowsToAdd * rowDepth;
-          break;
-        case 'shallowEnd':
-          newX = paver.x - fullRowsToAdd * rowDepth;
-          break;
-        case 'deepEnd':
-          newX = paver.x + fullRowsToAdd * rowDepth;
-          break;
-      }
-      
-      const newPaver: CopingPaverData = {
-        id: `ext-${paver.id}-row${baseRowIndex + fullRowsToAdd}`,
-        x: newX,
-        y: newY,
-        width: paver.width,
-        height: paver.height,
-        isPartial: false,
-        edge: paver.edge,
-        rowIndex: baseRowIndex + fullRowsToAdd,
-        columnIndex: paver.columnIndex,
-        isCorner: false,
-        extensionDirection: direction,
-      };
-      
-      newPavers.push(newPaver);
-    });
+    // Loop through each row offset to create all intermediate rows
+    for (let rowOffset = 1; rowOffset <= fullRowsToAdd; rowOffset++) {
+      selectedPavers.forEach(paver => {
+        const direction = this.getExtensionDirection(paver, cornerOverrides);
+        
+        // Calculate position for this row RELATIVE to existing paver position
+        let newX = paver.x;
+        let newY = paver.y;
+        
+        switch (direction) {
+          case 'leftSide':
+            newY = paver.y - rowOffset * rowDepth;
+            break;
+          case 'rightSide':
+            newY = paver.y + rowOffset * rowDepth;
+            break;
+          case 'shallowEnd':
+            newX = paver.x - rowOffset * rowDepth;
+            break;
+          case 'deepEnd':
+            newX = paver.x + rowOffset * rowDepth;
+            break;
+        }
+        
+        const newPaver: CopingPaverData = {
+          id: `ext-${paver.id}-row${baseRowIndex + rowOffset}`,
+          x: newX,
+          y: newY,
+          width: paver.width,
+          height: paver.height,
+          isPartial: false,
+          edge: paver.edge,
+          rowIndex: baseRowIndex + rowOffset,
+          columnIndex: paver.columnIndex,
+          isCorner: false,
+          extensionDirection: direction,
+        };
+        
+        newPavers.push(newPaver);
+      });
+    }
     
     return { fullRowsToAdd, newPavers };
   }
