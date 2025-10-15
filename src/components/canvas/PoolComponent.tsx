@@ -105,19 +105,29 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     
     // Handle corner pavers - show direction picker (only for base pavers, not extensions)
     if (paver.isCorner && !isMultiSelect && !paver.extensionDirection) {
-      // Calculate screen position for picker
+      // Calculate screen position for picker using stage container
       const stage = groupRef.current?.getStage();
       if (!stage) return;
       
       const transform = groupRef.current.getAbsoluteTransform();
-      const paverCenter = transform.point({
+      const paverCanvasCenter = transform.point({
         x: (paver.x + paver.width / 2) * scale,
         y: (paver.y + paver.height / 2) * scale,
       });
       
+      // Get stage container position relative to viewport
+      const containerRect = stage.container().getBoundingClientRect();
+      const stageScale = stage.scaleX();
+      
+      // Convert canvas coordinates to screen coordinates
+      const screenPos = {
+        x: containerRect.left + (paverCanvasCenter.x + stage.x()) * stageScale,
+        y: containerRect.top + (paverCanvasCenter.y + stage.y()) * stageScale,
+      };
+      
       setCopingSelection(prev => ({
         ...prev,
-        showCornerPicker: { paverId, position: paverCenter }
+        showCornerPicker: { paverId, position: screenPos }
       }));
       return;
     }

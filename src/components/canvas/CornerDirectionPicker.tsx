@@ -1,4 +1,4 @@
-import { Html } from 'react-konva-utils';
+import { createPortal } from 'react-dom';
 import { CopingPaverData } from '@/types/copingSelection';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -17,16 +17,15 @@ export const CornerDirectionPicker = ({
   onSelectDirection,
   onCancel,
 }: CornerDirectionPickerProps) => {
-  return (
-    <Html
-      divProps={{
-        style: {
-          position: 'absolute',
-          left: position.x,
-          top: position.y,
-          transform: 'translate(-50%, -50%)',
-          zIndex: 1000,
-        },
+  return createPortal(
+    <div
+      style={{
+        position: 'fixed',
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        transform: 'translate(-50%, -50%)',
+        zIndex: 1000,
+        pointerEvents: 'auto',
       }}
     >
       <Card className="p-3 bg-background shadow-lg border-2 border-primary">
@@ -87,6 +86,7 @@ export const CornerDirectionPicker = ({
           Cancel
         </Button>
       </Card>
-    </Html>
+    </div>,
+    document.body
   );
 };
