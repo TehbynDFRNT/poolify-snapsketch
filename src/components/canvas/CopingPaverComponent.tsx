@@ -45,29 +45,27 @@ export const CopingPaverComponent = ({
   }> = [];
   
   if (paver.isCorner) {
-    // Place handles on the faces that meet the pool interior for this corner.
+    // Place handles on the EXTERIOR-facing sides (away from pool) for outward extension
     const isHorizontalEdge = paver.edge === 'shallowEnd' || paver.edge === 'deepEnd';
     const isVerticalEdge = paver.edge === 'leftSide' || paver.edge === 'rightSide';
 
-    // Determine base directions for each axis based on which edges meet at this corner.
+    // Determine base directions for each axis based on which edges meet at this corner
     const horizontalBase: 'shallowEnd' | 'deepEnd' =
       isHorizontalEdge ? (paver.edge as 'shallowEnd' | 'deepEnd') : (paver.rowIndex === 0 ? 'shallowEnd' : 'deepEnd');
 
     const verticalBase: 'leftSide' | 'rightSide' =
       isVerticalEdge ? (paver.edge as 'leftSide' | 'rightSide') : (paver.columnIndex === 0 ? 'leftSide' : 'rightSide');
 
-    // Position handles on the interior-facing sides of the corner paver.
-    // Horizontal handle sits on left for right-side corners, right for left-side corners.
-    const horizontalX =
-      isVerticalEdge
-        ? (paver.edge === 'leftSide' ? paver.width : 0)
-        : (paver.columnIndex === 0 ? paver.width : 0);
+    // Position handles on the exterior-facing sides (away from pool)
+    // leftSide/shallowEnd corners: place at left edge (x=0)
+    // rightSide/deepEnd corners: place at right edge (x=width)
+    const horizontalX = 
+      (paver.edge === 'leftSide' || paver.edge === 'shallowEnd') ? 0 : paver.width;
 
-    // Vertical handle sits on bottom for top corners, top for bottom corners.
-    const verticalY =
-      isHorizontalEdge
-        ? (paver.edge === 'shallowEnd' ? paver.height : 0)
-        : (paver.rowIndex === 0 ? paver.height : 0);
+    // leftSide/shallowEnd corners: place at top edge (y=0)
+    // rightSide/deepEnd corners: place at bottom edge (y=height)
+    const verticalY = 
+      (paver.edge === 'shallowEnd' || paver.edge === 'leftSide') ? 0 : paver.height;
 
     handles.push({
       position: { x: horizontalX, y: paver.height / 2 },
