@@ -13,6 +13,7 @@ import { BoundaryComponent } from './canvas/BoundaryComponent';
 import { HouseComponent } from './canvas/HouseComponent';
 import { ReferenceLineComponent } from './canvas/ReferenceLineComponent';
 import { PavingAreaComponent } from './canvas/PavingAreaComponent';
+import { CornerDirectionPicker } from './canvas/CornerDirectionPicker';
 import { PavingAreaDialog, PavingConfig } from './PavingAreaDialog';
 import { fillAreaWithPavers, calculateStatistics, validateBoundary } from '@/utils/pavingFill';
 import { snapToGrid, smartSnap } from '@/utils/snap';
@@ -1119,6 +1120,23 @@ export const Canvas = ({
           onConfirm={handlePavingConfig}
         />
       )}
+      
+      {/* Corner Direction Picker (rendered outside Konva context) */}
+      {(() => {
+        const poolWithPicker = components.find(c => c.type === 'pool' && (c as any)._cornerPickerState);
+        if (poolWithPicker) {
+          const pickerState = (poolWithPicker as any)._cornerPickerState;
+          return (
+            <CornerDirectionPicker
+              paver={pickerState.paver}
+              position={pickerState.position}
+              onSelectDirection={pickerState.onSelectDirection}
+              onCancel={pickerState.onCancel}
+            />
+          );
+        }
+        return null;
+      })()}
     </div>
   );
 };

@@ -160,7 +160,10 @@ export const CopingPaverComponent = ({
             e.cancelBubble = true;
             const currentPos = { x: e.target.x(), y: e.target.y() };
             const distance = calculateDragDistance(currentPos);
-            onHandleDragMove(paver.id, Math.max(0, distance)); // Only positive distances
+            // Convert screen distance back to unscaled units (mm)
+            const unscaledDistance = distance / scale;
+            console.log('Handle drag:', { distance, unscaledDistance, scale, currentPos, handleDragStart });
+            onHandleDragMove(paver.id, Math.max(0, unscaledDistance));
           }}
           onDragEnd={(e) => {
             e.cancelBubble = true;

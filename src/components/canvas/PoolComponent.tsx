@@ -21,6 +21,9 @@ interface PoolComponentProps {
 export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: PoolComponentProps) => {
   const groupRef = useRef<any>(null);
   const { components: allComponents, updateComponent } = useDesignStore();
+  
+  // Expose corner picker state for parent rendering
+  (component as any)._cornerPickerState = null;
 
   // Prefer embedded pool geometry to avoid library mismatches
   const poolData = (component.properties as any).pool ||
@@ -125,6 +128,18 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
         y: containerRect.top + (paverCanvasCenter.y + stage.y()) * stageScale,
       };
       
+      // Store for external rendering
+      (component as any)._cornerPickerState = {
+        paverId,
+        position: screenPos,
+        paver,
+        onSelectDirection: handleCornerDirectionSelect,
+        onCancel: () => {
+          setCopingSelection(prev => ({ ...prev, showCornerPicker: null }));
+          (component as any)._cornerPickerState = null;
+        }
+      };
+      
       setCopingSelection(prev => ({
         ...prev,
         showCornerPicker: { paverId, position: screenPos }
@@ -169,6 +184,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     });
     
     // Select the paver and close picker
+    (component as any)._cornerPickerState = null;
     setCopingSelection({
       selectedIds: new Set([paverId]),
       showCornerPicker: null,
@@ -187,9 +203,14 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   const handlePaverHandleDragMove = (paverId: string, dragDistance: number) => {
     if (!copingSelection.dragState || !copingConfig) return;
     
+    console.log('PoolComponent handlePaverHandleDragMove:', { paverId, dragDistance });
+    
     // Get the paver being dragged
     const paver = allPavers.find(p => p.id === paverId);
-    if (!paver) return;
+    if (!paver) {
+      console.log('Paver not found:', paverId);
+      return;
+    }
     
     // Calculate extension for this single paver
     const { newPavers } = copingSelectionController.calculateExtensionRow(
@@ -199,6 +220,8 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       poolData,
       cornerOverrides
     );
+    
+    console.log('Extension calculated:', { newPaversCount: newPavers.length, dragDistance });
     
     setCopingSelection(prev => ({
       ...prev,
@@ -253,9 +276,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   };
 
   return (
-    <>
-      {/* Pool group with local coordinates */}
-      <Group
+    <Group
         ref={groupRef}
         x={component.position.x}
         y={component.position.y}
@@ -395,16 +416,5 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
           strokeWidth={2}
         />
       </Group>
-
-      {/* Corner direction picker (outside pool group for proper positioning) */}
-      {copingSelection.showCornerPicker && (
-        <CornerDirectionPicker
-          paver={allPavers.find(p => p.id === copingSelection.showCornerPicker.paverId)!}
-          position={copingSelection.showCornerPicker.position}
-          onSelectDirection={handleCornerDirectionSelect}
-          onCancel={() => setCopingSelection(prev => ({ ...prev, showCornerPicker: null }))}
-        />
-      )}
-    </>
   );
 };
