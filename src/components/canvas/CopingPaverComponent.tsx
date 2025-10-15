@@ -45,24 +45,39 @@ export const CopingPaverComponent = ({
   }> = [];
   
   if (paver.isCorner) {
-    // Determine corner type from paver.edge
-    // shallowEnd/leftSide edges are typically "left" or "top" corners
-    // deepEnd/rightSide edges are typically "right" or "bottom" corners
-    const isLeftOrTopCorner = paver.edge === 'shallowEnd' || paver.edge === 'leftSide';
-    
-    // Horizontal handle (for deepEnd/shallowEnd extension)
-    // Base direction depends on which corner: left corners extend from shallowEnd, right corners from deepEnd
+    // Place handles on the faces that meet the pool interior for this corner.
+    const isHorizontalEdge = paver.edge === 'shallowEnd' || paver.edge === 'deepEnd';
+    const isVerticalEdge = paver.edge === 'leftSide' || paver.edge === 'rightSide';
+
+    // Determine base directions for each axis based on which edges meet at this corner.
+    const horizontalBase: 'shallowEnd' | 'deepEnd' =
+      isHorizontalEdge ? (paver.edge as 'shallowEnd' | 'deepEnd') : (paver.rowIndex === 0 ? 'shallowEnd' : 'deepEnd');
+
+    const verticalBase: 'leftSide' | 'rightSide' =
+      isVerticalEdge ? (paver.edge as 'leftSide' | 'rightSide') : (paver.columnIndex === 0 ? 'leftSide' : 'rightSide');
+
+    // Position handles on the interior-facing sides of the corner paver.
+    // Horizontal handle sits on left for right-side corners, right for left-side corners.
+    const horizontalX =
+      isVerticalEdge
+        ? (paver.edge === 'leftSide' ? paver.width : 0)
+        : (paver.columnIndex === 0 ? paver.width : 0);
+
+    // Vertical handle sits on bottom for top corners, top for bottom corners.
+    const verticalY =
+      isHorizontalEdge
+        ? (paver.edge === 'shallowEnd' ? paver.height : 0)
+        : (paver.rowIndex === 0 ? paver.height : 0);
+
     handles.push({
-      position: { x: paver.width, y: paver.height / 2 },
-      direction: isLeftOrTopCorner ? 'shallowEnd' : 'deepEnd',
+      position: { x: horizontalX, y: paver.height / 2 },
+      direction: horizontalBase,
       axis: 'horizontal'
     });
-    
-    // Vertical handle (for rightSide/leftSide extension)
-    // Base direction depends on which corner: top corners extend from leftSide, bottom corners from rightSide
+
     handles.push({
-      position: { x: paver.width / 2, y: paver.height },
-      direction: isLeftOrTopCorner ? 'leftSide' : 'rightSide',
+      position: { x: paver.width / 2, y: verticalY },
+      direction: verticalBase,
       axis: 'vertical'
     });
   } else {
