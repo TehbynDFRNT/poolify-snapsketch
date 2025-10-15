@@ -44,7 +44,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     selectedIds: Set<string>;
     showCornerPicker: { paverId: string; position: { x: number; y: number } } | null;
     dragState: { 
-      startPos: { x: number; y: number }; 
+      paverId: string;
       currentDragDistance: number;
       previewPavers: CopingPaverData[];
     } | null;
@@ -166,45 +166,24 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     });
   };
 
-  // Drag handlers for extension
-  const handlePaverDragStart = (e: any) => {
-    const stage = e.target.getStage();
-    if (!stage) return;
-    
-    const pointerPos = stage.getPointerPosition();
-    if (!pointerPos) return;
-    
+  // Handle drag handlers for individual paver handles
+  const handlePaverHandleDragStart = (paverId: string) => {
     setCopingSelection(prev => ({
       ...prev,
-      dragState: { startPos: pointerPos, currentDragDistance: 0, previewPavers: [] }
+      dragState: { paverId, currentDragDistance: 0, previewPavers: [] }
     }));
   };
 
-  const handlePaverDragMove = (e: any) => {
+  const handlePaverHandleDragMove = (paverId: string, dragDistance: number) => {
     if (!copingSelection.dragState || !copingConfig) return;
     
-    const stage = e.target.getStage();
-    if (!stage) return;
+    // Get the paver being dragged
+    const paver = allPavers.find(p => p.id === paverId);
+    if (!paver) return;
     
-    const pointerPos = stage.getPointerPosition();
-    if (!pointerPos) return;
-    
-    // Calculate drag distance
-    const deltaX = pointerPos.x - copingSelection.dragState.startPos.x;
-    const deltaY = pointerPos.y - copingSelection.dragState.startPos.y;
-    const dragDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY) / scale; // Convert to mm
-    
-    // Get selected pavers
-    const selectedPavers = copingSelectionController.getSelectedPavers(
-      copingSelection.selectedIds,
-      allPavers
-    );
-    
-    if (!copingSelectionController.canExtend(selectedPavers)) return;
-    
-    // Calculate extension
+    // Calculate extension for this single paver
     const { newPavers } = copingSelectionController.calculateExtensionRow(
-      selectedPavers,
+      [paver],
       dragDistance,
       copingConfig,
       poolData,
@@ -221,7 +200,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     }));
   };
 
-  const handlePaverDragEnd = () => {
+  const handlePaverHandleDragEnd = (paverId: string) => {
     if (!copingSelection.dragState) return;
     
     const { previewPavers } = copingSelection.dragState;
@@ -284,6 +263,10 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
             isSelected={copingSelection.selectedIds.has(paver.id)}
             scale={scale}
             onSelect={handlePaverSelect}
+            onHandleDragStart={handlePaverHandleDragStart}
+            onHandleDragMove={handlePaverHandleDragMove}
+            onHandleDragEnd={handlePaverHandleDragEnd}
+            cornerDirection={cornerOverrides.get(paver.id)}
           />
         ))}
 
@@ -401,45 +384,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
           stroke="#166534"
           strokeWidth={2}
         />
-        
-        {/* Visible drag area for multi-paver drag with instructions */}
-        {copingSelection.selectedIds.size > 0 && isSelected && (
-          <>
-            <Rect
-              x={-10}
-              y={-10}
-              width={poolData.length * scale + 20}
-              height={poolData.width * scale + 20}
-              fill="rgba(59, 130, 246, 0.1)"
-              stroke="#3B82F6"
-              strokeWidth={2}
-              dash={[10, 5]}
-              draggable
-              onDragStart={handlePaverDragStart}
-              onDragMove={handlePaverDragMove}
-              onDragEnd={handlePaverDragEnd}
-              onMouseEnter={(e) => {
-                const container = e.target.getStage()?.container();
-                if (container) container.style.cursor = 'move';
-              }}
-              onMouseLeave={(e) => {
-                const container = e.target.getStage()?.container();
-                if (container) container.style.cursor = 'default';
-              }}
-            />
-            <Text
-              x={poolData.length * scale / 2}
-              y={poolData.width * scale / 2}
-              text="⬆️ Drag pool to extend selected pavers"
-              fontSize={14}
-              fontStyle="bold"
-              fill="#3B82F6"
-              align="center"
-              offsetX={100}
-              rotation={-component.rotation}
-            />
-          </>
-        )}
       </Group>
 
       {/* Corner direction picker (outside pool group for proper positioning) */}
