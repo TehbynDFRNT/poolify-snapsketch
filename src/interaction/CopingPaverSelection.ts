@@ -61,6 +61,11 @@ export class CopingPaverSelectionController {
     paver: CopingPaverData,
     cornerOverrides: Map<string, 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd'>
   ): 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd' {
+    // If already an extension paver, use its extension direction
+    if (paver.extensionDirection) {
+      return paver.extensionDirection;
+    }
+    
     // If corner paver and override exists, use override
     if (paver.isCorner && cornerOverrides.has(paver.id)) {
       return cornerOverrides.get(paver.id)!;
