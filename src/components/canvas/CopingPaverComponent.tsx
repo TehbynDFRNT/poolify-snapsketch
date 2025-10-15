@@ -9,8 +9,8 @@ interface CopingPaverProps {
   onSelect: (paverId: string, isMultiSelect: boolean) => void;
   isPreview?: boolean;
   isHovered?: boolean;
-  onHandleDragStart?: (paverId: string) => void;
-  onHandleDragMove?: (paverId: string, dragDistance: number) => void;
+  onHandleDragStart?: (paverId: string, direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => void;
+  onHandleDragMove?: (paverId: string, dragDistance: number, direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => void;
   onHandleDragEnd?: (paverId: string) => void;
   cornerDirection?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd';
 }
@@ -37,39 +37,49 @@ export const CopingPaverComponent = ({
   // Determine extension direction (use cornerDirection for corner pavers)
   const extensionEdge = paver.isCorner && cornerDirection ? cornerDirection : paver.edge;
 
-  // Calculate handle position based on extension edge
-  const getHandlePosition = () => {
+  // For corner pavers, render two handles (horizontal and vertical)
+  const handles: Array<{
+    position: { x: number; y: number };
+    direction: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd';
+    axis: 'horizontal' | 'vertical';
+  }> = [];
+  
+  if (paver.isCorner) {
+    // Horizontal handle (for deepEnd/shallowEnd extension)
+    handles.push({
+      position: { x: paver.width, y: paver.height / 2 },
+      direction: 'deepEnd',
+      axis: 'horizontal'
+    });
+    // Vertical handle (for rightSide/leftSide extension)
+    handles.push({
+      position: { x: paver.width / 2, y: paver.height },
+      direction: 'rightSide',
+      axis: 'vertical'
+    });
+  } else {
+    // Regular paver with single handle
+    let handlePos = { x: 0, y: 0 };
     switch (extensionEdge) {
-      case 'shallowEnd':
-        return { x: 0, y: paver.height / 2 }; // left middle (extends leftward)
-      case 'deepEnd':
-        return { x: paver.width, y: paver.height / 2 }; // right middle (extends rightward)
-      case 'leftSide':
-        return { x: paver.width / 2, y: 0 }; // top middle (extends upward)
-      case 'rightSide':
-        return { x: paver.width / 2, y: paver.height }; // bottom middle (extends downward)
+      case 'shallowEnd': // extends left
+        handlePos = { x: 0, y: paver.height / 2 };
+        break;
+      case 'deepEnd': // extends right
+        handlePos = { x: paver.width, y: paver.height / 2 };
+        break;
+      case 'leftSide': // extends up
+        handlePos = { x: paver.width / 2, y: 0 };
+        break;
+      case 'rightSide': // extends down
+        handlePos = { x: paver.width / 2, y: paver.height };
+        break;
     }
-  };
-
-  const handlePos = getHandlePosition();
-
-  // Calculate drag distance from handle start position
-  const calculateDragDistance = (currentPos: { x: number; y: number }) => {
-    if (!handleDragStart) return 0;
-
-    switch (extensionEdge) {
-      case 'shallowEnd':
-        return (handleDragStart.x - currentPos.x); // leftward = positive
-      case 'deepEnd':
-        return (currentPos.x - handleDragStart.x); // rightward = positive
-      case 'leftSide':
-        return (handleDragStart.y - currentPos.y); // upward = positive
-      case 'rightSide':
-        return (currentPos.y - handleDragStart.y); // downward = positive
-      default:
-        return 0;
-    }
-  };
+    handles.push({
+      position: handlePos,
+      direction: extensionEdge,
+      axis: extensionEdge === 'leftSide' || extensionEdge === 'rightSide' ? 'vertical' : 'horizontal'
+    });
+  }
   
   // Color logic
   let fill = "#9CA3AF"; // gray normal
@@ -120,54 +130,66 @@ export const CopingPaverComponent = ({
         listening={!isPreview}
       />
 
-      {/* Draggable extension handle - only show when selected and not preview */}
-      {isSelected && !isPreview && onHandleDragStart && onHandleDragMove && onHandleDragEnd && (
+      {/* Extension handles - one or two based on corner status */}
+      {isSelected && !isPreview && onHandleDragStart && onHandleDragMove && onHandleDragEnd && handles.map((handle, idx) => (
         <Circle
-          x={(paver.x + handlePos.x) * scale}
-          y={(paver.y + handlePos.y) * scale}
+          key={`handle-${idx}`}
+          x={(paver.x + handle.position.x) * scale}
+          y={(paver.y + handle.position.y) * scale}
           radius={8}
-          fill="#3B82F6"
-          stroke="white"
+          fill="#10b981"
+          stroke="#059669"
           strokeWidth={2}
           draggable
           dragBoundFunc={(pos) => {
-            // Allow bidirectional drag along the extension direction
-            const handleScreenX = (paver.x + handlePos.x) * scale;
-            const handleScreenY = (paver.y + handlePos.y) * scale;
+            // Allow bidirectional drag along the handle's axis
+            const handleScreenX = (paver.x + handle.position.x) * scale;
+            const handleScreenY = (paver.y + handle.position.y) * scale;
 
-            switch (extensionEdge) {
-              case 'shallowEnd':
-                return { x: pos.x, y: handleScreenY }; // left/right
-              case 'deepEnd':
-                return { x: pos.x, y: handleScreenY }; // left/right
-              case 'leftSide':
-                return { x: handleScreenX, y: pos.y }; // up/down
-              case 'rightSide':
-                return { x: handleScreenX, y: pos.y }; // up/down
-              default:
-                return pos;
+            if (handle.axis === 'horizontal') {
+              return { x: pos.x, y: handleScreenY }; // left/right
+            } else {
+              return { x: handleScreenX, y: pos.y }; // up/down
             }
           }}
           onDragStart={(e) => {
             e.cancelBubble = true;
-            const pos = { x: e.target.x(), y: e.target.y() };
-            setHandleDragStart(pos);
-            onHandleDragStart(paver.id);
+            const startPos = { x: e.target.x(), y: e.target.y() };
+            setHandleDragStart(startPos);
+            onHandleDragStart(paver.id, handle.direction);
           }}
           onDragMove={(e) => {
             e.cancelBubble = true;
             const currentPos = { x: e.target.x(), y: e.target.y() };
-            const distance = calculateDragDistance(currentPos);
+            
+            // Calculate distance along the handle's axis
+            let distance = 0;
+            if (handle.axis === 'horizontal') {
+              distance = currentPos.x - handleDragStart!.x;
+            } else {
+              distance = currentPos.y - handleDragStart!.y;
+            }
+            
+            // Infer direction from drag sign for corners
+            let inferredDirection = handle.direction;
+            if (paver.isCorner) {
+              if (handle.axis === 'horizontal') {
+                inferredDirection = distance > 0 ? 'deepEnd' : 'shallowEnd';
+              } else {
+                inferredDirection = distance > 0 ? 'rightSide' : 'leftSide';
+              }
+            }
+            
             // Convert screen distance back to unscaled units (mm) - allow negative for inward extension
-            const unscaledDistance = distance / scale;
-            console.log('Handle drag:', { distance, unscaledDistance, scale, currentPos, handleDragStart });
-            onHandleDragMove(paver.id, unscaledDistance);
+            const unscaledDistance = Math.abs(distance) / scale * (distance < 0 ? -1 : 1);
+            console.log('Handle drag:', { distance, unscaledDistance, scale, currentPos, handleDragStart, inferredDirection });
+            onHandleDragMove(paver.id, unscaledDistance, inferredDirection);
           }}
           onDragEnd={(e) => {
             e.cancelBubble = true;
             onHandleDragEnd(paver.id);
             // Reset handle position
-            e.target.position({ x: (paver.x + handlePos.x) * scale, y: (paver.y + handlePos.y) * scale });
+            e.target.position({ x: (paver.x + handle.position.x) * scale, y: (paver.y + handle.position.y) * scale });
             setHandleDragStart(null);
           }}
           onMouseEnter={(e) => {
@@ -179,7 +201,7 @@ export const CopingPaverComponent = ({
             if (container) container.style.cursor = 'default';
           }}
         />
-      )}
+      ))}
     </>
   );
 };

@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo } from 'react';
+import { useRef, useState, useMemo, useEffect } from 'react';
 import { Group, Line, Text, Circle, Rect } from 'react-konva';
 import { Component } from '@/types';
 import { POOL_LIBRARY } from '@/constants/pools';
@@ -8,7 +8,6 @@ import { snapPoolToPaverGrid } from '@/utils/snap';
 import { generateCopingPaverData } from '@/utils/copingPaverData';
 import { copingSelectionController } from '@/interaction/CopingPaverSelection';
 import { CopingPaverComponent } from './CopingPaverComponent';
-import { CornerDirectionPicker } from './CornerDirectionPicker';
 import type { CopingPaverData } from '@/types/copingSelection';
 
 interface PoolComponentProps {
@@ -21,9 +20,6 @@ interface PoolComponentProps {
 export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: PoolComponentProps) => {
   const groupRef = useRef<any>(null);
   const { components: allComponents, updateComponent } = useDesignStore();
-  
-  // Expose corner picker state for parent rendering
-  (component as any)._cornerPickerState = null;
 
   // Prefer embedded pool geometry to avoid library mismatches
   const poolData = (component.properties as any).pool ||
@@ -45,7 +41,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   // Selection state for paver-based extension
   const [copingSelection, setCopingSelection] = useState<{
     selectedIds: Set<string>;
-    showCornerPicker: { paverId: string; position: { x: number; y: number } } | null;
     dragState: { 
       paverId: string;
       currentDragDistance: number;
@@ -53,7 +48,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     } | null;
   }>({
     selectedIds: new Set(),
-    showCornerPicker: null,
     dragState: null,
   });
 
@@ -63,15 +57,32 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     return generateCopingPaverData(poolData, copingConfig);
   }, [showCoping, copingCalc, poolData, copingConfig]);
 
-  // Get extension pavers from component properties
+  // Get deletion data
+  const deletedPaverIds = useMemo(() => {
+    return new Set(component.properties.copingSelection?.deletedPaverIds || []);
+  }, [component.properties.copingSelection]);
+
+  const deletedRows = useMemo(() => {
+    return component.properties.copingSelection?.deletedRows || [];
+  }, [component.properties.copingSelection]);
+
+  // Get extension pavers from component properties (filtered by deletions)
   const extensionPavers: CopingPaverData[] = useMemo(() => {
     const stored = component.properties.copingSelection?.extensionPavers || [];
-    return stored.map(p => ({
-      ...p,
-      edge: p.edge as 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd',
-      extensionDirection: p.extensionDirection as 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd' | undefined,
-    }));
-  }, [component.properties.copingSelection]);
+    return stored
+      .map(p => ({
+        ...p,
+        edge: p.edge as 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd',
+        extensionDirection: p.extensionDirection as 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd' | undefined,
+      }))
+      .filter(p => {
+        // Filter out deleted pavers
+        if (deletedPaverIds.has(p.id)) return false;
+        // Filter out pavers in deleted rows
+        if (deletedRows.some(dr => dr.edge === p.edge && dr.rowIndex === p.rowIndex)) return false;
+        return true;
+      });
+  }, [component.properties.copingSelection, deletedPaverIds, deletedRows]);
 
   // Get corner direction overrides
   const cornerOverrides = useMemo(() => {
@@ -79,10 +90,17 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     return new Map(overrides as Array<[string, 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd']>);
   }, [component.properties.copingSelection]);
 
-  // All pavers (base + extensions)
+  // All pavers (base + extensions, filtered by deletions)
   const allPavers = useMemo(() => {
-    return [...baseCopingPavers, ...extensionPavers];
-  }, [baseCopingPavers, extensionPavers]);
+    const base = baseCopingPavers.filter(p => {
+      // Filter out deleted pavers
+      if (deletedPaverIds.has(p.id)) return false;
+      // Filter out pavers in deleted rows
+      if (deletedRows.some(dr => dr.edge === p.edge && dr.rowIndex === p.rowIndex)) return false;
+      return true;
+    });
+    return [...base, ...extensionPavers];
+  }, [baseCopingPavers, extensionPavers, deletedPaverIds, deletedRows]);
 
   const handleDragEnd = (e: any) => {
     const newPos = { x: e.target.x(), y: e.target.y() };
@@ -119,94 +137,18 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     }));
   };
 
-  // Handle corner direction selection
-  const handleCornerDirectionSelect = (direction: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => {
-    if (!copingSelection.showCornerPicker) return;
-    
-    const paverId = copingSelection.showCornerPicker.paverId;
-    
-    // Update corner overrides
-    const newOverrides = new Map(cornerOverrides);
-    newOverrides.set(paverId, direction);
-    
-    // Save to component properties
-    updateComponent(component.id, {
-      properties: {
-        ...component.properties,
-        copingSelection: {
-          ...component.properties.copingSelection,
-          selectedPaverIds: [paverId],
-          extensionPavers: extensionPavers,
-          cornerDirectionOverrides: Array.from(newOverrides.entries()),
-        }
-      }
-    });
-    
-    // Select the paver and close picker
-    (component as any)._cornerPickerState = null;
-    setCopingSelection({
-      selectedIds: new Set([paverId]),
-      showCornerPicker: null,
-      dragState: null,
-    });
-  };
-
   // Handle drag handlers for individual paver handles
-  const handlePaverHandleDragStart = (paverId: string) => {
-    const paver = allPavers.find(p => p.id === paverId);
-    if (!paver) return;
-    
-    // Show direction picker for corner pavers that don't have a direction set yet
-    if (paver.isCorner && !paver.extensionDirection && !cornerOverrides.has(paverId)) {
-      // Calculate screen position for picker using stage container
-      const stage = groupRef.current?.getStage();
-      if (!stage) return;
-      
-      const transform = groupRef.current.getAbsoluteTransform();
-      const paverCanvasCenter = transform.point({
-        x: (paver.x + paver.width / 2) * scale,
-        y: (paver.y + paver.height / 2) * scale,
-      });
-      
-      // Get stage container position relative to viewport
-      const containerRect = stage.container().getBoundingClientRect();
-      const stageScale = stage.scaleX();
-      
-      // Convert canvas coordinates to screen coordinates
-      const screenPos = {
-        x: containerRect.left + (paverCanvasCenter.x + stage.x()) * stageScale,
-        y: containerRect.top + (paverCanvasCenter.y + stage.y()) * stageScale,
-      };
-      
-      // Store for external rendering
-      (component as any)._cornerPickerState = {
-        paverId,
-        position: screenPos,
-        paver,
-        onSelectDirection: handleCornerDirectionSelect,
-        onCancel: () => {
-          setCopingSelection(prev => ({ ...prev, showCornerPicker: null }));
-          (component as any)._cornerPickerState = null;
-        }
-      };
-      
-      setCopingSelection(prev => ({
-        ...prev,
-        showCornerPicker: { paverId, position: screenPos }
-      }));
-      return; // Don't start drag until direction is selected
-    }
-    
+  const handlePaverHandleDragStart = (paverId: string, direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => {
     setCopingSelection(prev => ({
       ...prev,
       dragState: { paverId, currentDragDistance: 0, previewPavers: [] }
     }));
   };
 
-  const handlePaverHandleDragMove = (paverId: string, dragDistance: number) => {
+  const handlePaverHandleDragMove = (paverId: string, dragDistance: number, direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => {
     if (!copingSelection.dragState || !copingConfig) return;
     
-    console.log('PoolComponent handlePaverHandleDragMove:', { paverId, dragDistance });
+    console.log('PoolComponent handlePaverHandleDragMove:', { paverId, dragDistance, direction });
     
     // Get the paver being dragged
     const paver = allPavers.find(p => p.id === paverId);
@@ -215,13 +157,19 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       return;
     }
     
+    // Build temporary override map with the drag direction
+    const tempOverrides = new Map(cornerOverrides);
+    if (direction) {
+      tempOverrides.set(paverId, direction);
+    }
+    
     // Calculate extension for this single paver
     const { newPavers } = copingSelectionController.calculateExtensionRow(
       [paver],
       dragDistance,
       copingConfig,
       poolData,
-      cornerOverrides
+      tempOverrides
     );
     
     console.log('Extension calculated:', { newPaversCount: newPavers.length, dragDistance });
@@ -265,6 +213,8 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
               extensionDirection: p.extensionDirection,
             })),
             cornerDirectionOverrides: Array.from(cornerOverrides.entries()),
+            deletedPaverIds: Array.from(deletedPaverIds),
+            deletedRows: deletedRows,
           }
         }
       });
@@ -273,10 +223,123 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     // Clear selection and drag state
     setCopingSelection({
       selectedIds: new Set(),
-      showCornerPicker: null,
       dragState: null,
     });
   };
+
+  // Keyboard deletion handler
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (!isSelected || copingSelection.selectedIds.size === 0) return;
+    
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      
+      const selectedPavers = Array.from(copingSelection.selectedIds)
+        .map(id => allPavers.find(p => p.id === id))
+        .filter(p => p !== undefined) as CopingPaverData[];
+      
+      if (e.shiftKey) {
+        // Delete entire rows (Shift+Delete)
+        const rowsToDelete = new Set<string>();
+        selectedPavers.forEach(paver => {
+          rowsToDelete.add(`${paver.edge}-${paver.rowIndex}`);
+        });
+        
+        const newDeletedRows = [
+          ...deletedRows,
+          ...Array.from(rowsToDelete).map(key => {
+            const [edge, rowIndex] = key.split('-');
+            return { edge: edge as 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd', rowIndex: parseInt(rowIndex) };
+          })
+        ];
+        
+        // Also remove extension pavers in those rows
+        const newExtensionPavers = extensionPavers.filter(p => 
+          !newDeletedRows.some(dr => dr.edge === p.edge && dr.rowIndex === p.rowIndex)
+        );
+        
+        updateComponent(component.id, {
+          properties: {
+            ...component.properties,
+            copingSelection: {
+              ...component.properties.copingSelection,
+              selectedPaverIds: [],
+              extensionPavers: newExtensionPavers.map(p => ({
+                id: p.id,
+                x: p.x,
+                y: p.y,
+                width: p.width,
+                height: p.height,
+                isPartial: p.isPartial,
+                edge: p.edge,
+                rowIndex: p.rowIndex,
+                columnIndex: p.columnIndex,
+                isCorner: p.isCorner,
+                extensionDirection: p.extensionDirection,
+              })),
+              cornerDirectionOverrides: Array.from(cornerOverrides.entries()),
+              deletedPaverIds: Array.from(deletedPaverIds),
+              deletedRows: newDeletedRows,
+            }
+          }
+        });
+      } else {
+        // Delete individual pavers (Delete/Backspace)
+        const newDeletedPaverIds = new Set(deletedPaverIds);
+        const newExtensionPavers = [...extensionPavers];
+        
+        selectedPavers.forEach(paver => {
+          // Check if it's an extension paver
+          const extIndex = newExtensionPavers.findIndex(p => p.id === paver.id);
+          if (extIndex >= 0) {
+            // Remove from extension pavers
+            newExtensionPavers.splice(extIndex, 1);
+          } else {
+            // Add to deleted base pavers
+            newDeletedPaverIds.add(paver.id);
+          }
+        });
+        
+        updateComponent(component.id, {
+          properties: {
+            ...component.properties,
+            copingSelection: {
+              ...component.properties.copingSelection,
+              selectedPaverIds: [],
+              extensionPavers: newExtensionPavers.map(p => ({
+                id: p.id,
+                x: p.x,
+                y: p.y,
+                width: p.width,
+                height: p.height,
+                isPartial: p.isPartial,
+                edge: p.edge,
+                rowIndex: p.rowIndex,
+                columnIndex: p.columnIndex,
+                isCorner: p.isCorner,
+                extensionDirection: p.extensionDirection,
+              })),
+              cornerDirectionOverrides: Array.from(cornerOverrides.entries()),
+              deletedPaverIds: Array.from(newDeletedPaverIds),
+              deletedRows: deletedRows,
+            }
+          }
+        });
+      }
+      
+      // Clear selection
+      setCopingSelection(prev => ({
+        ...prev,
+        selectedIds: new Set(),
+      }));
+    }
+  };
+
+  // Add keyboard listener
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSelected, copingSelection.selectedIds, allPavers, extensionPavers, deletedPaverIds, deletedRows]);
 
   return (
     <Group

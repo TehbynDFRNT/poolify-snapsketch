@@ -106,6 +106,8 @@ export interface ComponentProperties {
       extensionDirection?: string;
     }>;
     cornerDirectionOverrides: Array<[string, string]>; // serialized Map
+    deletedPaverIds?: string[]; // IDs of deleted pavers (base or extension)
+    deletedRows?: Array<{ edge: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd'; rowIndex: number }>; // Deleted rows
   };
   
   // Paver
