@@ -45,16 +45,24 @@ export const CopingPaverComponent = ({
   }> = [];
   
   if (paver.isCorner) {
+    // Determine corner type from paver.edge
+    // shallowEnd/leftSide edges are typically "left" or "top" corners
+    // deepEnd/rightSide edges are typically "right" or "bottom" corners
+    const isLeftOrTopCorner = paver.edge === 'shallowEnd' || paver.edge === 'leftSide';
+    
     // Horizontal handle (for deepEnd/shallowEnd extension)
+    // Base direction depends on which corner: left corners extend from shallowEnd, right corners from deepEnd
     handles.push({
       position: { x: paver.width, y: paver.height / 2 },
-      direction: 'deepEnd',
+      direction: isLeftOrTopCorner ? 'shallowEnd' : 'deepEnd',
       axis: 'horizontal'
     });
+    
     // Vertical handle (for rightSide/leftSide extension)
+    // Base direction depends on which corner: top corners extend from leftSide, bottom corners from rightSide
     handles.push({
       position: { x: paver.width / 2, y: paver.height },
-      direction: 'rightSide',
+      direction: isLeftOrTopCorner ? 'leftSide' : 'rightSide',
       axis: 'vertical'
     });
   } else {
