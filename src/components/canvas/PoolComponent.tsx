@@ -402,27 +402,43 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
           strokeWidth={2}
         />
         
-        {/* Invisible drag area for multi-paver drag */}
+        {/* Visible drag area for multi-paver drag with instructions */}
         {copingSelection.selectedIds.size > 0 && isSelected && (
-          <Rect
-            x={-10}
-            y={-10}
-            width={poolData.length * scale + 20}
-            height={poolData.width * scale + 20}
-            fill="transparent"
-            draggable
-            onDragStart={handlePaverDragStart}
-            onDragMove={handlePaverDragMove}
-            onDragEnd={handlePaverDragEnd}
-            onMouseEnter={(e) => {
-              const container = e.target.getStage()?.container();
-              if (container) container.style.cursor = 'move';
-            }}
-            onMouseLeave={(e) => {
-              const container = e.target.getStage()?.container();
-              if (container) container.style.cursor = 'default';
-            }}
-          />
+          <>
+            <Rect
+              x={-10}
+              y={-10}
+              width={poolData.length * scale + 20}
+              height={poolData.width * scale + 20}
+              fill="rgba(59, 130, 246, 0.1)"
+              stroke="#3B82F6"
+              strokeWidth={2}
+              dash={[10, 5]}
+              draggable
+              onDragStart={handlePaverDragStart}
+              onDragMove={handlePaverDragMove}
+              onDragEnd={handlePaverDragEnd}
+              onMouseEnter={(e) => {
+                const container = e.target.getStage()?.container();
+                if (container) container.style.cursor = 'move';
+              }}
+              onMouseLeave={(e) => {
+                const container = e.target.getStage()?.container();
+                if (container) container.style.cursor = 'default';
+              }}
+            />
+            <Text
+              x={poolData.length * scale / 2}
+              y={poolData.width * scale / 2}
+              text="⬆️ Drag pool to extend selected pavers"
+              fontSize={14}
+              fontStyle="bold"
+              fill="#3B82F6"
+              align="center"
+              offsetX={100}
+              rotation={-component.rotation}
+            />
+          </>
         )}
       </Group>
 
