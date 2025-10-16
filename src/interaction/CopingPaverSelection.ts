@@ -93,12 +93,21 @@ export class CopingPaverSelectionController {
     const firstPaver = selectedPavers[0];
     const edge = firstPaver.edge;
     
+    console.log('🧩 [CALC-EXT] Starting calculation', {
+      edge,
+      dragDistance,
+      paverCount: selectedPavers.length,
+      firstPaver: { id: firstPaver.id, x: firstPaver.x, y: firstPaver.y, width: firstPaver.width, height: firstPaver.height }
+    });
+    
     // Determine row depth based on edge - use paver dimensions directly
     // For sides (leftSide/rightSide), rows stack in Y direction (use height)
     // For ends (shallowEnd/deepEnd), rows stack in X direction (use width)
     const rowDepth = (edge === 'leftSide' || edge === 'rightSide') 
       ? firstPaver.height 
       : firstPaver.width;
+    
+    console.log('🧩 [ROW-DEPTH]', { edge, rowDepth, paverWidth: firstPaver.width, paverHeight: firstPaver.height });
     
     // Safety check
     if (!Number.isFinite(rowDepth) || rowDepth <= 0) {
@@ -109,7 +118,7 @@ export class CopingPaverSelectionController {
     // Calculate how many full rows can fit (allow negative for inward extension)
     const fullRowsToAdd = Math.floor(dragDistance / rowDepth);
     
-    console.debug('Extension calculation:', {
+    console.log('🧩 [ROWS-CALC]', {
       edge,
       baseRowIndex: firstPaver.rowIndex,
       rowDepth,
@@ -168,9 +177,20 @@ export class CopingPaverSelectionController {
           extensionDirection: direction,
         };
         
+        console.log('🧩 [NEW-PAVER]', {
+          edge: paver.edge,
+          direction,
+          rowOffset,
+          basePos: { x: paver.x, y: paver.y },
+          newPos: { x: newX, y: newY },
+          dimensions: { width: paver.width, height: paver.height }
+        });
+        
         newPavers.push(newPaver);
       });
     }
+    
+    console.log('🧩 [CALC-EXT] Complete', { edge, totalNewPavers: newPavers.length, fullRowsToAdd });
     
     return { fullRowsToAdd, newPavers };
   }

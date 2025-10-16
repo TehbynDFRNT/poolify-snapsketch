@@ -189,6 +189,12 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     
     const { previewPavers } = copingSelection.dragState;
     
+    console.log('🎯 [DRAG-END] Finalizing extension', {
+      paverId,
+      previewPaversCount: previewPavers.length,
+      previewSample: previewPavers.slice(0, 3).map(p => ({ id: p.id, x: p.x, y: p.y, edge: p.edge }))
+    });
+    
     if (previewPavers.length > 0) {
       // Save extension pavers to component properties
       const newExtensionPavers = [...extensionPavers, ...previewPavers];

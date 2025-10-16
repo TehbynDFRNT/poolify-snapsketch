@@ -25,6 +25,16 @@ export function getAlongAndDepthForEdge(edge: CopingEdgeId, config: CopingConfig
   const { tile } = config;
   const along = edgeIsLengthAxis(edge) ? tile.x : tile.y;
   const rowDepth = edgeIsLengthAxis(edge) ? tile.y : tile.x;
+  
+  console.log('🧭 [EDGE-MAP] getAlongAndDepthForEdge', {
+    edge,
+    isLengthAxis: edgeIsLengthAxis(edge),
+    tileX: tile.x,
+    tileY: tile.y,
+    along,
+    rowDepth
+  });
+  
   return { along, rowDepth };
 }
 
@@ -45,13 +55,26 @@ export function getDynamicEdgeLength(
   config: CopingConfig,
   edgesState: CopingEdgesState,
 ) {
-  if (edgeIsLengthAxis(edge)) return pool.length;
+  if (edgeIsLengthAxis(edge)) {
+    console.log('🧭 [EDGE-LENGTH] Length axis edge', { edge, length: pool.length });
+    return pool.length;
+  }
 
   const currentSideRows =
     Math.max(getBaseRowsForEdge('leftSide', config), edgesState.leftSide.currentRows ?? 0) ||
     getBaseRowsForEdge('leftSide', config);
   const cornerExt = getCornerExtensionFromSides(currentSideRows, config);
-  return pool.width + 2 * cornerExt;
+  const dynLength = pool.width + 2 * cornerExt;
+  
+  console.log('🧭 [EDGE-LENGTH] Width axis edge', { 
+    edge, 
+    poolWidth: pool.width, 
+    currentSideRows, 
+    cornerExt, 
+    dynLength 
+  });
+  
+  return dynLength;
 }
 
 export function getAxisMinCut(along: number) {
@@ -70,7 +93,9 @@ export interface BoundaryHit {
 }
 
 export function rowStartOffset(r: number, rowDepth: number) {
-  return GROUT_MM + r * (rowDepth + GROUT_MM);
+  const offset = GROUT_MM + r * (rowDepth + GROUT_MM);
+  console.log('🧮 [ROW-OFFSET]', { rowIndex: r, rowDepth, offset });
+  return offset;
 }
 
 export function getNearestBoundaryDistanceFromEdgeOuter(
@@ -262,7 +287,18 @@ export function buildRowPavers(
 
   const startOffset = rowStartOffset(rowIndex, rowDepth);
 
+  console.log('🧱 [BUILD-ROW] Starting', {
+    edge,
+    rowIndex,
+    rowDepth,
+    along,
+    startOffset,
+    edgeLength: plan.edgeLength,
+    isLengthAxis: edgeIsLengthAxis(edge)
+  });
+
   const pushRect = (x: number, y: number, w: number, h: number, isPartial: boolean) => {
+    console.log('🧱 [RECT]', { edge, rowIndex, x, y, w, h, isPartial });
     p.push({
       x: Math.round(x),
       y: Math.round(y),
@@ -275,6 +311,15 @@ export function buildRowPavers(
 
   const isLengthAxis = edgeIsLengthAxis(edge);
   const alongLen = plan.edgeLength;
+  
+  // Log offset calculation
+  let offsetX = 0, offsetY = 0;
+  if (isLengthAxis) {
+    offsetY = edge === 'leftSide' ? -startOffset - rowDepth : startOffset;
+  } else {
+    offsetX = edge === 'shallowEnd' ? -startOffset - rowDepth : startOffset;
+  }
+  console.log('🧭 [OFFSET]', { edge, offsetX, offsetY, startOffset, rowDepth });
 
   // 1) From one corner towards centre (left/top side)
   for (let i = 0; i < plan.paversPerCorner; i++) {
@@ -332,6 +377,8 @@ export function buildRowPavers(
     }
   }
 
+  console.log('🧱 [BUILD-ROW] Complete', { edge, rowIndex, totalPavers: p.length });
+
   return p;
 }
 
@@ -345,10 +392,22 @@ export function buildExtensionRowsForEdge(
   cutRowDepth?: number
 ): PaverRect[] {
   const plan = getAxisPlanForEdge(edge, pool, config, edgesState);
-  const { rowDepth } = getAlongAndDepthForEdge(edge, config);
+  const { along, rowDepth } = getAlongAndDepthForEdge(edge, config);
 
   const startRow = edgesState[edge].currentRows;
   const p: PaverRect[] = [];
+
+  console.table({
+    '🧱 Edge': edge,
+    'Along': along,
+    'Row Depth': rowDepth,
+    'Edge Length': plan.edgeLength,
+    'Full Rows': fullRowsToAdd,
+    'Has Cut Row': hasCutRow,
+    'Cut Row Depth': cutRowDepth ?? 0,
+    'Current Rows': startRow,
+    'Total Pavers Before': p.length
+  });
 
   // Full rows
   for (let i = 0; i < fullRowsToAdd; i++) {
@@ -361,6 +420,8 @@ export function buildExtensionRowsForEdge(
     const rowIdx = startRow + fullRowsToAdd;
     p.push(...buildRowPavers(edge, plan, rowIdx, cutRowDepth, true));
   }
+
+  console.log('🧱 [BUILD-EXT] Complete', { edge, totalPavers: p.length });
 
   return p;
 }
