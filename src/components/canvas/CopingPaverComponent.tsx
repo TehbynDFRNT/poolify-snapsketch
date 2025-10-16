@@ -190,15 +190,9 @@ export const CopingPaverComponent = ({
               distance = currentPos.y - handleDragStart!.y;
             }
             
-            // Infer direction from drag sign for corners
-            let inferredDirection = handle.direction;
-            if (paver.isCorner) {
-              if (handle.axis === 'horizontal') {
-                inferredDirection = distance > 0 ? 'deepEnd' : 'shallowEnd';
-              } else {
-                inferredDirection = distance > 0 ? 'rightSide' : 'leftSide';
-              }
-            }
+      // Use the handle's base direction - it's already correct for all pavers
+      // The sign of distance handles extend (positive) vs retract (negative)
+      const inferredDirection = handle.direction;
             
             // Convert screen distance back to unscaled units (mm) - allow negative for inward extension
             const unscaledDistance = Math.abs(distance) / scale * (distance < 0 ? -1 : 1);
