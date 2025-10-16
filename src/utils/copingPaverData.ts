@@ -15,7 +15,7 @@ export function generateCopingPaverData(
   const tileX = (config.tile as any).x ?? (config.tile as any).along ?? 400;
   const tileY = (config.tile as any).y ?? (config.tile as any).inward ?? 400;
   
-  // Helper to determine if a paver is at a corner
+  // Helper to determine if a paver is at a corner - uses center point for better detection
   const isCornerPaver = (
     edge: string,
     x: number,
@@ -23,20 +23,26 @@ export function generateCopingPaverData(
     width: number,
     height: number
   ): boolean => {
-    const tolerance = 5; // mm
+    const tolerance = 10; // mm - increased for better detection
     
-    // Check if paver overlaps with any corner region
-    if (edge === 'shallowEnd' || edge === 'deepEnd') {
-      // For end edges, corners are at the top and bottom
-      const atTop = y <= tolerance;
-      const atBottom = y + height >= pool.width - tolerance;
-      return atTop || atBottom;
-    } else {
-      // For side edges, corners are at the left and right
-      const atLeft = x <= tolerance;
-      const atRight = x + width >= pool.length - tolerance;
-      return atLeft || atRight;
-    }
+    // Use paver center point for more reliable detection
+    const centerX = x + width / 2;
+    const centerY = y + height / 2;
+    
+    // Account for negative coordinates (pavers extending beyond pool origin)
+    const poolLeft = 0;
+    const poolRight = pool.length;
+    const poolTop = 0;
+    const poolBottom = pool.width;
+    
+    // Check if center is in a corner zone (both horizontally and vertically at edges)
+    const isAtLeftEdge = centerX <= poolLeft + tolerance || centerX < 0;
+    const isAtRightEdge = centerX >= poolRight - tolerance;
+    const isAtTopEdge = centerY <= poolTop + tolerance || centerY < 0;
+    const isAtBottomEdge = centerY >= poolBottom - tolerance;
+    
+    // Corner if at BOTH a horizontal and vertical edge
+    return (isAtLeftEdge || isAtRightEdge) && (isAtTopEdge || isAtBottomEdge);
   };
   
   // Process each edge

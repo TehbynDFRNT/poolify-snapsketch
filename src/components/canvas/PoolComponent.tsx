@@ -364,6 +364,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
             onHandleDragMove={handlePaverHandleDragMove}
             onHandleDragEnd={handlePaverHandleDragEnd}
             cornerDirection={cornerOverrides.get(paver.id)}
+            poolDimensions={{ length: poolData.length, width: poolData.width }}
           />
         ))}
 
@@ -419,6 +420,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
             scale={scale}
             onSelect={() => {}}
             isPreview
+            poolDimensions={{ length: poolData.length, width: poolData.width }}
           />
         ))}
 
