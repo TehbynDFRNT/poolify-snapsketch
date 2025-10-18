@@ -278,6 +278,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
+      e.stopPropagation();
       
       const selectedPavers = Array.from(copingSelection.selectedIds)
         .map(id => allPavers.find(p => p.id === id))
