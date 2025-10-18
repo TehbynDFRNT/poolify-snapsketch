@@ -1,5 +1,5 @@
 import { CopingPaverData } from '@/types/copingSelection';
-import { CopingConfig, Pool } from '@/utils/copingCalculation';
+import { CopingConfig, Pool, GROUT_MM } from '@/utils/copingCalculation';
 
 export class CopingPaverSelectionController {
   /**
@@ -116,7 +116,9 @@ export class CopingPaverSelectionController {
     }
     
     // Calculate how many full rows can fit (allow negative for inward extension)
-    const fullRowsToAdd = Math.floor(dragDistance / rowDepth);
+    // Account for grout spacing between rows
+    const rowUnit = rowDepth + GROUT_MM;
+    const fullRowsToAdd = Math.floor(dragDistance / rowUnit);
     
     console.log('🧩 [ROWS-CALC]', {
       edge,
@@ -145,26 +147,31 @@ export class CopingPaverSelectionController {
         const direction = this.getExtensionDirection(paver, cornerOverrides);
         
         // Calculate position for this row RELATIVE to existing paver position
+        // Include grout spacing between rows
+        const rowSpacing = rowDepth + GROUT_MM;
         let newX = paver.x;
         let newY = paver.y;
         
         switch (direction) {
           case 'leftSide':
-            newY = paver.y - rowOffset * rowDepth;
+            newY = paver.y - rowOffset * rowSpacing;
             break;
           case 'rightSide':
-            newY = paver.y + rowOffset * rowDepth;
+            newY = paver.y + rowOffset * rowSpacing;
             break;
           case 'shallowEnd':
-            newX = paver.x - rowOffset * rowDepth;
+            newX = paver.x - rowOffset * rowSpacing;
             break;
           case 'deepEnd':
-            newX = paver.x + rowOffset * rowDepth;
+            newX = paver.x + rowOffset * rowSpacing;
             break;
         }
         
+        // Generate truly unique ID using timestamp + random to avoid collisions
+        const uniqueId = `ext-${edge}-c${paver.columnIndex}-r${baseRowIndex + rowOffset}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        
         const newPaver: CopingPaverData = {
-          id: `ext-${paver.id}-row${baseRowIndex + rowOffset}`,
+          id: uniqueId,
           x: newX,
           y: newY,
           width: paver.width,
