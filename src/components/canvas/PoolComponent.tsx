@@ -61,7 +61,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
 
   // Initialize or retrieve edge states from component properties
   const getEdgesState = (): CopingEdgesState => {
-    const stored = (component.properties as any).copingEdgesState;
+    const stored = component.properties.copingEdgesState;
     if (stored) return stored as CopingEdgesState;
     if (copingConfig) return initialCopingEdgesState(copingConfig);
     return {
@@ -329,7 +329,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     updateComponent(component.id, {
       properties: {
         ...component.properties,
-        copingEdgesState: result.newEdgesState as any,
+        copingEdgesState: result.newEdgesState,
         copingSelection: {
           ...component.properties.copingSelection,
           selectedPaverIds: [],
