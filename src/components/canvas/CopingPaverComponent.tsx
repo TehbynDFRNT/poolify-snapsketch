@@ -7,6 +7,7 @@ interface CopingPaverProps {
   isSelected: boolean;
   scale: number;
   onSelect: (paverId: string, isMultiSelect: boolean) => void;
+  onRowSelect?: (edge: string, rowIndex: number) => void;
   isPreview?: boolean;
   isHovered?: boolean;
   onHandleDragStart?: (paverId: string, direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => void;
@@ -21,6 +22,7 @@ export const CopingPaverComponent = ({
   isSelected,
   scale,
   onSelect,
+  onRowSelect,
   isPreview = false,
   isHovered = false,
   onHandleDragStart,
@@ -30,10 +32,23 @@ export const CopingPaverComponent = ({
   poolDimensions,
 }: CopingPaverProps) => {
   const [handleDragStart, setHandleDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [lastClickTime, setLastClickTime] = useState<number>(0);
 
   const handleClick = (e: any) => {
-    const isMultiSelect = e.evt.ctrlKey || e.evt.metaKey;
-    onSelect(paver.id, isMultiSelect);
+    const now = Date.now();
+    const timeSinceLastClick = now - lastClickTime;
+    
+    // Double-click detection (within 300ms)
+    if (timeSinceLastClick < 300 && onRowSelect) {
+      // Double-click: select entire row
+      onRowSelect(paver.edge, paver.rowIndex);
+    } else {
+      // Single-click: normal select behavior
+      const isMultiSelect = e.evt.ctrlKey || e.evt.metaKey;
+      onSelect(paver.id, isMultiSelect);
+    }
+    
+    setLastClickTime(now);
   };
 
   // Determine extension direction (use cornerDirection for corner pavers)

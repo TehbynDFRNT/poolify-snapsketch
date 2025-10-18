@@ -141,6 +141,20 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     }));
   };
 
+  // Row selection handler (for double-click)
+  const handleRowSelect = (edge: string, rowIndex: number) => {
+    // Find all pavers in the same row on the same edge
+    const rowPavers = allPavers.filter(p => p.edge === edge && p.rowIndex === rowIndex);
+    const rowPaverIds = new Set(rowPavers.map(p => p.id));
+    
+    console.log('Row selection:', { edge, rowIndex, count: rowPaverIds.size });
+    
+    setCopingSelection(prev => ({
+      ...prev,
+      selectedIds: rowPaverIds,
+    }));
+  };
+
   // Handle drag handlers for individual paver handles
   const handlePaverHandleDragStart = (paverId: string, direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => {
     setCopingSelection(prev => ({
@@ -381,6 +395,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
             isSelected={copingSelection.selectedIds.has(paver.id)}
             scale={scale}
             onSelect={handlePaverSelect}
+            onRowSelect={handleRowSelect}
             onHandleDragStart={handlePaverHandleDragStart}
             onHandleDragMove={handlePaverHandleDragMove}
             onHandleDragEnd={handlePaverHandleDragEnd}
