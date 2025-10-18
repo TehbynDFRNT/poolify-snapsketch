@@ -190,13 +190,26 @@ export const CopingPaverComponent = ({
               distance = currentPos.y - handleDragStart!.y;
             }
             
-      // Use the handle's base direction - it's already correct for all pavers
-      // The sign of distance handles extend (positive) vs retract (negative)
-      const inferredDirection = handle.direction;
+            // Fix: Flip sign for edges that extend in negative screen direction
+            // leftSide (top) and shallowEnd (left) extend in NEGATIVE screen coords
+            // but should be treated as POSITIVE extension distance
+            let signCorrectedDistance = distance;
+            if (handle.direction === 'leftSide' || handle.direction === 'shallowEnd') {
+              signCorrectedDistance = -distance;
+            }
             
-            // Convert screen distance back to unscaled units (mm) - allow negative for inward extension
-            const unscaledDistance = Math.abs(distance) / scale * (distance < 0 ? -1 : 1);
-            console.log('Handle drag:', { distance, unscaledDistance, scale, currentPos, handleDragStart, inferredDirection });
+            const inferredDirection = handle.direction;
+            
+            // Convert to mm
+            const unscaledDistance = signCorrectedDistance / scale;
+            
+            console.log('Handle drag:', { 
+              raw: distance, 
+              corrected: signCorrectedDistance,
+              unscaledDistance, 
+              direction: inferredDirection 
+            });
+            
             onHandleDragMove(paver.id, unscaledDistance, inferredDirection);
           }}
           onDragEnd={(e) => {
