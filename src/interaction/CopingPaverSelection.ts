@@ -61,17 +61,17 @@ export class CopingPaverSelectionController {
     paver: CopingPaverData,
     cornerOverrides: Map<string, 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd'>
   ): 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd' {
-    // If already an extension paver, use its extension direction
+    // Priority 1: Check override (from drag handle direction)
+    if (cornerOverrides.has(paver.id)) {
+      return cornerOverrides.get(paver.id)!;
+    }
+    
+    // Priority 2: If already an extension paver, use its extension direction
     if (paver.extensionDirection) {
       return paver.extensionDirection;
     }
     
-    // If corner paver and override exists, use override
-    if (paver.isCorner && cornerOverrides.has(paver.id)) {
-      return cornerOverrides.get(paver.id)!;
-    }
-    
-    // Default: extend in the edge's direction
+    // Priority 3: Default to the edge's direction
     return paver.edge;
   }
   
@@ -141,6 +141,14 @@ export class CopingPaverSelectionController {
 
       selectedPavers.forEach(paver => {
         const direction = this.getExtensionDirection(paver, cornerOverrides);
+        
+        console.log('🧩 [DIR-RESOLVE]', { 
+          paverId: paver.id, 
+          edge: paver.edge, 
+          extDir: paver.extensionDirection, 
+          override: cornerOverrides.get(paver.id), 
+          resolved: direction 
+        });
 
         let newX = paver.x;
         let newY = paver.y;
