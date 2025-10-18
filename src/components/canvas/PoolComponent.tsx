@@ -166,43 +166,46 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   const handlePaverHandleDragMove = (paverId: string, dragDistance: number, direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => {
     if (!copingSelection.dragState || !copingConfig) return;
     
-    // Find dragged paver and determine its row/edge
-    const dragged = allPavers.find(p => p.id === paverId);
-    if (!dragged) return;
+    // Get ALL selected pavers
+    const selectedPavers = allPavers.filter(p => copingSelection.selectedIds.has(p.id));
+    
+    if (selectedPavers.length === 0) {
+      console.log('No pavers selected');
+      return;
+    }
 
-    // Get ALL selected pavers (not just the one being dragged)
-    const selectedPaversAll = allPavers.filter(p => copingSelection.selectedIds.has(p.id));
+    // Check if selected pavers can extend together (same edge + row)
+    const canExtend = copingSelectionController.canExtend(selectedPavers);
+    
+    if (!canExtend) {
+      console.warn('Selected pavers cannot extend together - they must be on the same edge and row');
+      return;
+    }
 
-    // Restrict to the dragged paver's row and edge to guarantee a valid multi-extend set
-    const selectedPavers = selectedPaversAll.filter(p => p.edge === dragged.edge && p.rowIndex === dragged.rowIndex);
-
-    // If nothing matches, at least operate on the dragged paver
-    const effectivePavers = selectedPavers.length > 0 ? selectedPavers : [dragged];
-
-    // Build temporary override map with the drag direction for the EFFECTIVE set
+    // Build temporary override map with the drag direction for ALL selected pavers
     const tempOverrides = new Map(cornerOverrides);
     if (direction) {
-      effectivePavers.forEach(p => {
+      // Apply the drag direction to ALL selected pavers so they extend in the same direction
+      selectedPavers.forEach(p => {
         tempOverrides.set(p.id, direction);
       });
     }
-
-    // Calculate extension for the EFFECTIVE set (single row of same edge)
+    
+    // Calculate extension for ALL selected pavers
     const { newPavers } = copingSelectionController.calculateExtensionRow(
-      effectivePavers,
+      selectedPavers,
       dragDistance,
       copingConfig,
       poolData,
       tempOverrides
     );
-
-    console.log('PoolComponent handlePaverHandleDragMove:', {
+    
+    console.log('PoolComponent handlePaverHandleDragMove:', { 
       draggedPaverId: paverId,
-      selectedCount: selectedPaversAll.length,
-      filteredToRowCount: effectivePavers.length,
-      edge: dragged.edge,
-      rowIndex: dragged.rowIndex,
-      dragDistance,
+      selectedCount: selectedPavers.length,
+      edge: selectedPavers[0].edge,
+      rowIndex: selectedPavers[0].rowIndex,
+      dragDistance, 
       direction,
       newPaversCount: newPavers.length
     });
