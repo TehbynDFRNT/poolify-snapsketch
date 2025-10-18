@@ -69,19 +69,23 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   // Get extension pavers from component properties (filtered by deletions)
   const extensionPavers: CopingPaverData[] = useMemo(() => {
     const stored = component.properties.copingSelection?.extensionPavers || [];
-    return stored
+    // Normalize, filter deletions, then de-duplicate by id to avoid React key collisions
+    const filtered = stored
       .map(p => ({
         ...p,
         edge: p.edge as 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd',
         extensionDirection: p.extensionDirection as 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd' | undefined,
       }))
       .filter(p => {
-        // Filter out deleted pavers
         if (deletedPaverIds.has(p.id)) return false;
-        // Filter out pavers in deleted rows
         if (deletedRows.some(dr => dr.edge === p.edge && dr.rowIndex === p.rowIndex)) return false;
         return true;
       });
+
+    // De-dupe by id (keep the last occurrence)
+    const map = new Map<string, CopingPaverData>();
+    filtered.forEach(p => map.set(p.id, p));
+    return Array.from(map.values());
   }, [component.properties.copingSelection, deletedPaverIds, deletedRows]);
 
   // Get corner direction overrides
