@@ -200,34 +200,37 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     });
     
     if (previewPavers.length > 0) {
-      // Save extension pavers to component properties
-      const newExtensionPavers = [...extensionPavers, ...previewPavers];
-      
-      updateComponent(component.id, {
-        properties: {
-          ...component.properties,
-          copingSelection: {
-            ...component.properties.copingSelection,
-            selectedPaverIds: [],
-            extensionPavers: newExtensionPavers.map(p => ({
-              id: p.id,
-              x: p.x,
-              y: p.y,
-              width: p.width,
-              height: p.height,
-              isPartial: p.isPartial,
-              edge: p.edge,
-              rowIndex: p.rowIndex,
-              columnIndex: p.columnIndex,
-              isCorner: p.isCorner,
-              extensionDirection: p.extensionDirection,
-            })),
-            cornerDirectionOverrides: Array.from(cornerOverrides.entries()),
-            deletedPaverIds: Array.from(deletedPaverIds),
-            deletedRows: deletedRows,
+      // Save only FULL rows (exclude partial preview pavers)
+      const toCommit = previewPavers.filter(p => !p.isPartial);
+      if (toCommit.length > 0) {
+        const newExtensionPavers = [...extensionPavers, ...toCommit];
+
+        updateComponent(component.id, {
+          properties: {
+            ...component.properties,
+            copingSelection: {
+              ...component.properties.copingSelection,
+              selectedPaverIds: [],
+              extensionPavers: newExtensionPavers.map(p => ({
+                id: p.id,
+                x: p.x,
+                y: p.y,
+                width: p.width,
+                height: p.height,
+                isPartial: p.isPartial,
+                edge: p.edge,
+                rowIndex: p.rowIndex,
+                columnIndex: p.columnIndex,
+                isCorner: p.isCorner,
+                extensionDirection: p.extensionDirection,
+              })),
+              cornerDirectionOverrides: Array.from(cornerOverrides.entries()),
+              deletedPaverIds: Array.from(deletedPaverIds),
+              deletedRows: deletedRows,
+            }
           }
-        }
-      });
+        });
+      }
     }
     
     // Clear selection and drag state

@@ -129,7 +129,66 @@ export class CopingPaverSelectionController {
     });
     
     if (fullRowsToAdd === 0) {
-      return { fullRowsToAdd: 0, newPavers: [] };
+      // Show a cut-row preview when drag is less than one full row
+      const remainder = Math.max(0, Math.abs(dragDistance));
+      const minPreview = 5; // mm threshold to avoid jitter
+      if (remainder < minPreview) {
+        return { fullRowsToAdd: 0, newPavers: [] };
+      }
+
+      const cutPavers: CopingPaverData[] = [];
+      const rowSpacing = rowDepth + GROUT_MM;
+
+      selectedPavers.forEach(paver => {
+        const direction = this.getExtensionDirection(paver, cornerOverrides);
+
+        let newX = paver.x;
+        let newY = paver.y;
+        let width = paver.width;
+        let height = paver.height;
+
+        switch (direction) {
+          case 'deepEnd':
+            // Outward to the right
+            newX = paver.x + rowSpacing; // start after grout gap
+            width = remainder;
+            break;
+          case 'shallowEnd':
+            // Outward to the left
+            newX = paver.x - GROUT_MM - remainder;
+            width = remainder;
+            break;
+          case 'rightSide':
+            // Outward downward
+            newY = paver.y + rowSpacing;
+            height = remainder;
+            break;
+          case 'leftSide':
+            // Outward upward
+            newY = paver.y - GROUT_MM - remainder;
+            height = remainder;
+            break;
+        }
+
+        const id = `preview-cut-${direction}-c${paver.columnIndex}-r${paver.rowIndex + 1}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+
+        cutPavers.push({
+          id,
+          x: newX,
+          y: newY,
+          width,
+          height,
+          isPartial: true,
+          edge: paver.edge,
+          rowIndex: paver.rowIndex + 1,
+          columnIndex: paver.columnIndex,
+          isCorner: false,
+          extensionDirection: direction,
+        });
+      });
+
+      console.log('🧩 [CUT-PREVIEW]', { edge, remainder, count: cutPavers.length });
+      return { fullRowsToAdd: 0, newPavers: cutPavers };
     }
     
     // Generate new pavers for ALL rows
