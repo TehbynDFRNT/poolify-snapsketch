@@ -382,9 +382,9 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   };
 
   // Add keyboard listener
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown, true); // capture to intercept before global
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [isSelected, copingSelection.selectedIds, allPavers, extensionPavers, deletedPaverIds, deletedRows]);
 
   return (
