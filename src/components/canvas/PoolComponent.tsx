@@ -152,31 +152,39 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   const handlePaverHandleDragMove = (paverId: string, dragDistance: number, direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => {
     if (!copingSelection.dragState || !copingConfig) return;
     
-    console.log('PoolComponent handlePaverHandleDragMove:', { paverId, dragDistance, direction });
+    // Get ALL selected pavers (not just the one being dragged)
+    const selectedPavers = allPavers.filter(p => copingSelection.selectedIds.has(p.id));
     
-    // Get the paver being dragged
-    const paver = allPavers.find(p => p.id === paverId);
-    if (!paver) {
-      console.log('Paver not found:', paverId);
+    if (selectedPavers.length === 0) {
+      console.log('No pavers selected');
       return;
     }
     
-    // Build temporary override map with the drag direction
+    // Build temporary override map with the drag direction for ALL selected pavers
     const tempOverrides = new Map(cornerOverrides);
     if (direction) {
-      tempOverrides.set(paverId, direction);
+      // Apply the drag direction to ALL selected pavers so they extend in the same direction
+      selectedPavers.forEach(p => {
+        tempOverrides.set(p.id, direction);
+      });
     }
     
-    // Calculate extension for this single paver
+    // Calculate extension for ALL selected pavers
     const { newPavers } = copingSelectionController.calculateExtensionRow(
-      [paver],
+      selectedPavers,
       dragDistance,
       copingConfig,
       poolData,
       tempOverrides
     );
     
-    console.log('Extension calculated:', { newPaversCount: newPavers.length, dragDistance });
+    console.log('PoolComponent handlePaverHandleDragMove:', { 
+      draggedPaverId: paverId,
+      selectedCount: selectedPavers.length,
+      dragDistance, 
+      direction,
+      newPaversCount: newPavers.length
+    });
     
     setCopingSelection(prev => ({
       ...prev,
