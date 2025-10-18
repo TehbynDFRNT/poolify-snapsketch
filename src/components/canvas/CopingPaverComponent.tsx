@@ -39,14 +39,14 @@ export const CopingPaverComponent = ({
   // Determine extension direction (use cornerDirection for corner pavers)
   const extensionEdge = paver.isCorner && cornerDirection ? cornerDirection : paver.edge;
 
-  // For corner pavers, render two handles (horizontal and vertical)
+  // Give ALL pavers two handles (horizontal and vertical) for any-direction extension
   const handles: Array<{
     position: { x: number; y: number };
     direction: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd';
     axis: 'horizontal' | 'vertical';
   }> = [];
   
-  if (paver.isCorner && poolDimensions) {
+  if (poolDimensions) {
     // Use geometric position to determine handle placement (away from pool center)
     const paverCenterX = paver.x + paver.width / 2;
     const paverCenterY = paver.y + paver.height / 2;
@@ -78,7 +78,7 @@ export const CopingPaverComponent = ({
       axis: 'vertical'
     });
   } else {
-    // Regular paver with single handle
+    // Fallback: single handle based on edge (if poolDimensions not available)
     let handlePos = { x: 0, y: 0 };
     switch (extensionEdge) {
       case 'shallowEnd': // extends left
