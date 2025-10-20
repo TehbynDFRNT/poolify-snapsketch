@@ -121,25 +121,53 @@ export function transformPaverToWorld(
 
 /**
  * Check if a paver (in world coordinates) is valid (not intersecting boundaries)
+ * 
+ * Two-phase validation:
+ * 1. Obstacles (fence, wall, house, drainage, paving_area): Paver invalid if ANY corner is INSIDE
+ * 2. Property boundaries (boundary): Paver invalid if ANY corner is OUTSIDE
  */
 export function isPaverValid(
   paverCorners: Point[],
   boundaryComponents: Component[],
   poolComponentId: string
 ): { valid: boolean; intersectedComponentId?: string } {
-  // Check each corner against all boundary components
+  
+  // Phase 1: Check obstacles (pavers must NOT be inside)
   for (const component of boundaryComponents) {
     if (component.id === poolComponentId) continue;
-    if (!['fence', 'wall', 'house', 'boundary', 'drainage', 'paving_area'].includes(component.type)) continue;
     
     const polygon = getComponentPolygon(component);
     if (!polygon || polygon.length < 3) continue;
     
-    // Check if any paver corner is inside this boundary
-    for (const corner of paverCorners) {
-      if (isPointInPolygon(corner, polygon)) {
+    // Obstacles: fence, wall, house, drainage, paving_area
+    if (['fence', 'wall', 'house', 'drainage', 'paving_area'].includes(component.type)) {
+      // Check if ANY corner is INSIDE obstacle → invalid
+      const anyInside = paverCorners.some(corner => isPointInPolygon(corner, polygon));
+      if (anyInside) {
+        console.log('🚫 [BOUNDARY-HIT] Paver inside obstacle', { 
+          type: component.type, 
+          id: component.id 
+        });
         return { valid: false, intersectedComponentId: component.id };
       }
+    }
+  }
+  
+  // Phase 2: Check property boundaries (pavers must be INSIDE)
+  for (const component of boundaryComponents) {
+    if (component.id === poolComponentId) continue;
+    if (component.type !== 'boundary') continue;
+    
+    const polygon = getComponentPolygon(component);
+    if (!polygon || polygon.length < 3) continue;
+    
+    // Check if ANY corner is OUTSIDE boundary → invalid
+    const anyOutside = paverCorners.some(corner => !isPointInPolygon(corner, polygon));
+    if (anyOutside) {
+      console.log('🚫 [BOUNDARY-HIT] Paver outside property boundary', { 
+        id: component.id 
+      });
+      return { valid: false, intersectedComponentId: component.id };
     }
   }
   
