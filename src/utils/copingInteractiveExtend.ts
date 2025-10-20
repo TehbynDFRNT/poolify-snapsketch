@@ -127,7 +127,11 @@ export function getNearestBoundaryDistanceFromEdgeOuter(
   const poolY = poolComponent.position.y;
   const rotation = (poolComponent.rotation * Math.PI) / 180;
   
-  // Determine ray origin and direction based on edge
+  // Pool dimensions in pixels
+  const poolLenPx = pool.length * SCALE;
+  const poolWidPx = pool.width * SCALE;
+  
+  // Determine ray origin (at middle of edge) and direction based on edge
   let rayOrigin: { x: number; y: number };
   let rayDirection: { x: number; y: number };
   
@@ -135,53 +139,41 @@ export function getNearestBoundaryDistanceFromEdgeOuter(
   const sin = Math.sin(rotation);
   
   if (edge === 'leftSide') {
-    // Left side: offset in -Y direction (local), outward is also -Y
-    const localX = 0;
+    // Left side: middle of top edge, offset outward in -Y direction
+    const localX = poolLenPx / 2;
     const localY = -outerOffsetPx;
     rayOrigin = {
       x: poolX + localX * cos - localY * sin,
       y: poolY + localX * sin + localY * cos
     };
-    rayDirection = {
-      x: -sin,
-      y: cos
-    };
+    rayDirection = { x: -sin, y: cos };
   } else if (edge === 'rightSide') {
-    // Right side: offset in +Y direction (local), outward is +Y
-    const localX = 0;
-    const localY = outerOffsetPx;
+    // Right side: middle of bottom edge, offset outward in +Y direction
+    const localX = poolLenPx / 2;
+    const localY = poolWidPx + outerOffsetPx;
     rayOrigin = {
       x: poolX + localX * cos - localY * sin,
       y: poolY + localX * sin + localY * cos
     };
-    rayDirection = {
-      x: sin,
-      y: -cos
-    };
+    rayDirection = { x: sin, y: -cos };
   } else if (edge === 'shallowEnd') {
-    // Shallow end: offset in -X direction (local), outward is -X
+    // Shallow end: middle of left edge, offset outward in -X direction
     const localX = -outerOffsetPx;
-    const localY = 0;
+    const localY = poolWidPx / 2;
     rayOrigin = {
       x: poolX + localX * cos - localY * sin,
       y: poolY + localX * sin + localY * cos
     };
-    rayDirection = {
-      x: -cos,
-      y: -sin
-    };
+    rayDirection = { x: -cos, y: -sin };
   } else {
-    // Deep end: offset in +X direction (local), outward is +X
-    const localX = outerOffsetPx;
-    const localY = 0;
+    // Deep end: middle of right edge, offset outward in +X direction
+    const localX = poolLenPx + outerOffsetPx;
+    const localY = poolWidPx / 2;
     rayOrigin = {
       x: poolX + localX * cos - localY * sin,
       y: poolY + localX * sin + localY * cos
     };
-    rayDirection = {
-      x: cos,
-      y: sin
-    };
+    rayDirection = { x: cos, y: sin };
   }
   
   // Find nearest boundary
@@ -192,10 +184,20 @@ export function getNearestBoundaryDistanceFromEdgeOuter(
     poolComponent.id
   );
   
-  if (!intersection) return null;
+  if (!intersection) {
+    console.log('🎯 [RAY-BOUNDARY] No hit', { edge, rayOrigin });
+    return null;
+  }
   
   // Convert distance from pixels back to mm
   const distanceMm = intersection.distance / SCALE;
+  
+  console.log('🎯 [RAY-BOUNDARY] Hit', { 
+    edge, 
+    rayOrigin: { x: Math.round(rayOrigin.x), y: Math.round(rayOrigin.y) },
+    distanceMm: Math.round(distanceMm),
+    componentId: intersection.componentId 
+  });
   
   return {
     componentId: intersection.componentId,
@@ -302,8 +304,8 @@ export function buildRowPavers(
   rowIndex: number,
   rowDepth: number,
   isBoundaryCutRow: boolean,
-  poolHalfLength: number,
-  poolHalfWidth: number
+  poolLength: number,
+  poolWidth: number
 ): PaverRect[] {
   const p: PaverRect[] = [];
   const along = plan.along; // tile.x for sides, tile.y for ends
@@ -313,14 +315,14 @@ export function buildRowPavers(
   // Outward offset from waterline to row START (inner joint face)
   const startOffset = GROUT_MM + rowIndex * (rowDepth + GROUT_MM);
 
-  // Outward direction per edge, starting from pool waterline position
+  // Outward direction per edge (offset from top-left waterline origin)
   const offsetX =
-    edge === 'shallowEnd' ? -poolHalfLength - startOffset - rowDepth :
-    edge === 'deepEnd'    ?  poolHalfLength + startOffset           : 0;
+    edge === 'shallowEnd' ? -(startOffset + rowDepth) :
+    edge === 'deepEnd'    ?  poolLength + startOffset : 0;
 
   const offsetY =
-    edge === 'leftSide'   ? -poolHalfWidth - startOffset - rowDepth :
-    edge === 'rightSide'  ?  poolHalfWidth + startOffset           : 0;
+    edge === 'leftSide'   ? -(startOffset + rowDepth) :
+    edge === 'rightSide'  ?  poolWidth + startOffset  : 0;
 
   const push = (x: number, y: number, w: number, h: number, isPartial: boolean) =>
     p.push({ 
@@ -430,20 +432,20 @@ export function buildExtensionRowsForEdge(
   const startRow = edgesState[edge].currentRows;
   const p: PaverRect[] = [];
 
-  // Pool half-dimensions for waterline positioning
-  const poolHalfLength = pool.length / 2;
-  const poolHalfWidth = pool.width / 2;
+  // Pool full dimensions for waterline positioning
+  const poolLength = pool.length;
+  const poolWidth = pool.width;
 
   // Full rows
   for (let i = 0; i < fullRowsToAdd; i++) {
     const rowIdx = startRow + i;
-    p.push(...buildRowPavers(edge, plan, rowIdx, rowDepth, false, poolHalfLength, poolHalfWidth));
+    p.push(...buildRowPavers(edge, plan, rowIdx, rowDepth, false, poolLength, poolWidth));
   }
 
   // Boundary cut row
   if (hasCutRow && cutRowDepth && cutRowDepth > 0) {
     const rowIdx = startRow + fullRowsToAdd;
-    p.push(...buildRowPavers(edge, plan, rowIdx, cutRowDepth, true, poolHalfLength, poolHalfWidth));
+    p.push(...buildRowPavers(edge, plan, rowIdx, cutRowDepth, true, poolLength, poolWidth));
   }
 
   return p;
