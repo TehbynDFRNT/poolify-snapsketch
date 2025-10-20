@@ -21,7 +21,7 @@ export function findNearestBoundary(
   allComponents: Component[],
   excludePoolId: string
 ): BoundaryIntersection | null {
-  const boundaryTypes = ['fence', 'wall', 'boundary', 'house', 'drainage'];
+  const boundaryTypes = ['fence', 'wall', 'boundary', 'house', 'drainage', 'paver', 'paving_area'];
   const boundaries = allComponents.filter(
     c => boundaryTypes.includes(c.type) && c.id !== excludePoolId
   );
@@ -95,6 +95,29 @@ function getComponentEdges(component: Component): Array<{
         start: transformedPoints[i],
         end: transformedPoints[nextIndex]
       });
+    }
+  } else if (component.type === 'paver' || component.type === 'paving_area') {
+    // Axis-aligned rectangle components (transformed by rotation around position)
+    const w = component.dimensions.width;
+    const h = component.dimensions.height;
+    const cos = Math.cos((component.rotation * Math.PI) / 180);
+    const sin = Math.sin((component.rotation * Math.PI) / 180);
+
+    const local = [
+      { x: 0, y: 0 },
+      { x: w, y: 0 },
+      { x: w, y: h },
+      { x: 0, y: h },
+    ];
+
+    const transformed = local.map((p) => ({
+      x: component.position.x + p.x * cos - p.y * sin,
+      y: component.position.y + p.x * sin + p.y * cos,
+    }));
+
+    for (let i = 0; i < transformed.length; i++) {
+      const next = (i + 1) % transformed.length;
+      edges.push({ start: transformed[i], end: transformed[next] });
     }
   }
 
