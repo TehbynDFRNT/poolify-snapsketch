@@ -1,6 +1,9 @@
 import { Component } from '@/types';
 import { GRID_CONFIG } from '@/constants/grid';
 
+// Coordinate system: canvas pixels for world coordinates, mm for component dimensions
+const SCALE = 0.1; // mm to pixel conversion (1px = 10mm)
+
 export interface BoundaryIntersection {
   componentId: string;
   componentType: string;
@@ -98,8 +101,9 @@ function getComponentEdges(component: Component): Array<{
     }
   } else if (component.type === 'paver' || component.type === 'paving_area') {
     // Axis-aligned rectangle components (transformed by rotation around position)
-    const w = component.dimensions.width;
-    const h = component.dimensions.height;
+    // Dimensions are in mm, need to convert to pixels for world coordinates
+    const w = component.dimensions.width * SCALE;
+    const h = component.dimensions.height * SCALE;
     const cos = Math.cos((component.rotation * Math.PI) / 180);
     const sin = Math.sin((component.rotation * Math.PI) / 180);
 
