@@ -9,7 +9,7 @@ import { generateCopingPaverData } from '@/utils/copingPaverData';
 import { copingSelectionController } from '@/interaction/CopingPaverSelection';
 import { CopingPaverComponent } from './CopingPaverComponent';
 import type { CopingPaverData } from '@/types/copingSelection';
-import { getNearestBoundaryDistanceFromEdgeOuter } from '@/utils/copingInteractiveExtend';
+import { getNearestBoundaryDistanceFromEdgeOuter, validatePreviewPaversWithBoundaries } from '@/utils/copingInteractiveExtend';
 import type { CopingEdgesState, CopingEdgeId } from '@/types/copingInteractive';
 
 interface PoolComponentProps {
@@ -148,6 +148,25 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     };
   };
 
+  // Helper to validate preview pavers against boundaries
+  const validatePreviewPavers = (
+    pavers: CopingPaverData[],
+    edge: CopingEdgeId
+  ) => {
+    if (!poolData || !copingConfig) {
+      return { validPavers: pavers, maxValidDistance: 0, hitBoundary: false };
+    }
+    
+    return validatePreviewPaversWithBoundaries(
+      pavers,
+      component,
+      poolData,
+      copingConfig,
+      allComponents,
+      edge
+    );
+  };
+
   const handleDragEnd = (e: any) => {
     const newPos = { x: e.target.x(), y: e.target.y() };
     
@@ -249,21 +268,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       }
     };
 
-    // Get boundary distance for this edge
-    const boundaryHit = getNearestBoundaryDistanceFromEdgeOuter(
-      edge,
-      poolData,
-      component,
-      normalizedConfig,
-      edgesStateAtStart,
-      allComponents
-    );
-
-    // Clamp drag distance by boundary
-    const clampedDistance = boundaryHit?.distance 
-      ? Math.min(dragDistance, boundaryHit.distance)
-      : dragDistance;
-
     // Build temporary override map with the drag direction for ALL selected pavers
     const tempOverrides = new Map(cornerOverrides);
     if (direction) {
@@ -272,22 +276,31 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       });
     }
     
-    // Calculate extension for ALL selected pavers using CLAMPED distance
+    // Calculate extension for ALL selected pavers - generate full preview first
     const { newPavers } = copingSelectionController.calculateExtensionRow(
       selectedPavers,
-      clampedDistance,
+      dragDistance,
       normalizedConfig,
       poolData,
       tempOverrides
     );
     
-    console.log('🔍 [DRAG-MOVE] Boundary-aware extension', { 
+    // Now validate the preview pavers against boundaries using polygon detection
+    // This is the "generate then validate" approach - much more reliable than ray-casting
+    const validation = validatePreviewPavers(newPavers, edge);
+    
+    // Use validated pavers and max valid distance
+    const validatedPavers = validation.validPavers;
+    const clampedDistance = validation.hitBoundary ? validation.maxValidDistance : dragDistance;
+    
+    console.log('🔍 [DRAG-MOVE] Polygon-based boundary detection', { 
       edge,
       rawDragDistance: dragDistance,
-      boundaryDistance: boundaryHit?.distance,
       clampedDistance,
-      boundaryId: boundaryHit?.componentId,
-      newPaversCount: newPavers.length,
+      hitBoundary: validation.hitBoundary,
+      boundaryId: validation.boundaryId,
+      totalPaversGenerated: newPavers.length,
+      validPaversCount: validatedPavers.length,
     });
     
     setCopingSelection(prev => ({
@@ -295,9 +308,9 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       dragState: {
         ...prev.dragState!,
         currentDragDistance: clampedDistance,
-        previewPavers: newPavers,
-        boundaryDistance: boundaryHit?.distance,
-        boundaryId: boundaryHit?.componentId,
+        previewPavers: validatedPavers,
+        boundaryDistance: validation.hitBoundary ? validation.maxValidDistance : undefined,
+        boundaryId: validation.boundaryId,
       }
     }));
   };

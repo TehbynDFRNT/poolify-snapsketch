@@ -9,6 +9,7 @@ import type {
   PaverRect,
   DragPreview,
 } from '../types/copingInteractive';
+import { validateExtensionPavers } from './copingBoundaryValidation';
 
 export const GROUT_MM = 5;
 export const MIN_BOUNDARY_CUT_ROW_MM = 100;
@@ -380,6 +381,36 @@ export function buildRowPavers(
   console.log('🧱 [BUILD-ROW] Complete', { edge, rowIndex, totalPavers: p.length });
 
   return p;
+}
+
+/**
+ * Validate preview pavers against boundaries using polygon-based detection
+ * This replaces unreliable ray-casting with proven point-in-polygon checks
+ */
+export function validatePreviewPaversWithBoundaries<T extends { x: number; y: number; width: number; height: number; rowIndex: number }>(
+  previewPavers: T[],
+  poolComponent: Component,
+  poolData: Pool,
+  config: CopingConfig,
+  allComponents: Component[],
+  edge: CopingEdgeId
+): {
+  validPavers: T[];
+  maxValidDistance: number;
+  hitBoundary: boolean;
+  boundaryId?: string;
+} {
+  const { rowDepth } = getAlongAndDepthForEdge(edge, config);
+  
+  return validateExtensionPavers(
+    previewPavers,
+    poolComponent.position,
+    poolComponent.rotation,
+    allComponents,
+    poolComponent.id,
+    rowDepth,
+    GROUT_MM
+  );
 }
 
 export function buildExtensionRowsForEdge(
