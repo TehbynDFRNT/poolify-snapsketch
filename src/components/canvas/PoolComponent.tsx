@@ -9,8 +9,10 @@ import { generateCopingPaverData } from '@/utils/copingPaverData';
 import { copingSelectionController } from '@/interaction/CopingPaverSelection';
 import { CopingPaverComponent } from './CopingPaverComponent';
 import type { CopingPaverData } from '@/types/copingSelection';
-import { getNearestBoundaryDistanceFromEdgeOuter, validatePreviewPaversWithBoundaries } from '@/utils/copingInteractiveExtend';
+import { getNearestBoundaryDistanceFromEdgeOuter, validatePreviewPaversWithBoundaries, getAlongAndDepthForEdge } from '@/utils/copingInteractiveExtend';
 import type { CopingEdgesState, CopingEdgeId } from '@/types/copingInteractive';
+
+const GROUT_MM = 3;
 
 interface PoolComponentProps {
   component: Component;
@@ -167,6 +169,65 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     );
   };
 
+  // Helper to generate cut row pavers after boundary detection
+  const generateCutRowPavers = (
+    selectedPavers: CopingPaverData[],
+    fullRowsAdded: number,
+    cutRowDepth: number,
+    rowDepth: number,
+    cornerOverrides: Map<string, CopingEdgeId>
+  ): CopingPaverData[] => {
+    const cutPavers: CopingPaverData[] = [];
+    const rowSpacing = rowDepth + GROUT_MM;
+    
+    selectedPavers.forEach(paver => {
+      const direction = copingSelectionController.getExtensionDirection(paver, cornerOverrides);
+      
+      let newX = paver.x;
+      let newY = paver.y;
+      let width = paver.width;
+      let height = paver.height;
+      
+      // Position after full rows + grout
+      const offsetDistance = (fullRowsAdded + 1) * rowSpacing;
+      
+      switch (direction) {
+        case 'deepEnd':
+          newX = paver.x + (fullRowsAdded * rowSpacing) + GROUT_MM;
+          width = cutRowDepth;
+          break;
+        case 'shallowEnd':
+          newX = paver.x - offsetDistance + (rowSpacing - cutRowDepth);
+          width = cutRowDepth;
+          break;
+        case 'rightSide':
+          newY = paver.y + (fullRowsAdded * rowSpacing) + GROUT_MM;
+          height = cutRowDepth;
+          break;
+        case 'leftSide':
+          newY = paver.y - offsetDistance + (rowSpacing - cutRowDepth);
+          height = cutRowDepth;
+          break;
+      }
+      
+      cutPavers.push({
+        id: `cut-${direction}-c${paver.columnIndex}-r${paver.rowIndex + fullRowsAdded + 1}`,
+        x: newX,
+        y: newY,
+        width,
+        height,
+        isPartial: true,
+        edge: paver.edge,
+        rowIndex: paver.rowIndex + fullRowsAdded + 1,
+        columnIndex: paver.columnIndex,
+        isCorner: false,
+        extensionDirection: direction,
+      });
+    });
+    
+    return cutPavers;
+  };
+
   const handleDragEnd = (e: any) => {
     const newPos = { x: e.target.x(), y: e.target.y() };
     
@@ -293,6 +354,39 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     const validatedPavers = validation.validPavers;
     const clampedDistance = validation.hitBoundary ? validation.maxValidDistance : dragDistance;
     
+    // If we hit boundary, check if we should add a cut row
+    let finalPreviewPavers = validatedPavers;
+    if (validation.hitBoundary && poolData && copingConfig) {
+      const { rowDepth } = getAlongAndDepthForEdge(edge, normalizedConfig);
+      const rowUnit = rowDepth + GROUT_MM;
+      
+      // Calculate how many full rows fit in maxValidDistance
+      const fullRows = Math.floor(validation.maxValidDistance / rowUnit);
+      const remainingDistance = validation.maxValidDistance - (fullRows * rowUnit);
+      
+      // If remaining distance is enough for a cut row, generate it
+      const MIN_CUT_ROW = 50; // mm
+      if (remainingDistance >= MIN_CUT_ROW) {
+        const cutRowDepth = remainingDistance - GROUT_MM;
+        if (cutRowDepth >= MIN_CUT_ROW) {
+          // Generate cut row pavers
+          const cutRowPavers = generateCutRowPavers(
+            selectedPavers,
+            fullRows,
+            cutRowDepth,
+            rowDepth,
+            tempOverrides
+          );
+          
+          // Validate cut row pavers too
+          const cutValidation = validatePreviewPavers(cutRowPavers, edge);
+          if (cutValidation.validPavers.length > 0) {
+            finalPreviewPavers = [...validatedPavers, ...cutValidation.validPavers];
+          }
+        }
+      }
+    }
+    
     console.log('🔍 [DRAG-MOVE] Polygon-based boundary detection', { 
       edge,
       rawDragDistance: dragDistance,
@@ -301,6 +395,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       boundaryId: validation.boundaryId,
       totalPaversGenerated: newPavers.length,
       validPaversCount: validatedPavers.length,
+      finalPreviewCount: finalPreviewPavers.length,
     });
     
     setCopingSelection(prev => ({
@@ -308,7 +403,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       dragState: {
         ...prev.dragState!,
         currentDragDistance: clampedDistance,
-        previewPavers: validatedPavers,
+        previewPavers: finalPreviewPavers,
         boundaryDistance: validation.hitBoundary ? validation.maxValidDistance : undefined,
         boundaryId: validation.boundaryId,
       }
