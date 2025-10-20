@@ -20,6 +20,10 @@ interface PoolComponentProps {
 export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: PoolComponentProps) => {
   const groupRef = useRef<any>(null);
   const { components: allComponents, updateComponent } = useDesignStore();
+  // Throttle drag-move to ~60fps
+  const moveRafRef = useRef<number | null>(null);
+  const pendingMoveRef = useRef<{ paverId: string; dragDistance: number; direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd' } | null>(null);
+
 
   // Prefer embedded pool geometry to avoid library mismatches
   const poolData = (component.properties as any).pool ||
@@ -41,11 +45,12 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   // Selection state for paver-based extension
   const [copingSelection, setCopingSelection] = useState<{
     selectedIds: Set<string>;
-    dragState: { 
-      paverId: string;
-      currentDragDistance: number;
-      previewPavers: CopingPaverData[];
-    } | null;
+      dragState: { 
+        paverId: string;
+        currentDragDistance: number;
+        previewPavers: CopingPaverData[];
+        boundaryHit?: any;
+      } | null;
   }>({
     selectedIds: new Set(),
     dragState: null,
@@ -141,54 +146,54 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   const handlePaverHandleDragStart = (paverId: string, direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => {
     setCopingSelection(prev => ({
       ...prev,
-      dragState: { paverId, currentDragDistance: 0, previewPavers: [] }
+      dragState: { paverId, currentDragDistance: 0, previewPavers: [], boundaryHit: null }
     }));
   };
 
   const handlePaverHandleDragMove = (paverId: string, dragDistance: number, direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => {
     if (!copingSelection.dragState || !copingConfig) return;
-    
-    console.log('PoolComponent handlePaverHandleDragMove:', { paverId, dragDistance, direction });
-    
-    // Get the paver being dragged
-    const paver = allPavers.find(p => p.id === paverId);
-    if (!paver) {
-      console.log('Paver not found:', paverId);
-      return;
-    }
-    
-    // Build temporary override map with the drag direction
-    const tempOverrides = new Map(cornerOverrides);
-    if (direction) {
-      tempOverrides.set(paverId, direction);
-    }
-    
-    // Calculate extension for this single paver with boundary detection
-    const { newPavers, boundaryHit } = copingSelectionController.calculateExtensionRow(
-      [paver],
-      dragDistance,
-      copingConfig,
-      poolData,
-      tempOverrides,
-      component,        // Pass pool component for boundary detection
-      allComponents     // Pass all components for boundary detection
-    );
-    
-    console.log('Extension calculated:', { 
-      newPaversCount: newPavers.length, 
-      dragDistance,
-      hitBoundary: !!boundaryHit,
-      boundaryDistance: boundaryHit?.distance 
-    });
-    
-    setCopingSelection(prev => ({
-      ...prev,
-      dragState: {
-        ...prev.dragState!,
-        currentDragDistance: dragDistance,
-        previewPavers: newPavers,
+
+    // Throttle using requestAnimationFrame
+    pendingMoveRef.current = { paverId, dragDistance, direction };
+    if (moveRafRef.current != null) return;
+
+    moveRafRef.current = requestAnimationFrame(() => {
+      moveRafRef.current = null;
+      const args = pendingMoveRef.current;
+      if (!args) return;
+      const { paverId: id, dragDistance: dist, direction: dir } = args;
+
+      // Get the paver being dragged
+      const paver = allPavers.find(p => p.id === id);
+      if (!paver) return;
+
+      // Build temporary override map with the drag direction
+      const tempOverrides = new Map(cornerOverrides);
+      if (dir) {
+        tempOverrides.set(id, dir);
       }
-    }));
+
+      // Calculate extension for this single paver with boundary detection
+      const { newPavers, boundaryHit } = copingSelectionController.calculateExtensionRow(
+        [paver],
+        dist,
+        copingConfig,
+        poolData,
+        tempOverrides,
+        component,        // Pass pool component for boundary detection
+        allComponents     // Pass all components for boundary detection
+      );
+
+      setCopingSelection(prev => ({
+        ...prev,
+        dragState: {
+          ...prev.dragState!,
+          currentDragDistance: dist,
+          previewPavers: newPavers,
+          boundaryHit,
+        }
+      }));
+    });
   };
 
   const handlePaverHandleDragEnd = (paverId: string) => {
@@ -428,6 +433,30 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
             isPreview
           />
         ))}
+
+        {/* Boundary hit indicator (dashed red) */}
+        {(() => {
+          const bh = copingSelection.dragState?.boundaryHit as any;
+          if (!bh?.segment) return null;
+          const rad = (-component.rotation * Math.PI) / 180;
+          const cos = Math.cos(rad);
+          const sin = Math.sin(rad);
+          const toLocal = (pt: any) => ({
+            x: (pt.x - component.position.x) * cos - (pt.y - component.position.y) * sin,
+            y: (pt.x - component.position.x) * sin + (pt.y - component.position.y) * cos,
+          });
+          const a = toLocal(bh.segment.a);
+          const b = toLocal(bh.segment.b);
+          return (
+            <Line
+              points={[a.x, a.y, b.x, b.y]}
+              stroke="#EF4444"
+              strokeWidth={3}
+              dash={[10, 5]}
+              listening={false}
+            />
+          );
+        })()}
 
         {/* Pool outline - filled */}
         <Line

@@ -166,10 +166,19 @@ export class CopingPaverSelectionController {
       }
     }
     
-    // Calculate how many full rows can fit (allow negative for inward extension)
-    const fullRowsToAdd = boundaryHit 
-      ? Math.floor(effectiveDragDistance / (rowDepth + 5)) // Include grout spacing
-      : Math.floor(dragDistance / rowDepth);
+    // Calculate rows using consistent logic (mm units)
+    const reachedBoundary = !!boundaryHit;
+    const rowsCalc = rowsFromDragDistance(
+      reachedBoundary ? effectiveDragDistance : dragDistance,
+      reachedBoundary,
+      rowDepth,
+      200
+    );
+    const fullRowsToAdd = rowsCalc.fullRowsToAdd;
+    if (reachedBoundary) {
+      hasCutRow = rowsCalc.hasCutRow;
+      cutRowDepth = rowsCalc.cutRowDepth;
+    }
     
     console.debug('Extension calculation:', {
       edge,
@@ -246,7 +255,7 @@ export class CopingPaverSelectionController {
         
         let newX = paver.x;
         let newY = paver.y;
-        const offset = (fullRowsToAdd + 1) * (rowDepth + GROUT_MM);
+        const offset = fullRowsToAdd * (rowDepth + GROUT_MM) + GROUT_MM;
         
         switch (direction) {
           case 'leftSide':
