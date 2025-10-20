@@ -301,7 +301,9 @@ export function buildRowPavers(
   plan: AxisPlan,
   rowIndex: number,
   rowDepth: number,
-  isBoundaryCutRow: boolean
+  isBoundaryCutRow: boolean,
+  poolHalfLength: number,
+  poolHalfWidth: number
 ): PaverRect[] {
   const p: PaverRect[] = [];
   const along = plan.along; // tile.x for sides, tile.y for ends
@@ -311,14 +313,14 @@ export function buildRowPavers(
   // Outward offset from waterline to row START (inner joint face)
   const startOffset = GROUT_MM + rowIndex * (rowDepth + GROUT_MM);
 
-  // Outward direction per edge (offset axis + sign)
+  // Outward direction per edge, starting from pool waterline position
   const offsetX =
-    edge === 'shallowEnd' ? -(startOffset + rowDepth) :
-    edge === 'deepEnd'    ?  (startOffset)           : 0;
+    edge === 'shallowEnd' ? -poolHalfLength - startOffset - rowDepth :
+    edge === 'deepEnd'    ?  poolHalfLength + startOffset           : 0;
 
   const offsetY =
-    edge === 'leftSide'   ? -(startOffset + rowDepth) :
-    edge === 'rightSide'  ?  (startOffset)           : 0;
+    edge === 'leftSide'   ? -poolHalfWidth - startOffset - rowDepth :
+    edge === 'rightSide'  ?  poolHalfWidth + startOffset           : 0;
 
   const push = (x: number, y: number, w: number, h: number, isPartial: boolean) =>
     p.push({ 
@@ -424,36 +426,25 @@ export function buildExtensionRowsForEdge(
   cutRowDepth?: number
 ): PaverRect[] {
   const plan = getAxisPlanForEdge(edge, pool, config, edgesState);
-  const { along, rowDepth } = getAlongAndDepthForEdge(edge, config);
-
+  const { rowDepth } = getAlongAndDepthForEdge(edge, config);
   const startRow = edgesState[edge].currentRows;
   const p: PaverRect[] = [];
 
-  console.table({
-    '🧱 Edge': edge,
-    'Along': along,
-    'Row Depth': rowDepth,
-    'Edge Length': plan.edgeLength,
-    'Full Rows': fullRowsToAdd,
-    'Has Cut Row': hasCutRow,
-    'Cut Row Depth': cutRowDepth ?? 0,
-    'Current Rows': startRow,
-    'Total Pavers Before': p.length
-  });
+  // Pool half-dimensions for waterline positioning
+  const poolHalfLength = pool.length / 2;
+  const poolHalfWidth = pool.width / 2;
 
   // Full rows
   for (let i = 0; i < fullRowsToAdd; i++) {
     const rowIdx = startRow + i;
-    p.push(...buildRowPavers(edge, plan, rowIdx, rowDepth, false));
+    p.push(...buildRowPavers(edge, plan, rowIdx, rowDepth, false, poolHalfLength, poolHalfWidth));
   }
 
   // Boundary cut row
   if (hasCutRow && cutRowDepth && cutRowDepth > 0) {
     const rowIdx = startRow + fullRowsToAdd;
-    p.push(...buildRowPavers(edge, plan, rowIdx, cutRowDepth, true));
+    p.push(...buildRowPavers(edge, plan, rowIdx, cutRowDepth, true, poolHalfLength, poolHalfWidth));
   }
-
-  console.log('🧱 [BUILD-EXT] Complete', { edge, totalPavers: p.length });
 
   return p;
 }
