@@ -9,10 +9,8 @@ import { generateCopingPaverData } from '@/utils/copingPaverData';
 import { copingSelectionController } from '@/interaction/CopingPaverSelection';
 import { CopingPaverComponent } from './CopingPaverComponent';
 import type { CopingPaverData } from '@/types/copingSelection';
-import { getNearestBoundaryDistanceFromEdgeOuter, validatePreviewPaversWithBoundaries, getAlongAndDepthForEdge } from '@/utils/copingInteractiveExtend';
+import { getNearestBoundaryDistanceFromEdgeOuter, validatePreviewPaversWithBoundaries, getAlongAndDepthForEdge, rowsFromDragDistance, GROUT_MM } from '@/utils/copingInteractiveExtend';
 import type { CopingEdgesState, CopingEdgeId } from '@/types/copingInteractive';
-
-const GROUT_MM = 3;
 
 interface PoolComponentProps {
   component: Component;
@@ -337,75 +335,95 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       });
     }
     
-    // Calculate extension for ALL selected pavers - generate full preview first
-    const { newPavers } = copingSelectionController.calculateExtensionRow(
+    // 1) Get exact boundary distance using ray-casting (in mm)
+    const boundaryHit = getNearestBoundaryDistanceFromEdgeOuter(
+      edge,
+      poolData,
+      component,
+      normalizedConfig,
+      edgesStateAtStart,
+      allComponents
+    );
+    
+    // 2) Clamp drag distance to boundary
+    const maxDistance = boundaryHit 
+      ? Math.max(0, Math.min(dragDistance, boundaryHit.distance - 2)) // -2mm safety margin
+      : dragDistance;
+    
+    console.log('🎯 [RAY-BOUNDARY]', {
+      edge,
+      rawDragDistance: dragDistance,
+      boundaryDistance: boundaryHit?.distance,
+      maxDistance,
+      boundaryId: boundaryHit?.componentId,
+    });
+    
+    // 3) Calculate full rows and cut row depth
+    const { rowDepth } = getAlongAndDepthForEdge(edge, normalizedConfig);
+    const { fullRowsToAdd, hasCutRow, cutRowDepth } = rowsFromDragDistance(
+      maxDistance,
+      !!boundaryHit,
+      rowDepth
+    );
+    
+    console.log('🧮 [ROW-CALC]', {
+      maxDistance,
+      rowDepth,
+      fullRowsToAdd,
+      hasCutRow,
+      cutRowDepth,
+    });
+    
+    // 4) Generate full rows using calculateExtensionRow
+    const { newPavers: fullRowPavers } = copingSelectionController.calculateExtensionRow(
       selectedPavers,
-      dragDistance,
+      fullRowsToAdd * (rowDepth + GROUT_MM), // Pass distance for exact full rows
       normalizedConfig,
       poolData,
       tempOverrides
     );
     
-    // Now validate the preview pavers against boundaries using polygon detection
-    // This is the "generate then validate" approach - much more reliable than ray-casting
-    const validation = validatePreviewPavers(newPavers, edge);
+    // 5) Validate full rows with polygon detection
+    const fullRowValidation = validatePreviewPavers(fullRowPavers, edge);
+    let finalPreviewPavers = fullRowValidation.validPavers;
     
-    // Use validated pavers and max valid distance
-    const validatedPavers = validation.validPavers;
-    const clampedDistance = validation.hitBoundary ? validation.maxValidDistance : dragDistance;
-    
-    // If we hit boundary, check if we should add a cut row
-    let finalPreviewPavers = validatedPavers;
-    if (validation.hitBoundary && poolData && copingConfig) {
-      const { rowDepth } = getAlongAndDepthForEdge(edge, normalizedConfig);
-      const rowUnit = rowDepth + GROUT_MM;
+    // 6) Generate cut row if needed
+    if (hasCutRow && cutRowDepth && cutRowDepth > 0) {
+      const cutRowPavers = generateCutRowPavers(
+        selectedPavers,
+        fullRowsToAdd,
+        cutRowDepth,
+        rowDepth,
+        tempOverrides
+      );
       
-      // Calculate how many full rows fit in maxValidDistance
-      const fullRows = Math.floor(validation.maxValidDistance / rowUnit);
-      const remainingDistance = validation.maxValidDistance - (fullRows * rowUnit);
-      
-      // If remaining distance is enough for a cut row, generate it
-      const MIN_CUT_ROW = 50; // mm
-      if (remainingDistance >= MIN_CUT_ROW) {
-        const cutRowDepth = remainingDistance - GROUT_MM;
-        if (cutRowDepth >= MIN_CUT_ROW) {
-          // Generate cut row pavers
-          const cutRowPavers = generateCutRowPavers(
-            selectedPavers,
-            fullRows,
-            cutRowDepth,
-            rowDepth,
-            tempOverrides
-          );
-          
-          // Validate cut row pavers too
-          const cutValidation = validatePreviewPavers(cutRowPavers, edge);
-          if (cutValidation.validPavers.length > 0) {
-            finalPreviewPavers = [...validatedPavers, ...cutValidation.validPavers];
-          }
-        }
+      // Validate cut row pavers too
+      const cutValidation = validatePreviewPavers(cutRowPavers, edge);
+      if (cutValidation.validPavers.length > 0) {
+        finalPreviewPavers = [...finalPreviewPavers, ...cutValidation.validPavers];
       }
+      
+      console.log('✂️ [CUT-ROW]', {
+        cutRowDepth,
+        cutPaversGenerated: cutRowPavers.length,
+        cutPaversValid: cutValidation.validPavers.length,
+      });
     }
     
-    console.log('🔍 [DRAG-MOVE] Polygon-based boundary detection', { 
+    console.log('🔍 [DRAG-MOVE] Complete', { 
       edge,
-      rawDragDistance: dragDistance,
-      clampedDistance,
-      hitBoundary: validation.hitBoundary,
-      boundaryId: validation.boundaryId,
-      totalPaversGenerated: newPavers.length,
-      validPaversCount: validatedPavers.length,
       finalPreviewCount: finalPreviewPavers.length,
+      hitBoundary: !!boundaryHit,
     });
     
     setCopingSelection(prev => ({
       ...prev,
       dragState: {
         ...prev.dragState!,
-        currentDragDistance: clampedDistance,
+        currentDragDistance: maxDistance,
         previewPavers: finalPreviewPavers,
-        boundaryDistance: validation.hitBoundary ? validation.maxValidDistance : undefined,
-        boundaryId: validation.boundaryId,
+        boundaryDistance: boundaryHit?.distance,
+        boundaryId: boundaryHit?.componentId,
       }
     }));
   };
@@ -416,7 +434,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     const { previewPavers, edge, boundaryDistance, boundaryId, currentDragDistance } = copingSelection.dragState;
     
     const MIN_BOUNDARY_CUT_ROW_MM = 100;
-    const GROUT_MM = copingConfig.grout || 10;
     
     // Determine row depth based on edge
     const rowDepth = (edge === 'shallowEnd' || edge === 'deepEnd')

@@ -13,6 +13,7 @@ import { validateExtensionPavers } from './copingBoundaryValidation';
 
 export const GROUT_MM = 5;
 export const MIN_BOUNDARY_CUT_ROW_MM = 100;
+const SCALE = 0.1; // mm to pixel conversion (1px = 10mm)
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Helpers: which axis does an edge use? what projects outward? what's along?
@@ -110,8 +111,11 @@ export function getNearestBoundaryDistanceFromEdgeOuter(
   const { rowDepth } = getAlongAndDepthForEdge(edge, config);
   const currentRows = edgesState[edge].currentRows;
   
-  // Calculate current outer edge position
-  const outerOffset = rowStartOffset(currentRows, rowDepth);
+  // Calculate current outer edge position in mm
+  const outerOffsetMm = rowStartOffset(currentRows, rowDepth);
+  
+  // Convert mm to pixels for world coordinate calculations
+  const outerOffsetPx = outerOffsetMm * SCALE;
   
   // Pool center in world coordinates
   const poolX = poolComponent.position.x;
@@ -128,7 +132,7 @@ export function getNearestBoundaryDistanceFromEdgeOuter(
   if (edge === 'leftSide') {
     // Left side: offset in -Y direction (local), outward is also -Y
     const localX = 0;
-    const localY = -outerOffset;
+    const localY = -outerOffsetPx;
     rayOrigin = {
       x: poolX + localX * cos - localY * sin,
       y: poolY + localX * sin + localY * cos
@@ -140,7 +144,7 @@ export function getNearestBoundaryDistanceFromEdgeOuter(
   } else if (edge === 'rightSide') {
     // Right side: offset in +Y direction (local), outward is +Y
     const localX = 0;
-    const localY = outerOffset;
+    const localY = outerOffsetPx;
     rayOrigin = {
       x: poolX + localX * cos - localY * sin,
       y: poolY + localX * sin + localY * cos
@@ -151,7 +155,7 @@ export function getNearestBoundaryDistanceFromEdgeOuter(
     };
   } else if (edge === 'shallowEnd') {
     // Shallow end: offset in -X direction (local), outward is -X
-    const localX = -outerOffset;
+    const localX = -outerOffsetPx;
     const localY = 0;
     rayOrigin = {
       x: poolX + localX * cos - localY * sin,
@@ -163,7 +167,7 @@ export function getNearestBoundaryDistanceFromEdgeOuter(
     };
   } else {
     // Deep end: offset in +X direction (local), outward is +X
-    const localX = outerOffset;
+    const localX = outerOffsetPx;
     const localY = 0;
     rayOrigin = {
       x: poolX + localX * cos - localY * sin,
@@ -185,9 +189,12 @@ export function getNearestBoundaryDistanceFromEdgeOuter(
   
   if (!intersection) return null;
   
+  // Convert distance from pixels back to mm
+  const distanceMm = intersection.distance / SCALE;
+  
   return {
     componentId: intersection.componentId,
-    distance: intersection.distance,
+    distance: distanceMm,
     intersection: intersection.intersectionPoint,
     segment: {
       a: intersection.intersectionSegment.start,

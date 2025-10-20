@@ -79,13 +79,21 @@ function getComponentEdges(component: Component): Array<{
       end: { x: endX, y: endY }
     });
   } else if (component.type === 'boundary' || component.type === 'house') {
-    // Polygon components
+    // Polygon components - transform local points to world coordinates
     const points = component.properties.points || [];
-    for (let i = 0; i < points.length; i++) {
-      const nextIndex = (i + 1) % points.length;
+    const cos = Math.cos((component.rotation * Math.PI) / 180);
+    const sin = Math.sin((component.rotation * Math.PI) / 180);
+    
+    const transformedPoints = points.map((p: any) => ({
+      x: component.position.x + p.x * cos - p.y * sin,
+      y: component.position.y + p.x * sin + p.y * cos,
+    }));
+    
+    for (let i = 0; i < transformedPoints.length; i++) {
+      const nextIndex = (i + 1) % transformedPoints.length;
       edges.push({
-        start: points[i],
-        end: points[nextIndex]
+        start: transformedPoints[i],
+        end: transformedPoints[nextIndex]
       });
     }
   }
