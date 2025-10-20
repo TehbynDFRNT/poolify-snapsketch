@@ -90,7 +90,6 @@ export interface ComponentProperties {
   showCoping?: boolean;
   copingConfig?: any;
   copingCalculation?: CopingCalculation;
-  copingEdgesState?: any; // CopingEdgesState from copingInteractive types
   copingSelection?: {
     selectedPaverIds: string[];
     extensionPavers: Array<{

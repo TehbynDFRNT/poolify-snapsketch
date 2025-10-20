@@ -2,7 +2,7 @@ import { useRef, useState, useMemo, useEffect } from 'react';
 import { Group, Line, Text, Circle, Rect } from 'react-konva';
 import { Component } from '@/types';
 import { POOL_LIBRARY } from '@/constants/pools';
-import { calculatePoolCoping, type CopingConfig } from '@/utils/copingCalculation';
+import { calculatePoolCoping } from '@/utils/copingCalculation';
 import { useDesignStore } from '@/store/designStore';
 import { snapPoolToPaverGrid } from '@/utils/snap';
 import { generateCopingPaverData } from '@/utils/copingPaverData';
@@ -42,20 +42,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   // Calculate coping if enabled
   const showCoping = component.properties.showCoping ?? false;
   const copingConfig = component.properties.copingConfig;
-  const normalizedCopingConfig = useMemo((): CopingConfig | undefined => {
-    const cfg: any = copingConfig;
-    if (!cfg) return undefined;
-    const tile = cfg.tile || {};
-    if ('along' in tile || 'inward' in tile) {
-      return {
-        id: cfg.id,
-        name: cfg.name,
-        tile: { x: tile.along ?? 400, y: tile.inward ?? 400 },
-        rows: cfg.rows,
-      } as CopingConfig;
-    }
-    return cfg as CopingConfig;
-  }, [copingConfig]);
   const copingCalc = showCoping && poolData 
     ? calculatePoolCoping(poolData, copingConfig)
     : null;
@@ -75,9 +61,9 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
 
   // Initialize or retrieve edge states from component properties
   const getEdgesState = (): CopingEdgesState => {
-    const stored = component.properties.copingEdgesState;
+    const stored = (component.properties as any).copingEdgesState;
     if (stored) return stored as CopingEdgesState;
-    if (normalizedCopingConfig) return initialCopingEdgesState(normalizedCopingConfig);
+    if (copingConfig) return initialCopingEdgesState(copingConfig);
     return {
       leftSide: { currentRows: 1 },
       rightSide: { currentRows: 1 },
@@ -192,7 +178,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
 
   // Handle drag handlers for individual paver handles
   const handlePaverHandleDragStart = (paverId: string, direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => {
-    if (!direction || !normalizedCopingConfig || !poolData) return;
+    if (!direction || !copingConfig || !poolData) return;
     
     const edgesState = getEdgesState();
     const session = copingExtendDragStart(direction, edgesState);
@@ -215,7 +201,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   };
 
   const handlePaverHandleDragMove = (paverId: string, dragDistance: number, direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => {
-    if (!copingSelection.dragState || !normalizedCopingConfig || !poolData) return;
+    if (!copingSelection.dragState || !copingConfig || !poolData) return;
     
     const { session } = copingSelection.dragState;
     const edgesState = getEdgesState();
@@ -233,7 +219,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       dragDistance,
       pool,
       component,
-      normalizedCopingConfig,
+      copingConfig,
       edgesState,
       allComponents
     );
@@ -254,15 +240,12 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     const previewPavers: PaverRect[] = [];
     
     // Add full rows
-    const isLengthAxis = preview.edge === 'leftSide' || preview.edge === 'rightSide';
-    const along = isLengthAxis ? normalizedCopingConfig!.tile.x : normalizedCopingConfig!.tile.y;
-    const rowDepth = isLengthAxis ? normalizedCopingConfig!.tile.y : normalizedCopingConfig!.tile.x;
     for (let i = 0; i < preview.fullRowsToAdd; i++) {
       previewPavers.push({
         x: 0, // Will be calculated properly in final implementation
         y: 0,
-        width: along,
-        height: rowDepth,
+        width: copingConfig.tileLength,
+        height: copingConfig.tileWidth,
         isPartial: false,
         meta: {
           edge: preview.edge,
@@ -276,7 +259,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       previewPavers.push({
         x: 0,
         y: 0,
-        width: (preview.edge === 'leftSide' || preview.edge === 'rightSide') ? normalizedCopingConfig.tile.x : normalizedCopingConfig.tile.y,
+        width: copingConfig.tileLength,
         height: preview.cutRowDepth,
         isPartial: true,
         meta: {
@@ -298,7 +281,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   };
 
   const handlePaverHandleDragEnd = (paverId: string) => {
-    if (!copingSelection.dragState || !normalizedCopingConfig || !poolData) return;
+    if (!copingSelection.dragState || !copingConfig || !poolData) return;
     
     const { session, preview } = copingSelection.dragState;
     const edgesState = getEdgesState();
@@ -314,7 +297,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     const result = copingExtendDragEnd(
       session,
       pool,
-      normalizedCopingConfig,
+      copingConfig,
       edgesState
     );
     
@@ -346,7 +329,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     updateComponent(component.id, {
       properties: {
         ...component.properties,
-        copingEdgesState: result.newEdgesState,
+        copingEdgesState: result.newEdgesState as any,
         copingSelection: {
           ...component.properties.copingSelection,
           selectedPaverIds: [],
