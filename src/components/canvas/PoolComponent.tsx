@@ -163,16 +163,23 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       tempOverrides.set(paverId, direction);
     }
     
-    // Calculate extension for this single paver
-    const { newPavers } = copingSelectionController.calculateExtensionRow(
+    // Calculate extension for this single paver with boundary detection
+    const { newPavers, boundaryHit } = copingSelectionController.calculateExtensionRow(
       [paver],
       dragDistance,
       copingConfig,
       poolData,
-      tempOverrides
+      tempOverrides,
+      component,        // Pass pool component for boundary detection
+      allComponents     // Pass all components for boundary detection
     );
     
-    console.log('Extension calculated:', { newPaversCount: newPavers.length, dragDistance });
+    console.log('Extension calculated:', { 
+      newPaversCount: newPavers.length, 
+      dragDistance,
+      hitBoundary: !!boundaryHit,
+      boundaryDistance: boundaryHit?.distance 
+    });
     
     setCopingSelection(prev => ({
       ...prev,

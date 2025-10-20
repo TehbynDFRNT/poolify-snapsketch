@@ -10,6 +10,8 @@ import type {
   DragPreview,
 } from '../types/copingInteractive';
 
+export type { CopingEdgesState };
+
 export const GROUT_MM = 5;
 export const MIN_BOUNDARY_CUT_ROW_MM = 100;
 

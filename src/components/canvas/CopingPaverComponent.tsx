@@ -102,28 +102,27 @@ export const CopingPaverComponent = ({
     });
   }
   
-  // Color logic
-  let fill = "#9CA3AF"; // gray normal
+  // Color logic - partial pavers are always yellow with dashed borders
+  let fill = paver.isPartial ? "#FCD34D" : "#9CA3AF"; // yellow for partial, gray for normal
   let stroke = "#374151";
   let strokeWidth = 2;
   let opacity = 1;
+  let dashPattern: number[] | undefined = paver.isPartial ? [5, 5] : undefined;
   
   if (isPreview) {
-    fill = "#93C5FD"; // blue preview
-    stroke = "#3B82F6";
+    fill = paver.isPartial ? "#FCD34D" : "#93C5FD"; // yellow for partial preview, blue for normal preview
+    stroke = paver.isPartial ? "#F59E0B" : "#3B82F6";
     strokeWidth = 2;
     opacity = 0.7;
+    dashPattern = [5, 5];
   } else if (isSelected) {
     fill = "#FCD34D"; // yellow selected
     stroke = "#F59E0B"; // orange border
     strokeWidth = 3;
     opacity = 1;
   } else if (isHovered) {
-    fill = "#D1D5DB"; // lighter gray on hover
+    fill = paver.isPartial ? "#FCD34D" : "#D1D5DB"; // yellow for partial, lighter gray for normal
     opacity = 0.9;
-  } else if (paver.isPartial) {
-    fill = "#FCD34D"; // yellow partial
-    opacity = 0.8;
   }
   
   return (
@@ -136,7 +135,7 @@ export const CopingPaverComponent = ({
         fill={fill}
         stroke={stroke}
         strokeWidth={strokeWidth}
-        dash={paver.isPartial || isPreview ? [5, 5] : undefined}
+        dash={dashPattern}
         opacity={opacity}
         onClick={handleClick}
         onTap={handleClick}
