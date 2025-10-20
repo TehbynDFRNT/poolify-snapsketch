@@ -3,14 +3,49 @@ import { Group, Line, Text, Circle, Rect } from 'react-konva';
 import { Component } from '@/types';
 import { POOL_LIBRARY } from '@/constants/pools';
 import { calculatePoolCoping } from '@/utils/copingCalculation';
+import type { CopingConfig } from '@/utils/copingCalculation';
 import { useDesignStore } from '@/store/designStore';
 import { snapPoolToPaverGrid } from '@/utils/snap';
 import { generateCopingPaverData } from '@/utils/copingPaverData';
 import { copingSelectionController } from '@/interaction/CopingPaverSelection';
 import { CopingPaverComponent } from './CopingPaverComponent';
 import type { CopingPaverData } from '@/types/copingSelection';
-import { getNearestBoundaryDistanceFromEdgeOuter, validatePreviewPaversWithBoundaries, getAlongAndDepthForEdge, rowsFromDragDistance, GROUT_MM } from '@/utils/copingInteractiveExtend';
-import type { CopingEdgesState, CopingEdgeId } from '@/types/copingInteractive';
+import { 
+  getNearestBoundaryDistanceFromEdgeOuter, 
+  validatePreviewPaversWithBoundaries, 
+  getAlongAndDepthForEdge, 
+  rowsFromDragDistance, 
+  buildExtensionRowsForEdge,
+  getDynamicEdgeLength,
+  GROUT_MM, 
+  MIN_BOUNDARY_CUT_ROW_MM 
+} from '@/utils/copingInteractiveExtend';
+import { planAxis } from '@/utils/copingCalculation';
+import type { CopingEdgesState, CopingEdgeId, PaverRect } from '@/types/copingInteractive';
+
+/**
+ * Normalize coping config to avoid undefined tile dimensions
+ */
+function normalizeCopingConfig(config: any): any {
+  const DEFAULT_CONFIG = {
+    id: 'default',
+    name: 'Default Config',
+    tile: { x: 600, y: 400 },
+    rows: { sides: 2, shallow: 2, deep: 2 }
+  };
+  
+  if (!config) return DEFAULT_CONFIG;
+  
+  const t: any = config.tile ?? {};
+  return {
+    ...DEFAULT_CONFIG,
+    ...config,
+    tile: {
+      x: t.x ?? t.along ?? 600,
+      y: t.y ?? t.inward ?? 400,
+    },
+  };
+}
 
 interface PoolComponentProps {
   component: Component;
@@ -33,9 +68,9 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   const scaledOutline = poolData.outline.map(p => ({ x: p.x * scale, y: p.y * scale }));
   const points = scaledOutline.flatMap(p => [p.x, p.y]);
 
-  // Calculate coping if enabled
+  // Calculate coping if enabled (use normalized config everywhere)
   const showCoping = component.properties.showCoping ?? false;
-  const copingConfig = component.properties.copingConfig;
+  const copingConfig = normalizeCopingConfig(component.properties.copingConfig);
   const copingCalc = showCoping && poolData 
     ? calculatePoolCoping(poolData, copingConfig)
     : null;
@@ -318,101 +353,102 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       return;
     }
 
-    // Normalize coping config to handle both {x,y} and {along,inward} tile formats
-    const normalizedConfig = {
-      ...copingConfig,
-      tile: {
-        x: (copingConfig.tile as any).x ?? (copingConfig.tile as any).along ?? 600,
-        y: (copingConfig.tile as any).y ?? (copingConfig.tile as any).inward ?? 400,
-      }
-    };
-
-    // Build temporary override map with the drag direction for ALL selected pavers
-    const tempOverrides = new Map(cornerOverrides);
-    if (direction) {
-      selectedPavers.forEach(p => {
-        tempOverrides.set(p.id, direction);
-      });
-    }
-    
     // 1) Get exact boundary distance using ray-casting (in mm)
     const boundaryHit = getNearestBoundaryDistanceFromEdgeOuter(
       edge,
       poolData,
       component,
-      normalizedConfig,
+      copingConfig, // Already normalized
       edgesStateAtStart,
       allComponents
     );
     
-    // 2) Clamp drag distance to boundary
-    const maxDistance = boundaryHit 
-      ? Math.max(0, Math.min(dragDistance, boundaryHit.distance - 2)) // -2mm safety margin
+    // 2) Clamp drag distance to boundary with 2mm safety margin
+    const clampedDistance = boundaryHit 
+      ? Math.max(0, Math.min(dragDistance, boundaryHit.distance - 2))
       : dragDistance;
     
     console.log('🎯 [RAY-BOUNDARY]', {
       edge,
       rawDragDistance: dragDistance,
       boundaryDistance: boundaryHit?.distance,
-      maxDistance,
+      clampedDistance,
       boundaryId: boundaryHit?.componentId,
     });
     
-    // 3) Calculate full rows and cut row depth
-    const { rowDepth } = getAlongAndDepthForEdge(edge, normalizedConfig);
+    // 3) Calculate full rows and cut row depth using continuous logic
+    const { rowDepth } = getAlongAndDepthForEdge(edge, copingConfig);
     const { fullRowsToAdd, hasCutRow, cutRowDepth } = rowsFromDragDistance(
-      maxDistance,
+      clampedDistance,
       !!boundaryHit,
-      rowDepth
+      rowDepth,
+      MIN_BOUNDARY_CUT_ROW_MM
     );
     
     console.log('🧮 [ROW-CALC]', {
-      maxDistance,
+      clampedDistance,
       rowDepth,
       fullRowsToAdd,
       hasCutRow,
       cutRowDepth,
     });
     
-    // 4) Generate full rows using calculateExtensionRow
-    const { newPavers: fullRowPavers } = copingSelectionController.calculateExtensionRow(
-      selectedPavers,
-      fullRowsToAdd * (rowDepth + GROUT_MM), // Pass distance for exact full rows
-      normalizedConfig,
+    // 4) Build ALL preview pavers using unified generator
+    const previewPaverRects: PaverRect[] = buildExtensionRowsForEdge(
+      edge,
       poolData,
-      tempOverrides
+      copingConfig,
+      edgesStateAtStart,
+      fullRowsToAdd,
+      hasCutRow,
+      cutRowDepth
     );
     
-    // 5) Validate full rows with polygon detection
-    const fullRowValidation = validatePreviewPavers(fullRowPavers, edge);
-    let finalPreviewPavers = fullRowValidation.validPavers;
+    // Convert PaverRect[] to CopingPaverData[] for preview display
+    const startRow = edgesStateAtStart[edge].currentRows;
+    const previewPavers: CopingPaverData[] = previewPaverRects.map((rect, idx) => ({
+      id: `preview-${edge}-${startRow}-${idx}`,
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+      isPartial: rect.isPartial,
+      edge: rect.meta!.edge,
+      rowIndex: rect.meta!.rowIndex,
+      columnIndex: idx,
+      isCorner: false,
+      extensionDirection: edge,
+    }));
     
-    // 6) Generate cut row if needed
-    if (hasCutRow && cutRowDepth && cutRowDepth > 0) {
-      const cutRowPavers = generateCutRowPavers(
-        selectedPavers,
-        fullRowsToAdd,
-        cutRowDepth,
-        rowDepth,
-        tempOverrides
-      );
-      
-      // Validate cut row pavers too
-      const cutValidation = validatePreviewPavers(cutRowPavers, edge);
-      if (cutValidation.validPavers.length > 0) {
-        finalPreviewPavers = [...finalPreviewPavers, ...cutValidation.validPavers];
-      }
-      
-      console.log('✂️ [CUT-ROW]', {
-        cutRowDepth,
-        cutPaversGenerated: cutRowPavers.length,
-        cutPaversValid: cutValidation.validPavers.length,
-      });
-    }
+    // 5) Validate pavers against boundaries (final guard)
+    const validation = validatePreviewPaversWithBoundaries(
+      previewPaverRects,
+      component,
+      poolData,
+      copingConfig,
+      allComponents,
+      edge
+    );
+    
+    const finalPreviewPavers = validation.validPavers.map((rect, idx) => ({
+      id: `preview-${edge}-${startRow}-${idx}`,
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+      isPartial: rect.isPartial,
+      edge: rect.meta!.edge,
+      rowIndex: rect.meta!.rowIndex,
+      columnIndex: idx,
+      isCorner: false,
+      extensionDirection: edge,
+    }));
     
     console.log('🔍 [DRAG-MOVE] Complete', { 
       edge,
-      finalPreviewCount: finalPreviewPavers.length,
+      generated: previewPaverRects.length,
+      validated: finalPreviewPavers.length,
+      truncated: validation.truncated,
       hitBoundary: !!boundaryHit,
     });
     
@@ -420,7 +456,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       ...prev,
       dragState: {
         ...prev.dragState!,
-        currentDragDistance: maxDistance,
+        currentDragDistance: clampedDistance,
         previewPavers: finalPreviewPavers,
         boundaryDistance: boundaryHit?.distance,
         boundaryId: boundaryHit?.componentId,

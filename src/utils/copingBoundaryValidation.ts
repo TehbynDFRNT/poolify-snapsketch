@@ -179,73 +179,58 @@ export function isPaverValid(
 }
 
 /**
- * Validate a list of pavers and return the maximum valid drag distance
- * This is the "generate then validate" approach
+ * Validate a list of pavers (final guard only - no quantization).
+ * 
+ * Filters out pavers whose corners violate boundaries.
+ * Does NOT alter cut-row depth or compute discrete steps.
+ * 
+ * Returns valid pavers and a flag if any were removed.
  */
 export function validateExtensionPavers<T extends { x: number; y: number; width: number; height: number; rowIndex: number }>(
   pavers: T[],
   poolPosition: { x: number; y: number },
   poolRotation: number,
   boundaryComponents: Component[],
-  poolComponentId: string,
-  rowDepthMm: number,
-  groutMm: number
+  poolComponentId: string
 ): {
   validPavers: T[];
-  maxValidDistance: number;
-  hitBoundary: boolean;
+  truncated: boolean;
   boundaryId?: string;
 } {
   if (pavers.length === 0) {
-    return { validPavers: [], maxValidDistance: 0, hitBoundary: false };
+    return { validPavers: [], truncated: false };
   }
   
-  // Sort pavers by rowIndex to validate in order
-  const sortedPavers = [...pavers].sort((a, b) => a.rowIndex - b.rowIndex);
   const validPavers: T[] = [];
-  let lastValidRowIndex = -1;
   let intersectedComponentId: string | undefined;
+  let truncated = false;
   
-  for (const paver of sortedPavers) {
+  for (const paver of pavers) {
     const corners = transformPaverToWorld(paver, poolPosition, poolRotation);
     const result = isPaverValid(corners, boundaryComponents, poolComponentId);
     
     if (result.valid) {
       validPavers.push(paver);
-      lastValidRowIndex = paver.rowIndex;
     } else {
-      // Hit a boundary - stop validating
+      truncated = true;
       intersectedComponentId = result.intersectedComponentId;
-      console.log('🚫 [BOUNDARY-HIT]', { 
+      console.log('🚫 [BOUNDARY-FILTER] Paver removed', { 
         paverId: `row-${paver.rowIndex}`,
-        rowIndex: paver.rowIndex,
         componentId: intersectedComponentId 
       });
-      break;
     }
   }
   
-  // Calculate max valid distance based on last valid row
-  const hitBoundary = lastValidRowIndex < sortedPavers[sortedPavers.length - 1].rowIndex;
-  const maxValidDistance = hitBoundary && lastValidRowIndex >= 0
-    ? (lastValidRowIndex + 1) * (rowDepthMm + groutMm)
-    : pavers.length > 0 
-      ? (sortedPavers[sortedPavers.length - 1].rowIndex + 1) * (rowDepthMm + groutMm)
-      : 0;
-  
-  console.log('✅ [VALIDATION-RESULT]', {
+  console.log('✅ [VALIDATION-GUARD]', {
     totalPavers: pavers.length,
     validPavers: validPavers.length,
-    lastValidRow: lastValidRowIndex,
-    maxValidDistance,
-    hitBoundary,
+    truncated,
     boundaryId: intersectedComponentId
   });
   
   return {
     validPavers,
-    maxValidDistance,
-    hitBoundary,
+    truncated,
     boundaryId: intersectedComponentId
   };
 }
