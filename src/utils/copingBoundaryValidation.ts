@@ -66,11 +66,15 @@ export function getComponentPolygon(component: Component): Point[] | null {
     }
     
     case 'boundary': {
-      // Boundary polygon
+      // Boundary polygon - must apply rotation like fence/wall
       if (!properties.points || !Array.isArray(properties.points)) return null;
+      
+      const cos = Math.cos((rotation * Math.PI) / 180);
+      const sin = Math.sin((rotation * Math.PI) / 180);
+      
       return properties.points.map((p: any) => ({
-        x: position.x + p.x,
-        y: position.y + p.y
+        x: position.x + p.x * cos - p.y * sin,
+        y: position.y + p.x * sin + p.y * cos
       }));
     }
     
