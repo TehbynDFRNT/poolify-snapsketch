@@ -21,7 +21,7 @@ export function findNearestBoundary(
   allComponents: Component[],
   excludePoolId: string
 ): BoundaryIntersection | null {
-  const boundaryTypes = ['fence', 'wall', 'boundary', 'house', 'drainage'];
+  const boundaryTypes = ['fence', 'wall', 'boundary', 'house', 'drainage', 'paver', 'paving_area'];
   const boundaries = allComponents.filter(
     c => boundaryTypes.includes(c.type) && c.id !== excludePoolId
   );
@@ -86,6 +86,44 @@ function getComponentEdges(component: Component): Array<{
       edges.push({
         start: points[i],
         end: points[nextIndex]
+      });
+    }
+  } else if (component.type === 'paver' || component.type === 'paving_area') {
+    // Rectangular components with dimensions in mm, position in pixels
+    const SCALE = 0.1; // 1 pixel = 10mm, so pixels = mm * 0.1
+    const widthPx = component.dimensions.width * SCALE;
+    const heightPx = component.dimensions.height * SCALE;
+    const cx = component.position.x;
+    const cy = component.position.y;
+    const radians = (component.rotation * Math.PI) / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    
+    // For pavers, handle paverCount if present
+    const count = component.properties.paverCount || { rows: 1, cols: 1 };
+    const totalWidth = widthPx * count.cols;
+    const totalHeight = heightPx * count.rows;
+    
+    // Four corners of the rectangle (unrotated, relative to position)
+    const corners = [
+      { x: 0, y: 0 },                        // top-left
+      { x: totalWidth, y: 0 },               // top-right
+      { x: totalWidth, y: totalHeight },     // bottom-right
+      { x: 0, y: totalHeight }               // bottom-left
+    ];
+    
+    // Rotate corners around position and convert to world coordinates
+    const rotatedCorners = corners.map(corner => ({
+      x: cx + corner.x * cos - corner.y * sin,
+      y: cy + corner.x * sin + corner.y * cos
+    }));
+    
+    // Create edges from corners
+    for (let i = 0; i < rotatedCorners.length; i++) {
+      const nextIndex = (i + 1) % rotatedCorners.length;
+      edges.push({
+        start: rotatedCorners[i],
+        end: rotatedCorners[nextIndex]
       });
     }
   }
