@@ -37,19 +37,11 @@ export function onDragMove(
   edgesState: CopingEdgesState,
   allComponents: Component[]
 ): DragPreview {
-  const rawDistance = dragDistance;
   const boundaryHit = getNearestBoundaryDistanceFromEdgeOuter(
     session.edge, pool, poolComponent, config, edgesState, allComponents
   );
-  
-  // Clamp drag distance to boundary limit with 2mm safety margin
-  const boundaryLimit = boundaryHit 
-    ? Math.max(0, boundaryHit.distance - 2) 
-    : rawDistance;
-  const clampedDistance = Math.min(rawDistance, boundaryLimit);
-  
   const preview = makeDragPreview(
-    session.edge, clampedDistance, pool, config, edgesState, boundaryHit
+    session.edge, dragDistance, pool, config, edgesState, boundaryHit
   );
   session.preview = preview;
   return preview;

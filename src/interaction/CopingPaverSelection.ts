@@ -1,5 +1,5 @@
 import { CopingPaverData } from '@/types/copingSelection';
-import { CopingConfig, Pool, GROUT_MM } from '@/utils/copingCalculation';
+import { CopingConfig, Pool } from '@/utils/copingCalculation';
 
 export class CopingPaverSelectionController {
   /**
@@ -61,17 +61,17 @@ export class CopingPaverSelectionController {
     paver: CopingPaverData,
     cornerOverrides: Map<string, 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd'>
   ): 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd' {
-    // Priority 1: Check override (from drag handle direction)
-    if (cornerOverrides.has(paver.id)) {
-      return cornerOverrides.get(paver.id)!;
-    }
-    
-    // Priority 2: If already an extension paver, use its extension direction
+    // If already an extension paver, use its extension direction
     if (paver.extensionDirection) {
       return paver.extensionDirection;
     }
     
-    // Priority 3: Default to the edge's direction
+    // If corner paver and override exists, use override
+    if (paver.isCorner && cornerOverrides.has(paver.id)) {
+      return cornerOverrides.get(paver.id)!;
+    }
+    
+    // Default: extend in the edge's direction
     return paver.edge;
   }
   
@@ -93,21 +93,12 @@ export class CopingPaverSelectionController {
     const firstPaver = selectedPavers[0];
     const edge = firstPaver.edge;
     
-    console.log('🧩 [CALC-EXT] Starting calculation', {
-      edge,
-      dragDistance,
-      paverCount: selectedPavers.length,
-      firstPaver: { id: firstPaver.id, x: firstPaver.x, y: firstPaver.y, width: firstPaver.width, height: firstPaver.height }
-    });
-    
     // Determine row depth based on edge - use paver dimensions directly
     // For sides (leftSide/rightSide), rows stack in Y direction (use height)
     // For ends (shallowEnd/deepEnd), rows stack in X direction (use width)
     const rowDepth = (edge === 'leftSide' || edge === 'rightSide') 
       ? firstPaver.height 
       : firstPaver.width;
-    
-    console.log('🧩 [ROW-DEPTH]', { edge, rowDepth, paverWidth: firstPaver.width, paverHeight: firstPaver.height });
     
     // Safety check
     if (!Number.isFinite(rowDepth) || rowDepth <= 0) {
@@ -116,11 +107,9 @@ export class CopingPaverSelectionController {
     }
     
     // Calculate how many full rows can fit (allow negative for inward extension)
-    // Account for grout spacing between rows
-    const rowUnit = rowDepth + GROUT_MM;
-    const fullRowsToAdd = Math.floor(dragDistance / rowUnit);
+    const fullRowsToAdd = Math.floor(dragDistance / rowDepth);
     
-    console.log('🧩 [ROWS-CALC]', {
+    console.debug('Extension calculation:', {
       edge,
       baseRowIndex: firstPaver.rowIndex,
       rowDepth,
@@ -129,74 +118,7 @@ export class CopingPaverSelectionController {
     });
     
     if (fullRowsToAdd === 0) {
-      // Show a cut-row preview when drag is less than one full row
-      const remainder = Math.max(0, Math.abs(dragDistance));
-      const minPreview = 5; // mm threshold to avoid jitter
-      if (remainder < minPreview) {
-        return { fullRowsToAdd: 0, newPavers: [] };
-      }
-
-      const cutPavers: CopingPaverData[] = [];
-      const rowSpacing = rowDepth + GROUT_MM;
-
-      selectedPavers.forEach(paver => {
-        const direction = this.getExtensionDirection(paver, cornerOverrides);
-        
-        console.log('🧩 [DIR-RESOLVE]', { 
-          paverId: paver.id, 
-          edge: paver.edge, 
-          extDir: paver.extensionDirection, 
-          override: cornerOverrides.get(paver.id), 
-          resolved: direction 
-        });
-
-        let newX = paver.x;
-        let newY = paver.y;
-        let width = paver.width;
-        let height = paver.height;
-
-        switch (direction) {
-          case 'deepEnd':
-            // Outward to the right
-            newX = paver.x + rowSpacing; // start after grout gap
-            width = remainder;
-            break;
-          case 'shallowEnd':
-            // Outward to the left
-            newX = paver.x - GROUT_MM - remainder;
-            width = remainder;
-            break;
-          case 'rightSide':
-            // Outward downward
-            newY = paver.y + rowSpacing;
-            height = remainder;
-            break;
-          case 'leftSide':
-            // Outward upward
-            newY = paver.y - GROUT_MM - remainder;
-            height = remainder;
-            break;
-        }
-
-        const id = `preview-cut-${direction}-c${paver.columnIndex}-r${paver.rowIndex + 1}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
-
-        cutPavers.push({
-          id,
-          x: newX,
-          y: newY,
-          width,
-          height,
-          isPartial: true,
-          edge: paver.edge,
-          rowIndex: paver.rowIndex + 1,
-          columnIndex: paver.columnIndex,
-          isCorner: false,
-          extensionDirection: direction,
-        });
-      });
-
-      console.log('🧩 [CUT-PREVIEW]', { edge, remainder, count: cutPavers.length });
-      return { fullRowsToAdd: 0, newPavers: cutPavers };
+      return { fullRowsToAdd: 0, newPavers: [] };
     }
     
     // Generate new pavers for ALL rows
@@ -214,31 +136,26 @@ export class CopingPaverSelectionController {
         const direction = this.getExtensionDirection(paver, cornerOverrides);
         
         // Calculate position for this row RELATIVE to existing paver position
-        // Include grout spacing between rows
-        const rowSpacing = rowDepth + GROUT_MM;
         let newX = paver.x;
         let newY = paver.y;
         
         switch (direction) {
           case 'leftSide':
-            newY = paver.y - rowOffset * rowSpacing;
+            newY = paver.y - rowOffset * rowDepth;
             break;
           case 'rightSide':
-            newY = paver.y + rowOffset * rowSpacing;
+            newY = paver.y + rowOffset * rowDepth;
             break;
           case 'shallowEnd':
-            newX = paver.x - rowOffset * rowSpacing;
+            newX = paver.x - rowOffset * rowDepth;
             break;
           case 'deepEnd':
-            newX = paver.x + rowOffset * rowSpacing;
+            newX = paver.x + rowOffset * rowDepth;
             break;
         }
         
-        // Generate truly unique ID using timestamp + random to avoid collisions
-        const uniqueId = `ext-${edge}-c${paver.columnIndex}-r${baseRowIndex + rowOffset}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        
         const newPaver: CopingPaverData = {
-          id: uniqueId,
+          id: `ext-${paver.id}-row${baseRowIndex + rowOffset}`,
           x: newX,
           y: newY,
           width: paver.width,
@@ -251,20 +168,9 @@ export class CopingPaverSelectionController {
           extensionDirection: direction,
         };
         
-        console.log('🧩 [NEW-PAVER]', {
-          edge: paver.edge,
-          direction,
-          rowOffset,
-          basePos: { x: paver.x, y: paver.y },
-          newPos: { x: newX, y: newY },
-          dimensions: { width: paver.width, height: paver.height }
-        });
-        
         newPavers.push(newPaver);
       });
     }
-    
-    console.log('🧩 [CALC-EXT] Complete', { edge, totalNewPavers: newPavers.length, fullRowsToAdd });
     
     return { fullRowsToAdd, newPavers };
   }

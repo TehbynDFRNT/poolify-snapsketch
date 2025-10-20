@@ -7,14 +7,12 @@ interface CopingPaverProps {
   isSelected: boolean;
   scale: number;
   onSelect: (paverId: string, isMultiSelect: boolean) => void;
-  onRowSelect?: (edge: string, rowIndex: number) => void;
   isPreview?: boolean;
   isHovered?: boolean;
   onHandleDragStart?: (paverId: string, direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => void;
   onHandleDragMove?: (paverId: string, dragDistance: number, direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => void;
   onHandleDragEnd?: (paverId: string) => void;
   cornerDirection?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd';
-  poolDimensions?: { length: number; width: number };
 }
 
 export const CopingPaverComponent = ({
@@ -22,64 +20,52 @@ export const CopingPaverComponent = ({
   isSelected,
   scale,
   onSelect,
-  onRowSelect,
   isPreview = false,
   isHovered = false,
   onHandleDragStart,
   onHandleDragMove,
   onHandleDragEnd,
   cornerDirection,
-  poolDimensions,
 }: CopingPaverProps) => {
   const [handleDragStart, setHandleDragStart] = useState<{ x: number; y: number } | null>(null);
-  const [lastClickTime, setLastClickTime] = useState<number>(0);
 
   const handleClick = (e: any) => {
-    const now = Date.now();
-    const timeSinceLastClick = now - lastClickTime;
-    
-    // Double-click detection (within 300ms)
-    if (timeSinceLastClick < 300 && onRowSelect) {
-      // Double-click: select entire row
-      onRowSelect(paver.edge, paver.rowIndex);
-    } else {
-      // Single-click: normal select behavior
-      const isMultiSelect = e.evt.ctrlKey || e.evt.metaKey;
-      onSelect(paver.id, isMultiSelect);
-    }
-    
-    setLastClickTime(now);
+    const isMultiSelect = e.evt.ctrlKey || e.evt.metaKey;
+    onSelect(paver.id, isMultiSelect);
   };
 
   // Determine extension direction (use cornerDirection for corner pavers)
   const extensionEdge = paver.isCorner && cornerDirection ? cornerDirection : paver.edge;
 
-  // Give ALL pavers two handles (horizontal and vertical) for any-direction extension
+  // For corner pavers, render two handles (horizontal and vertical)
   const handles: Array<{
     position: { x: number; y: number };
     direction: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd';
     axis: 'horizontal' | 'vertical';
   }> = [];
   
-  if (poolDimensions) {
-    // Use geometric position to determine handle placement (away from pool center)
-    const paverCenterX = paver.x + paver.width / 2;
-    const paverCenterY = paver.y + paver.height / 2;
-    const poolMidX = poolDimensions.length / 2;
-    const poolMidY = poolDimensions.width / 2;
-    
-    // Determine which quadrant: left/right and top/bottom
-    const isLeftHalf = paverCenterX < poolMidX;
-    const isTopHalf = paverCenterY < poolMidY;
-    
-    // Position handles on the EXTERIOR-facing sides (away from pool center)
-    // Horizontal handle (left/right extension)
-    const horizontalX = isLeftHalf ? 0 : paver.width;
-    const horizontalBase: 'shallowEnd' | 'deepEnd' = isLeftHalf ? 'shallowEnd' : 'deepEnd';
-    
-    // Vertical handle (up/down extension)
-    const verticalY = isTopHalf ? 0 : paver.height;
-    const verticalBase: 'leftSide' | 'rightSide' = isTopHalf ? 'leftSide' : 'rightSide';
+  if (paver.isCorner) {
+    // Place handles on the EXTERIOR-facing sides (away from pool) for outward extension
+    const isHorizontalEdge = paver.edge === 'shallowEnd' || paver.edge === 'deepEnd';
+    const isVerticalEdge = paver.edge === 'leftSide' || paver.edge === 'rightSide';
+
+    // Determine base directions for each axis based on which edges meet at this corner
+    const horizontalBase: 'shallowEnd' | 'deepEnd' =
+      isHorizontalEdge ? (paver.edge as 'shallowEnd' | 'deepEnd') : (paver.rowIndex === 0 ? 'shallowEnd' : 'deepEnd');
+
+    const verticalBase: 'leftSide' | 'rightSide' =
+      isVerticalEdge ? (paver.edge as 'leftSide' | 'rightSide') : (paver.columnIndex === 0 ? 'leftSide' : 'rightSide');
+
+    // Position handles on the exterior-facing sides (away from pool)
+    // leftSide/shallowEnd corners: place at left edge (x=0)
+    // rightSide/deepEnd corners: place at right edge (x=width)
+    const horizontalX = 
+      (paver.edge === 'leftSide' || paver.edge === 'shallowEnd') ? 0 : paver.width;
+
+    // leftSide/shallowEnd corners: place at top edge (y=0)
+    // rightSide/deepEnd corners: place at bottom edge (y=height)
+    const verticalY = 
+      (paver.edge === 'shallowEnd' || paver.edge === 'leftSide') ? 0 : paver.height;
 
     handles.push({
       position: { x: horizontalX, y: paver.height / 2 },
@@ -93,7 +79,7 @@ export const CopingPaverComponent = ({
       axis: 'vertical'
     });
   } else {
-    // Fallback: single handle based on edge (if poolDimensions not available)
+    // Regular paver with single handle
     let handlePos = { x: 0, y: 0 };
     switch (extensionEdge) {
       case 'shallowEnd': // extends left
@@ -205,26 +191,19 @@ export const CopingPaverComponent = ({
               distance = currentPos.y - handleDragStart!.y;
             }
             
-            // Fix: Flip sign for edges that extend in negative screen direction
-            // leftSide (top) and shallowEnd (left) extend in NEGATIVE screen coords
-            // but should be treated as POSITIVE extension distance
-            let signCorrectedDistance = distance;
-            if (handle.direction === 'leftSide' || handle.direction === 'shallowEnd') {
-              signCorrectedDistance = -distance;
+            // Infer direction from drag sign for corners
+            let inferredDirection = handle.direction;
+            if (paver.isCorner) {
+              if (handle.axis === 'horizontal') {
+                inferredDirection = distance > 0 ? 'deepEnd' : 'shallowEnd';
+              } else {
+                inferredDirection = distance > 0 ? 'rightSide' : 'leftSide';
+              }
             }
             
-            const inferredDirection = handle.direction;
-            
-            // Convert to mm
-            const unscaledDistance = signCorrectedDistance / scale;
-            
-            console.log('Handle drag:', { 
-              raw: distance, 
-              corrected: signCorrectedDistance,
-              unscaledDistance, 
-              direction: inferredDirection 
-            });
-            
+            // Convert screen distance back to unscaled units (mm) - allow negative for inward extension
+            const unscaledDistance = Math.abs(distance) / scale * (distance < 0 ? -1 : 1);
+            console.log('Handle drag:', { distance, unscaledDistance, scale, currentPos, handleDragStart, inferredDirection });
             onHandleDragMove(paver.id, unscaledDistance, inferredDirection);
           }}
           onDragEnd={(e) => {

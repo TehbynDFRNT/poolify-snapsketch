@@ -3,49 +3,12 @@ import { Group, Line, Text, Circle, Rect } from 'react-konva';
 import { Component } from '@/types';
 import { POOL_LIBRARY } from '@/constants/pools';
 import { calculatePoolCoping } from '@/utils/copingCalculation';
-import type { CopingConfig } from '@/utils/copingCalculation';
 import { useDesignStore } from '@/store/designStore';
 import { snapPoolToPaverGrid } from '@/utils/snap';
 import { generateCopingPaverData } from '@/utils/copingPaverData';
 import { copingSelectionController } from '@/interaction/CopingPaverSelection';
 import { CopingPaverComponent } from './CopingPaverComponent';
 import type { CopingPaverData } from '@/types/copingSelection';
-import { 
-  getNearestBoundaryDistanceFromEdgeOuter, 
-  validatePreviewPaversWithBoundaries, 
-  getAlongAndDepthForEdge, 
-  rowsFromDragDistance, 
-  buildExtensionRowsForEdge,
-  getDynamicEdgeLength,
-  GROUT_MM, 
-  MIN_BOUNDARY_CUT_ROW_MM 
-} from '@/utils/copingInteractiveExtend';
-import { planAxis } from '@/utils/copingCalculation';
-import type { CopingEdgesState, CopingEdgeId, PaverRect } from '@/types/copingInteractive';
-
-/**
- * Normalize coping config to avoid undefined tile dimensions
- */
-function normalizeCopingConfig(config: any): any {
-  const DEFAULT_CONFIG = {
-    id: 'default',
-    name: 'Default Config',
-    tile: { x: 600, y: 400 },
-    rows: { sides: 2, shallow: 2, deep: 2 }
-  };
-  
-  if (!config) return DEFAULT_CONFIG;
-  
-  const t: any = config.tile ?? {};
-  return {
-    ...DEFAULT_CONFIG,
-    ...config,
-    tile: {
-      x: t.x ?? t.along ?? 600,
-      y: t.y ?? t.inward ?? 400,
-    },
-  };
-}
 
 interface PoolComponentProps {
   component: Component;
@@ -68,9 +31,9 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   const scaledOutline = poolData.outline.map(p => ({ x: p.x * scale, y: p.y * scale }));
   const points = scaledOutline.flatMap(p => [p.x, p.y]);
 
-  // Calculate coping if enabled (use normalized config everywhere)
+  // Calculate coping if enabled
   const showCoping = component.properties.showCoping ?? false;
-  const copingConfig = normalizeCopingConfig(component.properties.copingConfig);
+  const copingConfig = component.properties.copingConfig;
   const copingCalc = showCoping && poolData 
     ? calculatePoolCoping(poolData, copingConfig)
     : null;
@@ -82,10 +45,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
       paverId: string;
       currentDragDistance: number;
       previewPavers: CopingPaverData[];
-      edge: CopingEdgeId;
-      edgesStateAtStart: CopingEdgesState;
-      boundaryDistance?: number;
-      boundaryId?: string | null;
     } | null;
   }>({
     selectedIds: new Set(),
@@ -110,23 +69,19 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   // Get extension pavers from component properties (filtered by deletions)
   const extensionPavers: CopingPaverData[] = useMemo(() => {
     const stored = component.properties.copingSelection?.extensionPavers || [];
-    // Normalize, filter deletions, then de-duplicate by id to avoid React key collisions
-    const filtered = stored
+    return stored
       .map(p => ({
         ...p,
         edge: p.edge as 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd',
         extensionDirection: p.extensionDirection as 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd' | undefined,
       }))
       .filter(p => {
+        // Filter out deleted pavers
         if (deletedPaverIds.has(p.id)) return false;
+        // Filter out pavers in deleted rows
         if (deletedRows.some(dr => dr.edge === p.edge && dr.rowIndex === p.rowIndex)) return false;
         return true;
       });
-
-    // De-dupe by id (keep the last occurrence)
-    const map = new Map<string, CopingPaverData>();
-    filtered.forEach(p => map.set(p.id, p));
-    return Array.from(map.values());
   }, [component.properties.copingSelection, deletedPaverIds, deletedRows]);
 
   // Get corner direction overrides
@@ -146,151 +101,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     });
     return [...base, ...extensionPavers];
   }, [baseCopingPavers, extensionPavers, deletedPaverIds, deletedRows]);
-
-  // Derive runtime edges state from current pool configuration
-  const deriveEdgesState = (): CopingEdgesState => {
-    if (!copingConfig) {
-      return {
-        leftSide: { currentRows: 0 },
-        rightSide: { currentRows: 0 },
-        shallowEnd: { currentRows: 0 },
-        deepEnd: { currentRows: 0 },
-      };
-    }
-
-    const baseRows = copingConfig.rows || { sides: 1, shallow: 1, deep: 1 };
-    
-    // Calculate max row index for each edge from all pavers
-    const maxRowByEdge: Record<CopingEdgeId, number> = {
-      leftSide: baseRows.sides - 1,
-      rightSide: baseRows.sides - 1,
-      shallowEnd: baseRows.shallow - 1,
-      deepEnd: baseRows.deep - 1,
-    };
-
-    allPavers.forEach(p => {
-      const edge = p.edge as CopingEdgeId;
-      if (p.rowIndex > maxRowByEdge[edge]) {
-        maxRowByEdge[edge] = p.rowIndex;
-      }
-    });
-
-    return {
-      leftSide: { currentRows: maxRowByEdge.leftSide + 1, pavers: [] },
-      rightSide: { currentRows: maxRowByEdge.rightSide + 1, pavers: [] },
-      shallowEnd: { currentRows: maxRowByEdge.shallowEnd + 1, pavers: [] },
-      deepEnd: { currentRows: maxRowByEdge.deepEnd + 1, pavers: [] },
-    };
-  };
-
-  // Helper to validate preview pavers against boundaries (wrapper for type compatibility)
-  const validatePreviewPavers = (
-    pavers: CopingPaverData[],
-    edge: CopingEdgeId
-  ) => {
-    if (!poolData || !copingConfig) {
-      return { validPavers: pavers, truncated: false };
-    }
-    
-    // Convert CopingPaverData to PaverRect format
-    const paverRects: PaverRect[] = pavers.map(p => ({
-      x: p.x,
-      y: p.y,
-      width: p.width,
-      height: p.height,
-      isPartial: p.isPartial,
-      meta: { edge: p.edge, rowIndex: p.rowIndex, isBoundaryCutRow: p.isPartial }
-    }));
-    
-    const result = validatePreviewPaversWithBoundaries(
-      paverRects,
-      component,
-      poolData,
-      copingConfig,
-      allComponents,
-      edge
-    );
-    
-    // Convert back to CopingPaverData
-    const validPaverData = result.validPavers.map((rect, idx) => {
-      const original = pavers.find(p => p.x === rect.x && p.y === rect.y);
-      return original ?? {
-        id: `validated-${edge}-${idx}`,
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height,
-        isPartial: rect.isPartial,
-        edge: rect.meta!.edge,
-        rowIndex: rect.meta!.rowIndex,
-        columnIndex: idx,
-        isCorner: false,
-        extensionDirection: edge,
-      };
-    });
-    
-    return { validPavers: validPaverData, truncated: result.truncated };
-  };
-
-  // LEGACY FUNCTION - No longer used, kept for backwards compatibility during transition
-  // TODO: Remove after verifying all extensions use buildExtensionRowsForEdge
-  const generateCutRowPavers = (
-    selectedPavers: CopingPaverData[],
-    fullRowsAdded: number,
-    cutRowDepth: number,
-    rowDepth: number,
-    cornerOverrides: Map<string, CopingEdgeId>
-  ): CopingPaverData[] => {
-    const cutPavers: CopingPaverData[] = [];
-    const rowSpacing = rowDepth + GROUT_MM;
-    
-    selectedPavers.forEach(paver => {
-      const direction = copingSelectionController.getExtensionDirection(paver, cornerOverrides);
-      
-      let newX = paver.x;
-      let newY = paver.y;
-      let width = paver.width;
-      let height = paver.height;
-      
-      // Position after full rows + grout
-      const offsetDistance = (fullRowsAdded + 1) * rowSpacing;
-      
-      switch (direction) {
-        case 'deepEnd':
-          newX = paver.x + (fullRowsAdded * rowSpacing) + GROUT_MM;
-          width = cutRowDepth;
-          break;
-        case 'shallowEnd':
-          newX = paver.x - offsetDistance + (rowSpacing - cutRowDepth);
-          width = cutRowDepth;
-          break;
-        case 'rightSide':
-          newY = paver.y + (fullRowsAdded * rowSpacing) + GROUT_MM;
-          height = cutRowDepth;
-          break;
-        case 'leftSide':
-          newY = paver.y - offsetDistance + (rowSpacing - cutRowDepth);
-          height = cutRowDepth;
-          break;
-      }
-      
-      cutPavers.push({
-        id: `cut-${direction}-c${paver.columnIndex}-r${paver.rowIndex + fullRowsAdded + 1}`,
-        x: newX,
-        y: newY,
-        width,
-        height,
-        isPartial: true,
-        edge: paver.edge,
-        rowIndex: paver.rowIndex + fullRowsAdded + 1,
-        columnIndex: paver.columnIndex,
-        isCorner: false,
-        extensionDirection: direction,
-      });
-    });
-    
-    return cutPavers;
-  };
 
   const handleDragEnd = (e: any) => {
     const newPos = { x: e.target.x(), y: e.target.y() };
@@ -327,203 +137,62 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     }));
   };
 
-  // Row selection handler (for double-click)
-  const handleRowSelect = (edge: string, rowIndex: number) => {
-    // Find all pavers in the same row on the same edge
-    const rowPavers = allPavers.filter(p => p.edge === edge && p.rowIndex === rowIndex);
-    const rowPaverIds = new Set(rowPavers.map(p => p.id));
-    
-    console.log('Row selection:', { edge, rowIndex, count: rowPaverIds.size });
-    
-    setCopingSelection(prev => ({
-      ...prev,
-      selectedIds: rowPaverIds,
-    }));
-  };
-
   // Handle drag handlers for individual paver handles
   const handlePaverHandleDragStart = (paverId: string, direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => {
-    // Get selected pavers to determine the edge
-    const selectedPavers = allPavers.filter(p => copingSelection.selectedIds.has(p.id));
-    if (selectedPavers.length === 0) return;
-
-    const edge = (direction || selectedPavers[0].edge) as CopingEdgeId;
-    const edgesStateAtStart = deriveEdgesState();
-
-    console.log('🚀 [DRAG-START] Boundary-aware extension', { 
-      edge, 
-      currentRows: edgesStateAtStart[edge].currentRows 
-    });
-
     setCopingSelection(prev => ({
       ...prev,
-      dragState: { 
-        paverId, 
-        currentDragDistance: 0, 
-        previewPavers: [],
-        edge,
-        edgesStateAtStart,
-      }
+      dragState: { paverId, currentDragDistance: 0, previewPavers: [] }
     }));
   };
 
   const handlePaverHandleDragMove = (paverId: string, dragDistance: number, direction?: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd') => {
-    if (!copingSelection.dragState || !copingConfig || !poolData) return;
+    if (!copingSelection.dragState || !copingConfig) return;
     
-    const { edge, edgesStateAtStart } = copingSelection.dragState;
+    console.log('PoolComponent handlePaverHandleDragMove:', { paverId, dragDistance, direction });
     
-    // Get ALL selected pavers
-    const selectedPavers = allPavers.filter(p => copingSelection.selectedIds.has(p.id));
-    
-    if (selectedPavers.length === 0) return;
-
-    // Check if selected pavers can extend together (same edge + row)
-    const canExtend = copingSelectionController.canExtend(selectedPavers);
-    if (!canExtend) {
-      console.warn('Selected pavers cannot extend together - they must be on the same edge and row');
+    // Get the paver being dragged
+    const paver = allPavers.find(p => p.id === paverId);
+    if (!paver) {
+      console.log('Paver not found:', paverId);
       return;
     }
-
-    // 1) Get exact boundary distance using ray-casting (in mm)
-    const boundaryHit = getNearestBoundaryDistanceFromEdgeOuter(
-      edge,
-      poolData,
-      component,
-      copingConfig, // Already normalized
-      edgesStateAtStart,
-      allComponents
-    );
     
-    // 2) Clamp drag distance to boundary with 2mm safety margin
-    const clampedDistance = boundaryHit 
-      ? Math.max(0, Math.min(dragDistance, boundaryHit.distance - 2))
-      : dragDistance;
+    // Build temporary override map with the drag direction
+    const tempOverrides = new Map(cornerOverrides);
+    if (direction) {
+      tempOverrides.set(paverId, direction);
+    }
     
-    console.log('🎯 [RAY-BOUNDARY]', {
-      edge,
-      rawDragDistance: dragDistance,
-      boundaryDistance: boundaryHit?.distance,
-      clampedDistance,
-      boundaryId: boundaryHit?.componentId,
-    });
-    
-    // 3) Calculate full rows and cut row depth using continuous logic
-    const { rowDepth } = getAlongAndDepthForEdge(edge, copingConfig);
-    const { fullRowsToAdd, hasCutRow, cutRowDepth } = rowsFromDragDistance(
-      clampedDistance,
-      !!boundaryHit,
-      rowDepth,
-      MIN_BOUNDARY_CUT_ROW_MM
-    );
-    
-    console.log('🧮 [ROW-CALC]', {
-      clampedDistance,
-      rowDepth,
-      fullRowsToAdd,
-      hasCutRow,
-      cutRowDepth,
-    });
-    
-    // 4) Build ALL preview pavers using unified generator
-    const previewPaverRects: PaverRect[] = buildExtensionRowsForEdge(
-      edge,
-      poolData,
+    // Calculate extension for this single paver
+    const { newPavers } = copingSelectionController.calculateExtensionRow(
+      [paver],
+      dragDistance,
       copingConfig,
-      edgesStateAtStart,
-      fullRowsToAdd,
-      hasCutRow,
-      cutRowDepth
-    );
-    
-    // Convert PaverRect[] to CopingPaverData[] for preview display
-    const startRow = edgesStateAtStart[edge].currentRows;
-    const previewPavers: CopingPaverData[] = previewPaverRects.map((rect, idx) => ({
-      id: `preview-${edge}-${startRow}-${idx}`,
-      x: rect.x,
-      y: rect.y,
-      width: rect.width,
-      height: rect.height,
-      isPartial: rect.isPartial,
-      edge: rect.meta!.edge,
-      rowIndex: rect.meta!.rowIndex,
-      columnIndex: idx,
-      isCorner: false,
-      extensionDirection: edge,
-    }));
-    
-    // 5) Validate pavers against boundaries (final guard)
-    const validation = validatePreviewPaversWithBoundaries(
-      previewPaverRects,
-      component,
       poolData,
-      copingConfig,
-      allComponents,
-      edge
+      tempOverrides
     );
     
-    const finalPreviewPavers = validation.validPavers.map((rect, idx) => ({
-      id: `preview-${edge}-${startRow}-${idx}`,
-      x: rect.x,
-      y: rect.y,
-      width: rect.width,
-      height: rect.height,
-      isPartial: rect.isPartial,
-      edge: rect.meta!.edge,
-      rowIndex: rect.meta!.rowIndex,
-      columnIndex: idx,
-      isCorner: false,
-      extensionDirection: edge,
-    }));
-    
-    console.log('🔍 [DRAG-MOVE] Complete', { 
-      edge,
-      generated: previewPaverRects.length,
-      validated: finalPreviewPavers.length,
-      truncated: validation.truncated,
-      hitBoundary: !!boundaryHit,
-    });
+    console.log('Extension calculated:', { newPaversCount: newPavers.length, dragDistance });
     
     setCopingSelection(prev => ({
       ...prev,
       dragState: {
         ...prev.dragState!,
-        currentDragDistance: clampedDistance,
-        previewPavers: finalPreviewPavers,
-        boundaryDistance: boundaryHit?.distance,
-        boundaryId: boundaryHit?.componentId,
+        currentDragDistance: dragDistance,
+        previewPavers: newPavers,
       }
     }));
   };
 
   const handlePaverHandleDragEnd = (paverId: string) => {
-    if (!copingSelection.dragState || !copingConfig) return;
+    if (!copingSelection.dragState) return;
     
-    const { previewPavers, edge, boundaryDistance, boundaryId, currentDragDistance } = copingSelection.dragState;
+    const { previewPavers } = copingSelection.dragState;
     
-    // Calculate rows using the unified system
-    const { rowDepth } = getAlongAndDepthForEdge(edge, copingConfig);
-    const { fullRowsToAdd, hasCutRow, cutRowDepth } = rowsFromDragDistance(
-      currentDragDistance,
-      !!boundaryDistance,
-      rowDepth,
-      MIN_BOUNDARY_CUT_ROW_MM
-    );
-    
-    console.log('🎯 [DRAG-END] Committing extension', {
-      paverId,
-      edge,
-      currentDragDistance,
-      boundaryDistance,
-      fullRowsToAdd,
-      hasCutRow,
-      cutRowDepth,
-      previewCount: previewPavers.length,
-    });
-    
-    // Commit all valid preview pavers (both full rows and cut row if present)
     if (previewPavers.length > 0) {
+      // Save extension pavers to component properties
       const newExtensionPavers = [...extensionPavers, ...previewPavers];
-
+      
       updateComponent(component.id, {
         properties: {
           ...component.properties,
@@ -549,13 +218,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
           }
         }
       });
-      
-      console.log('💾 [SAVED] Extension committed', { 
-        totalCommitted: previewPavers.length,
-        fullRows: fullRowsToAdd,
-        hasCutRow,
-        cutRowDepth,
-      });
     }
     
     // Clear selection and drag state
@@ -571,7 +233,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
-      e.stopPropagation();
       
       const selectedPavers = Array.from(copingSelection.selectedIds)
         .map(id => allPavers.find(p => p.id === id))
@@ -675,9 +336,9 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
   };
 
   // Add keyboard listener
-useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown, true); // capture to intercept before global
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isSelected, copingSelection.selectedIds, allPavers, extensionPavers, deletedPaverIds, deletedRows]);
 
   return (
@@ -699,12 +360,10 @@ useEffect(() => {
             isSelected={copingSelection.selectedIds.has(paver.id)}
             scale={scale}
             onSelect={handlePaverSelect}
-            onRowSelect={handleRowSelect}
             onHandleDragStart={handlePaverHandleDragStart}
             onHandleDragMove={handlePaverHandleDragMove}
             onHandleDragEnd={handlePaverHandleDragEnd}
             cornerDirection={cornerOverrides.get(paver.id)}
-            poolDimensions={{ length: poolData.length, width: poolData.width }}
           />
         ))}
 
@@ -760,7 +419,6 @@ useEffect(() => {
             scale={scale}
             onSelect={() => {}}
             isPreview
-            poolDimensions={{ length: poolData.length, width: poolData.width }}
           />
         ))}
 
