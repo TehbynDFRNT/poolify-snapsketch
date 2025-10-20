@@ -183,26 +183,57 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     };
   };
 
-  // Helper to validate preview pavers against boundaries
+  // Helper to validate preview pavers against boundaries (wrapper for type compatibility)
   const validatePreviewPavers = (
     pavers: CopingPaverData[],
     edge: CopingEdgeId
   ) => {
     if (!poolData || !copingConfig) {
-      return { validPavers: pavers, maxValidDistance: 0, hitBoundary: false };
+      return { validPavers: pavers, truncated: false };
     }
     
-    return validatePreviewPaversWithBoundaries(
-      pavers,
+    // Convert CopingPaverData to PaverRect format
+    const paverRects: PaverRect[] = pavers.map(p => ({
+      x: p.x,
+      y: p.y,
+      width: p.width,
+      height: p.height,
+      isPartial: p.isPartial,
+      meta: { edge: p.edge, rowIndex: p.rowIndex, isBoundaryCutRow: p.isPartial }
+    }));
+    
+    const result = validatePreviewPaversWithBoundaries(
+      paverRects,
       component,
       poolData,
       copingConfig,
       allComponents,
       edge
     );
+    
+    // Convert back to CopingPaverData
+    const validPaverData = result.validPavers.map((rect, idx) => {
+      const original = pavers.find(p => p.x === rect.x && p.y === rect.y);
+      return original ?? {
+        id: `validated-${edge}-${idx}`,
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        isPartial: rect.isPartial,
+        edge: rect.meta!.edge,
+        rowIndex: rect.meta!.rowIndex,
+        columnIndex: idx,
+        isCorner: false,
+        extensionDirection: edge,
+      };
+    });
+    
+    return { validPavers: validPaverData, truncated: result.truncated };
   };
 
-  // Helper to generate cut row pavers after boundary detection
+  // LEGACY FUNCTION - No longer used, kept for backwards compatibility during transition
+  // TODO: Remove after verifying all extensions use buildExtensionRowsForEdge
   const generateCutRowPavers = (
     selectedPavers: CopingPaverData[],
     fullRowsAdded: number,
@@ -469,47 +500,29 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     
     const { previewPavers, edge, boundaryDistance, boundaryId, currentDragDistance } = copingSelection.dragState;
     
-    const MIN_BOUNDARY_CUT_ROW_MM = 100;
+    // Calculate rows using the unified system
+    const { rowDepth } = getAlongAndDepthForEdge(edge, copingConfig);
+    const { fullRowsToAdd, hasCutRow, cutRowDepth } = rowsFromDragDistance(
+      currentDragDistance,
+      !!boundaryDistance,
+      rowDepth,
+      MIN_BOUNDARY_CUT_ROW_MM
+    );
     
-    // Determine row depth based on edge
-    const rowDepth = (edge === 'shallowEnd' || edge === 'deepEnd')
-      ? ((copingConfig.tile as any).x ?? (copingConfig.tile as any).along ?? 600)
-      : ((copingConfig.tile as any).y ?? (copingConfig.tile as any).inward ?? 400);
-    
-    const rowUnit = rowDepth + GROUT_MM;
-    
-    console.log('🎯 [DRAG-END] Analyzing cut-row commitment', {
+    console.log('🎯 [DRAG-END] Committing extension', {
       paverId,
       edge,
       currentDragDistance,
       boundaryDistance,
-      rowDepth,
-      rowUnit,
+      fullRowsToAdd,
+      hasCutRow,
+      cutRowDepth,
+      previewCount: previewPavers.length,
     });
     
-    let toCommit = previewPavers.filter(p => !p.isPartial);
-    
-    // If we hit a boundary, check if we should commit a cut row
-    if (boundaryDistance !== undefined && boundaryDistance < currentDragDistance + 50) {
-      const fullRows = Math.floor(currentDragDistance / rowUnit);
-      const remaining = currentDragDistance - (fullRows * rowUnit);
-      
-      console.log('🔍 [CUT-ROW-CHECK]', {
-        fullRows,
-        remaining,
-        minRequired: MIN_BOUNDARY_CUT_ROW_MM,
-        shouldCommitCutRow: remaining >= MIN_BOUNDARY_CUT_ROW_MM,
-      });
-      
-      // If remaining space is >= 100mm, commit the cut row (partial pavers)
-      if (remaining >= MIN_BOUNDARY_CUT_ROW_MM) {
-        toCommit = [...toCommit, ...previewPavers.filter(p => p.isPartial)];
-        console.log('✅ [CUT-ROW-COMMITTED]', { cutRowPaversCount: previewPavers.filter(p => p.isPartial).length });
-      }
-    }
-    
-    if (toCommit.length > 0) {
-      const newExtensionPavers = [...extensionPavers, ...toCommit];
+    // Commit all valid preview pavers (both full rows and cut row if present)
+    if (previewPavers.length > 0) {
+      const newExtensionPavers = [...extensionPavers, ...previewPavers];
 
       updateComponent(component.id, {
         properties: {
@@ -537,7 +550,12 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
         }
       });
       
-      console.log('💾 [SAVED]', { totalCommitted: toCommit.length, hasPartials: toCommit.some(p => p.isPartial) });
+      console.log('💾 [SAVED] Extension committed', { 
+        totalCommitted: previewPavers.length,
+        fullRows: fullRowsToAdd,
+        hasCutRow,
+        cutRowDepth,
+      });
     }
     
     // Clear selection and drag state

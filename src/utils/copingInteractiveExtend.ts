@@ -57,17 +57,6 @@ export function getAlongAndDepthForEdge(
     : { along: tile.y, rowDepth: tile.x }; // ends: along Y, project X
 }
 
-export function getBaseRowsForEdge(edge: CopingEdgeId, config: CopingConfig) {
-  if (edge === 'leftSide' || edge === 'rightSide') return config.rows.sides;
-  if (edge === 'shallowEnd') return config.rows.shallow;
-  return config.rows.deep;
-}
-
-export function getCornerExtensionFromSides(currentSidesRows: number, config: CopingConfig) {
-  const sideRowDepth = config.tile.y;
-  return currentSidesRows * sideRowDepth;
-}
-
 /**
  * Calculate the effective length of an edge considering corner extensions.
  * 
@@ -113,9 +102,7 @@ export interface BoundaryHit {
 }
 
 export function rowStartOffset(r: number, rowDepth: number) {
-  const offset = GROUT_MM + r * (rowDepth + GROUT_MM);
-  console.log('🧮 [ROW-OFFSET]', { rowIndex: r, rowDepth, offset });
-  return offset;
+  return GROUT_MM + r * (rowDepth + GROUT_MM);
 }
 
 export function getNearestBoundaryDistanceFromEdgeOuter(
