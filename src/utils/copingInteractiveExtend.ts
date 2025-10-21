@@ -88,8 +88,11 @@ export function getNearestBoundaryDistanceFromEdgeOuter(
   const { rowDepth } = getAlongAndDepthForEdge(edge, config);
   const currentRows = edgesState[edge].currentRows;
   
-  // Calculate current outer edge position (mm) and convert to px for world coordinates
-  const outerOffsetMm = rowStartOffset(currentRows, rowDepth);
+  // Calculate current outer edge position (mm) - outer edge after last complete tile
+  // For N rows: grout + tile + grout + tile + ... = GROUT_MM + (N-1)*(rowDepth+GROUT_MM) + rowDepth
+  const outerOffsetMm = currentRows > 0 
+    ? GROUT_MM + (currentRows - 1) * (rowDepth + GROUT_MM) + rowDepth
+    : 0;
   const outerOffsetPx = outerOffsetMm * MM_TO_PX;
   
   // Pool center in world coordinates (pixels)

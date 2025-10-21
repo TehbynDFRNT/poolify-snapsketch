@@ -143,49 +143,31 @@ export class CopingPaverSelectionController {
       
       if (boundaryHit && boundaryHit.distance > 0) {
         effectiveDragDistance = Math.min(dragDistance, boundaryHit.distance);
-        
-        // Use rowsFromDragDistance to handle partial tiles correctly
-        const result = rowsFromDragDistance(
-          effectiveDragDistance,
-          true, // reachedBoundary
-          rowDepth,
-          200 // MIN_BOUNDARY_CUT_ROW_MM
-        );
-        
-        console.debug('Boundary detection:', {
-          edge,
-          boundaryDistance: boundaryHit.distance,
-          effectiveDragDistance,
-          fullRows: result.fullRowsToAdd,
-          hasCutRow: result.hasCutRow,
-          cutRowDepth: result.cutRowDepth
-        });
-        
-        hasCutRow = result.hasCutRow;
-        cutRowDepth = result.cutRowDepth;
       }
     }
     
     // Calculate rows using consistent logic (mm units)
     const reachedBoundary = !!boundaryHit;
+    const maxDistanceMm = reachedBoundary ? effectiveDragDistance : dragDistance;
+    
     const rowsCalc = rowsFromDragDistance(
-      reachedBoundary ? effectiveDragDistance : dragDistance,
+      maxDistanceMm,
       reachedBoundary,
       rowDepth,
-      200
+      200 // MIN_BOUNDARY_CUT_ROW_MM
     );
+    
     const fullRowsToAdd = rowsCalc.fullRowsToAdd;
-    if (reachedBoundary) {
-      hasCutRow = rowsCalc.hasCutRow;
-      cutRowDepth = rowsCalc.cutRowDepth;
-    }
+    hasCutRow = rowsCalc.hasCutRow;
+    cutRowDepth = rowsCalc.cutRowDepth;
     
     console.debug('Extension calculation:', {
       edge,
       baseRowIndex: firstPaver.rowIndex,
       rowDepth,
-      dragDistance,
-      effectiveDragDistance,
+      dragDistanceMm: dragDistance,
+      boundaryDistanceMm: boundaryHit?.distance,
+      maxDistanceMm,
       fullRowsToAdd,
       hasCutRow,
       cutRowDepth
