@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Stage, Layer, Line, Circle, Text, Label, Tag } from 'react-konva';
+import { Stage, Layer, Line, Circle, Text, Label, Tag, Group, Rect } from 'react-konva';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,8 @@ import { PAVER_SIZES } from '@/constants/components';
 import { PoolSelector } from './PoolSelector';
 import { Pool } from '@/constants/pools';
 import { lockToAxis, detectAxisLock, calculateDistance } from '@/utils/canvas';
+import { WALL_MATERIALS, FENCE_TYPES, DRAINAGE_TYPES } from '@/constants/components';
+import { sortComponentsByRenderOrder } from '@/constants/renderOrder';
 
 export const Canvas = ({ 
   activeTool = 'select',
@@ -46,7 +48,7 @@ export const Canvas = ({
   const [selectedPool, setSelectedPool] = useState<Pool | null>(null);
   const [pendingPoolPosition, setPendingPoolPosition] = useState<{ x: number; y: number } | null>(null);
   
-  // Drawing state for boundary, house, and paving area tools
+  // Drawing state for boundary, house, paving area, and linear tools (wall/fence/drainage)
   const [drawingPoints, setDrawingPoints] = useState<Array<{ x: number; y: number }>>([]);
   const [ghostPoint, setGhostPoint] = useState<{ x: number; y: number } | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -150,7 +152,15 @@ export const Canvas = ({
   }, [isDrawing, drawingPoints.length, isMeasuring, shiftPressed, measureStart, measureEnd, ghostPoint, onDrawingStateChange]);
 
   const handleMouseMove = (e: any) => {
-    if (activeTool === 'boundary' || activeTool === 'house' || activeTool === 'paving_area') {
+    const isPolylineTool =
+      activeTool === 'boundary' ||
+      activeTool === 'house' ||
+      activeTool === 'paving_area' ||
+      activeTool === 'wall' ||
+      activeTool === 'fence' ||
+      activeTool === 'drainage';
+
+    if (isPolylineTool) {
       const pos = e.target.getStage().getPointerPosition();
       const canvasX = (pos.x - pan.x) / zoom;
       const canvasY = (pos.y - pan.y) / zoom;
@@ -179,7 +189,9 @@ export const Canvas = ({
       const canvasX = (pos.x - pan.x) / zoom;
       const canvasY = (pos.y - pan.y) / zoom;
       
-      let endPoint = { x: canvasX, y: canvasY };
+      // Smart snap to nearby vertices, then allow axis lock with Shift
+      let snappedPoint = smartSnap({ x: canvasX, y: canvasY }, components);
+      let endPoint = { x: snappedPoint.x, y: snappedPoint.y };
       
       // Apply shift key axis locking
       if (shiftPressed) {
@@ -207,6 +219,7 @@ export const Canvas = ({
 
     const canvasX = (pos.x - pan.x) / zoom;
     const canvasY = (pos.y - pan.y) / zoom;
+    // Default grid snap
     const snapped = {
       x: snapToGrid(canvasX),
       y: snapToGrid(canvasY),
@@ -215,9 +228,10 @@ export const Canvas = ({
     // Always handle measurement tools regardless of click target (allow over shapes)
     if (activeTool === 'quick_measure' || activeTool === 'reference_line') {
       if (!isMeasuring) {
-        // Start measuring
-        setMeasureStart(snapped);
-        setMeasureEnd(snapped);
+        // Start measuring (smart snap start point)
+        const startSmart = smartSnap({ x: canvasX, y: canvasY }, components);
+        setMeasureStart({ x: startSmart.x, y: startSmart.y });
+        setMeasureEnd({ x: startSmart.x, y: startSmart.y });
         setIsMeasuring(true);
       } else {
         // Finish measuring
@@ -281,17 +295,33 @@ export const Canvas = ({
 
     // For other tools, only handle clicks on empty canvas area
     if (e.target === stage) {
-      // Handle drawing tools
-      if (activeTool === 'boundary' || activeTool === 'house' || activeTool === 'paving_area') {
-        // Use smart snap for paving areas
-        const finalSnapped = activeTool === 'paving_area'
-          ? smartSnap(snapped, components)
-          : { ...snapped, snappedTo: null };
+      // Handle drawing tools (polyline)
+      const isPolylineTool =
+        activeTool === 'boundary' ||
+        activeTool === 'house' ||
+        activeTool === 'paving_area' ||
+        activeTool === 'wall' ||
+        activeTool === 'fence' ||
+        activeTool === 'drainage';
 
-        const pointToAdd = { x: finalSnapped.x, y: finalSnapped.y };
+      if (isPolylineTool) {
+        // Smart snap for all polyline tools
+        const smart = smartSnap({ x: canvasX, y: canvasY }, components);
+        let pointToAdd = { x: smart.x, y: smart.y };
+
+        // Apply axis lock commit when Shift is pressed and we have a prior point
+        if (shiftPressed && drawingPoints.length > 0) {
+          const last = drawingPoints[drawingPoints.length - 1];
+          const locked = lockToAxis(last, pointToAdd);
+          pointToAdd = { x: locked.x, y: locked.y };
+        }
 
         // Check if clicking near first point to close
-        if (drawingPoints.length >= 3 && isNearFirstPoint(pointToAdd)) {
+        if (
+          (activeTool === 'boundary' || activeTool === 'house' || activeTool === 'paving_area') &&
+          drawingPoints.length >= 3 &&
+          isNearFirstPoint(pointToAdd)
+        ) {
           // Close the shape
           if (activeTool === 'paving_area') {
             // Show paving dialog instead of creating component directly
@@ -327,8 +357,8 @@ export const Canvas = ({
         setPendingPoolPosition(snapped);
         setShowPoolSelector(true);
       }
-      // Place component if tool is active (not select, hand, or pool)
-      else if (activeTool !== 'hand') {
+      // Place component for one-click tools (keep Paver only)
+      else if (activeTool !== 'hand' && activeTool === 'paver') {
         selectComponent(null);
         handleToolPlace(snapped);
       }
@@ -394,7 +424,7 @@ export const Canvas = ({
     }
   };
 
-  // Finish drawing and create component
+  // Finish drawing and create component(s)
   const finishDrawing = (closed: boolean) => {
     if (drawingPoints.length < 2) {
       setDrawingPoints([]);
@@ -402,31 +432,73 @@ export const Canvas = ({
       return;
     }
 
-    // Calculate area for house
-    let area = 0;
-    if (closed && activeTool === 'house' && drawingPoints.length >= 3) {
-      // Shoelace formula
-      for (let i = 0; i < drawingPoints.length; i++) {
-        const j = (i + 1) % drawingPoints.length;
-        area += drawingPoints[i].x * drawingPoints[j].y;
-        area -= drawingPoints[j].x * drawingPoints[i].y;
+    if (activeTool === 'boundary' || activeTool === 'house') {
+      // Calculate area for house
+      let area = 0;
+      if (closed && activeTool === 'house' && drawingPoints.length >= 3) {
+        // Shoelace formula
+        for (let i = 0; i < drawingPoints.length; i++) {
+          const j = (i + 1) % drawingPoints.length;
+          area += drawingPoints[i].x * drawingPoints[j].y;
+          area -= drawingPoints[j].x * drawingPoints[i].y;
+        }
+        area = Math.abs(area) / 2;
+        // Convert to m² (10 pixels = 100mm = 0.1m, so 1 pixel² = 0.01m²)
+        area = area * 0.01;
       }
-      area = Math.abs(area) / 2;
-      // Convert to m² (10 pixels = 100mm = 0.1m, so 1 pixel² = 0.01m²)
-      area = area * 0.01;
-    }
 
-    addComponent({
-      type: activeTool as 'boundary' | 'house',
-      position: { x: 0, y: 0 },
-      rotation: 0,
-      dimensions: { width: 0, height: 0 },
-      properties: {
-        points: drawingPoints,
-        closed,
-        ...(activeTool === 'house' && { area }),
-      },
-    });
+      addComponent({
+        type: activeTool as 'boundary' | 'house',
+        position: { x: 0, y: 0 },
+        rotation: 0,
+        dimensions: { width: 0, height: 0 },
+        properties: {
+          points: drawingPoints,
+          closed,
+          ...(activeTool === 'house' && { area }),
+        },
+      });
+    } else if (activeTool === 'wall' || activeTool === 'fence' || activeTool === 'drainage') {
+      // Create a single polyline component for the entire drawing
+      if (drawingPoints.length < 2) return;
+      const baseProps: any = { points: drawingPoints };
+      if (activeTool === 'wall') {
+        addComponent({
+          type: 'wall',
+          position: { x: 0, y: 0 },
+          rotation: 0,
+          dimensions: { width: 0, height: 0 },
+          properties: {
+            wallMaterial: 'timber',
+            ...baseProps,
+          },
+        });
+      } else if (activeTool === 'fence') {
+        addComponent({
+          type: 'fence',
+          position: { x: 0, y: 0 },
+          rotation: 0,
+          dimensions: { width: 0, height: 0 },
+          properties: {
+            fenceType: 'glass',
+            gates: [],
+            ...baseProps,
+          },
+        });
+      } else if (activeTool === 'drainage') {
+        addComponent({
+          type: 'drainage',
+          position: { x: 0, y: 0 },
+          rotation: 0,
+          dimensions: { width: 0, height: 0 },
+          properties: {
+            drainageType: 'rock',
+            length: 0,
+            ...baseProps,
+          },
+        });
+      }
+    }
 
     setDrawingPoints([]);
     setIsDrawing(false);
@@ -501,7 +573,14 @@ export const Canvas = ({
 
   // Reset drawing when tool changes
   useEffect(() => {
-    if (activeTool !== 'boundary' && activeTool !== 'house') {
+    if (
+      activeTool !== 'boundary' &&
+      activeTool !== 'house' &&
+      activeTool !== 'paving_area' &&
+      activeTool !== 'wall' &&
+      activeTool !== 'fence' &&
+      activeTool !== 'drainage'
+    ) {
       setDrawingPoints([]);
       setIsDrawing(false);
       setGhostPoint(null);
@@ -625,31 +704,45 @@ export const Canvas = ({
 
     const lines: JSX.Element[] = [];
     const gridSize = GRID_CONFIG.spacing;
-    const width = dimensions.width / zoom;
-    const height = dimensions.height / zoom;
+    const viewW = dimensions.width / zoom;
+    const viewH = dimensions.height / zoom;
+    const offsetX = -pan.x / zoom; // visible content-space left
+    const offsetY = -pan.y / zoom; // visible content-space top
 
-    // Vertical lines
-    for (let i = 0; i < width; i += gridSize) {
-      const isMajor = i % (gridSize * GRID_CONFIG.majorGridEvery) === 0;
+    // Compute grid-aligned start positions
+    const startX = Math.floor(offsetX / gridSize) * gridSize;
+    const endX = offsetX + viewW;
+    const startY = Math.floor(offsetY / gridSize) * gridSize;
+    const endY = offsetY + viewH;
+
+    const majorEvery = GRID_CONFIG.majorGridEvery;
+
+    // Vertical lines across visible rect
+    for (let x = startX; x <= endX; x += gridSize) {
+      const index = Math.round(x / gridSize);
+      const isMajor = ((index % majorEvery) + majorEvery) % majorEvery === 0;
       lines.push(
         <Line
-          key={`v-${i}`}
-          points={[i, 0, i, height]}
+          key={`v-${x}`}
+          points={[x, offsetY, x, offsetY + viewH]}
           stroke={isMajor ? GRID_CONFIG.majorGridColor : GRID_CONFIG.color}
           strokeWidth={isMajor ? 1 : 0.5}
+          listening={false}
         />
       );
     }
 
-    // Horizontal lines
-    for (let i = 0; i < height; i += gridSize) {
-      const isMajor = i % (gridSize * GRID_CONFIG.majorGridEvery) === 0;
+    // Horizontal lines across visible rect
+    for (let y = startY; y <= endY; y += gridSize) {
+      const index = Math.round(y / gridSize);
+      const isMajor = ((index % majorEvery) + majorEvery) % majorEvery === 0;
       lines.push(
         <Line
-          key={`h-${i}`}
-          points={[0, i, width, i]}
+          key={`h-${y}`}
+          points={[offsetX, y, offsetX + viewW, y]}
           stroke={isMajor ? GRID_CONFIG.majorGridColor : GRID_CONFIG.color}
           strokeWidth={isMajor ? 1 : 0.5}
+          listening={false}
         />
       );
     }
@@ -657,157 +750,127 @@ export const Canvas = ({
     return lines;
   };
 
-  // Render ghost preview line for drawing
-  const renderDrawingPreview = () => {
-    if (!isDrawing || !ghostPoint || drawingPoints.length === 0) return null;
+  // Render styled ghost for a single segment depending on tool
+  const renderSegmentGhost = (
+    start: { x: number; y: number },
+    end: { x: number; y: number },
+    tool: string,
+    key?: string
+  ) => {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    if (length < 0.5) return null;
+    const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+    const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+    const label = (length / 100).toFixed(1) + 'm';
 
-    const lastPoint = drawingPoints[drawingPoints.length - 1];
-    const color = activeTool === 'boundary' ? 'hsl(220, 80%, 30%)' : '#92400E'; // Navy blue for boundary
+    // Defaults used for boundary/house/paving_area
+    let content: JSX.Element | null = null;
+    let color = tool === 'boundary' ? 'hsl(220, 80%, 30%)' : '#92400E';
+    let labelColor = color;
 
-    // Calculate distance for measurement
-    const dx = ghostPoint.x - lastPoint.x;
-    const dy = ghostPoint.y - lastPoint.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    const measurementMeters = (distance / 100).toFixed(1);
-    
-    const midPoint = {
-      x: (lastPoint.x + ghostPoint.x) / 2,
-      y: (lastPoint.y + ghostPoint.y) / 2,
-    };
-
-    return (
-      <>
-        {/* Ghost line */}
+    if (tool === 'wall') {
+      const height = 15;
+      const wallColor = WALL_MATERIALS.timber.color;
+      content = (
+        <Group x={start.x} y={start.y} rotation={angle} opacity={0.6} listening={false} key={key}>
+          <Rect x={0} y={-height / 2} width={length} height={height} fill={wallColor} stroke={wallColor} strokeWidth={1} />
+        </Group>
+      );
+      labelColor = wallColor;
+    } else if (tool === 'fence') {
+      const fenceColor = FENCE_TYPES.glass.color;
+      content = (
+        <Group x={start.x} y={start.y} rotation={angle} opacity={0.6} listening={false} key={key}>
+          <Line points={[0, -6, length, -6]} stroke={fenceColor} strokeWidth={2} />
+          <Line points={[0, 6, length, 6]} stroke={fenceColor} strokeWidth={2} />
+        </Group>
+      );
+      labelColor = fenceColor;
+    } else if (tool === 'drainage') {
+      const pxPerMm = GRID_CONFIG.spacing / 100;
+      const d = DRAINAGE_TYPES.rock;
+      const widthPx = d.width * pxPerMm;
+      content = (
+        <Group x={start.x} y={start.y} rotation={angle} opacity={0.6} listening={false} key={key}>
+          <Rect x={0} y={-widthPx / 2} width={length} height={widthPx} fill={d.color} stroke={d.color} strokeWidth={2} />
+        </Group>
+      );
+      labelColor = d.color;
+    } else {
+      // boundary/house/paving_area default line
+      content = (
         <Line
-          points={[lastPoint.x, lastPoint.y, ghostPoint.x, ghostPoint.y]}
+          key={key}
+          points={[start.x, start.y, end.x, end.y]}
           stroke={color}
-          strokeWidth={activeTool === 'boundary' ? 4 : 2}
+          strokeWidth={tool === 'boundary' ? 4 : 2}
           opacity={0.5}
           dash={[5, 5]}
           listening={false}
         />
-        
-        {/* Measurement label for boundary and house */}
-        {(activeTool === 'boundary' || activeTool === 'house') && distance > 10 && (
-          <Label x={midPoint.x} y={midPoint.y - 20}>
-            <Tag
-              fill="white"
-              stroke={color}
-              strokeWidth={1}
-              cornerRadius={3}
-              pointerDirection="down"
-              pointerWidth={6}
-              pointerHeight={6}
-            />
-            <Text
-              text={`${measurementMeters}m`}
-              fontSize={14}
-              fontStyle="bold"
-              fill={color}
-              padding={4}
-              align="center"
-            />
-          </Label>
-        )}
-        
-        {/* Snap indicator */}
-        <Circle
-          x={ghostPoint.x}
-          y={ghostPoint.y}
-          radius={5}
-          fill="#3B82F6"
-          opacity={0.6}
-          listening={false}
-        />
+      );
+    }
 
-        {/* Close indicator if near first point */}
-        {drawingPoints.length >= 3 && isNearFirstPoint(ghostPoint) && (
-          <Circle
-            x={drawingPoints[0].x}
-            y={drawingPoints[0].y}
-            radius={20}
-            stroke="#10B981"
-            strokeWidth={2}
-            opacity={0.5}
-            listening={false}
-          />
+    return (
+      <>
+        {content}
+        {length > 10 && (
+          <Label x={mid.x} y={mid.y - 20} listening={false}>
+            <Tag fill="white" stroke={labelColor} strokeWidth={1} cornerRadius={3} pointerDirection="down" pointerWidth={6} pointerHeight={6} />
+            <Text text={label} fontSize={14} fontStyle="bold" fill={labelColor} padding={4} align="center" />
+          </Label>
         )}
       </>
     );
   };
 
-  // Render points being drawn
-  const renderDrawingPoints = () => {
-    if (!isDrawing || drawingPoints.length === 0) return null;
+  // Render ghost preview for drawing (all polyline tools)
+  const renderDrawingPreview = () => {
+    if (!isDrawing || !ghostPoint || drawingPoints.length === 0) return null;
 
-    const color = activeTool === 'boundary' ? 'hsl(220, 80%, 30%)' : '#92400E'; // Navy blue for boundary
-    const flatPoints: number[] = [];
-    drawingPoints.forEach(p => {
-      flatPoints.push(p.x, p.y);
-    });
+    const lastPoint = drawingPoints[drawingPoints.length - 1];
+    const isClosedCandidate = (activeTool === 'boundary' || activeTool === 'house' || activeTool === 'paving_area');
 
     return (
       <>
-        {/* Lines connecting points */}
-        <Line
-          points={flatPoints}
-          stroke={color}
-          strokeWidth={activeTool === 'boundary' ? 4 : 2}
-          dash={activeTool === 'boundary' ? [10, 5] : undefined}
-          listening={false}
-        />
-        
-        {/* Segment measurements for boundary, house, and paving area */}
-        {(activeTool === 'boundary' || activeTool === 'house' || activeTool === 'paving_area') && drawingPoints.map((point, index) => {
-          if (index === 0) return null;
-          const prevPoint = drawingPoints[index - 1];
-          const dx = point.x - prevPoint.x;
-          const dy = point.y - prevPoint.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          const measurementMeters = (distance / 100).toFixed(1);
-          const midPoint = {
-            x: (prevPoint.x + point.x) / 2,
-            y: (prevPoint.y + point.y) / 2,
-          };
-          
-          return (
-            <Label key={`measurement-${index}`} x={midPoint.x} y={midPoint.y - 20}>
-              <Tag
-                fill="white"
-                stroke={color}
-                strokeWidth={1}
-                cornerRadius={3}
-                pointerDirection="down"
-                pointerWidth={6}
-                pointerHeight={6}
-              />
-              <Text
-                text={`${measurementMeters}m`}
-                fontSize={14}
-                fontStyle="bold"
-                fill={color}
-                padding={4}
-                align="center"
-              />
-            </Label>
-          );
-        })}
-        
-        {/* Points */}
+        {renderSegmentGhost(lastPoint, ghostPoint, activeTool)}
+        {/* Snap indicator */}
+        <Circle x={ghostPoint.x} y={ghostPoint.y} radius={5} fill="#3B82F6" opacity={0.6} listening={false} />
+
+        {/* Close indicator if near first point (only for closeable tools) */}
+        {isClosedCandidate && drawingPoints.length >= 3 && isNearFirstPoint(ghostPoint) && (
+          <Circle x={drawingPoints[0].x} y={drawingPoints[0].y} radius={20} stroke="#10B981" strokeWidth={2} opacity={0.5} listening={false} />
+        )}
+      </>
+    );
+  };
+
+  // Render points and already-placed segments during drawing
+  const renderDrawingPoints = () => {
+    if (!isDrawing || drawingPoints.length === 0) return null;
+
+    const items: JSX.Element[] = [];
+    for (let i = 1; i < drawingPoints.length; i++) {
+      items.push(
+        <>
+          {renderSegmentGhost(drawingPoints[i - 1], drawingPoints[i], activeTool, `sg-${i}`)}
+        </>
+      );
+    }
+
+    // Points
+    const pointColor = activeTool === 'boundary' ? 'hsl(220, 80%, 30%)' : '#92400E';
+    items.push(
+      <>
         {drawingPoints.map((point, index) => (
-          <Circle
-            key={`drawing-point-${index}`}
-            x={point.x}
-            y={point.y}
-            radius={5}
-            fill={color}
-            stroke="#fff"
-            strokeWidth={2}
-            listening={false}
-          />
+          <Circle key={`drawing-point-${index}`} x={point.x} y={point.y} radius={5} fill={pointColor} stroke="#fff" strokeWidth={2} listening={false} />
         ))}
       </>
     );
+
+    return <>{items}</>;
   };
 
   
@@ -828,6 +891,21 @@ export const Canvas = ({
           opacity={0.7}
           listening={false}
         />
+        {/* Measurement label */}
+        {(() => {
+          const mx = (measureStart.x + measureEnd.x) / 2;
+          const my = (measureStart.y + measureEnd.y) / 2;
+          const dx = measureEnd.x - measureStart.x;
+          const dy = measureEnd.y - measureStart.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const measurementMeters = (distance / 100).toFixed(1);
+          return (
+            <Label x={mx} y={my - 20} listening={false}>
+              <Tag fill="white" stroke={color} strokeWidth={1} cornerRadius={3} pointerDirection="down" pointerWidth={6} pointerHeight={6} />
+              <Text text={`${measurementMeters}m`} fontSize={14} fontStyle="bold" fill={color} padding={4} align="center" />
+            </Label>
+          );
+        })()}
         
         {/* Start point */}
         <Circle
@@ -878,18 +956,12 @@ export const Canvas = ({
           {renderDrawingPreview()}
           
           
-          {/* Render all components - measurement tools rendered last to appear on top */}
+          {/* Render all components in fixed type-based order */}
           {(() => {
-            // Separate components into regular and measurement types
-            const regularComponents = components.filter(c => 
-              c.type !== 'reference_line' && c.type !== 'quick_measure'
-            );
-            const measurementComponents = components.filter(c => 
-              c.type === 'reference_line' || c.type === 'quick_measure'
-            );
-            
-            // Render regular components first, then measurements on top
-            return [...regularComponents, ...measurementComponents].map((component) => {
+            // Sort components by render order (pavers -> pools -> walls -> ... -> measurements)
+            const sortedComponents = sortComponentsByRenderOrder(components);
+
+            return sortedComponents.map((component) => {
               const isSelected = component.id === selectedComponentId;
               
               switch (component.type) {
@@ -962,9 +1034,59 @@ export const Canvas = ({
                           },
                         });
                       }}
+                      onReplicateLeft={(cols) => {
+                        const base = component.properties.paverCount || { rows: 1, cols: 1 };
+                        const safe = {
+                          rows: Math.max(1, Number(base.rows) || 1),
+                          cols: Math.max(1, Number(cols) || 1),
+                        };
+                        const sizeKey = (component.properties.paverSize || '400x400') as keyof typeof PAVER_SIZES;
+                        const size = PAVER_SIZES[sizeKey];
+                        const additionalCols = safe.cols - base.cols;
+                        const scale = 0.1;
+                        updateComponent(component.id, {
+                          position: {
+                            x: component.position.x - (additionalCols * size.width * scale),
+                            y: component.position.y,
+                          },
+                          properties: {
+                            ...component.properties,
+                            paverCount: safe,
+                          },
+                          dimensions: {
+                            width: safe.cols * size.width,
+                            height: safe.rows * size.height,
+                          },
+                        });
+                      }}
+                      onReplicateTop={(rows) => {
+                        const base = component.properties.paverCount || { rows: 1, cols: 1 };
+                        const safe = {
+                          rows: Math.max(1, Number(rows) || 1),
+                          cols: Math.max(1, Number(base.cols) || 1),
+                        };
+                        const sizeKey = (component.properties.paverSize || '400x400') as keyof typeof PAVER_SIZES;
+                        const size = PAVER_SIZES[sizeKey];
+                        const additionalRows = safe.rows - base.rows;
+                        const scale = 0.1;
+                        updateComponent(component.id, {
+                          position: {
+                            x: component.position.x,
+                            y: component.position.y - (additionalRows * size.height * scale),
+                          },
+                          properties: {
+                            ...component.properties,
+                            paverCount: safe,
+                          },
+                          dimensions: {
+                            width: safe.cols * size.width,
+                            height: safe.rows * size.height,
+                          },
+                        });
+                      }}
                     />
                   );
-                  
+
                 case 'drainage':
                   return (
                     <DrainageComponent

@@ -107,6 +107,45 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
     return [...base, ...extensionPavers];
   }, [baseCopingPavers, extensionPavers, deletedPaverIds, deletedRows]);
 
+  // Calculate bounding box including pool and coping (if enabled)
+  const clickableBounds = useMemo(() => {
+    if (!showCoping || allPavers.length === 0) {
+      // No coping - just use pool dimensions
+      return {
+        x: -10,
+        y: -10,
+        width: poolData.length * scale + 20,
+        height: poolData.width * scale + 20,
+      };
+    }
+
+    // Calculate bounds from all coping pavers
+    let minX = 0;
+    let minY = 0;
+    let maxX = poolData.length * scale;
+    let maxY = poolData.width * scale;
+
+    allPavers.forEach(paver => {
+      const paverMinX = paver.x * scale;
+      const paverMinY = paver.y * scale;
+      const paverMaxX = paverMinX + paver.width * scale;
+      const paverMaxY = paverMinY + paver.height * scale;
+
+      minX = Math.min(minX, paverMinX);
+      minY = Math.min(minY, paverMinY);
+      maxX = Math.max(maxX, paverMaxX);
+      maxY = Math.max(maxY, paverMaxY);
+    });
+
+    // Add padding for easier clicking
+    return {
+      x: minX - 10,
+      y: minY - 10,
+      width: maxX - minX + 20,
+      height: maxY - minY + 20,
+    };
+  }, [showCoping, allPavers, poolData.length, poolData.width, scale]);
+
   const handleDragEnd = (e: any) => {
     const newPos = { x: e.target.x(), y: e.target.y() };
     
@@ -364,6 +403,15 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
         onTap={onSelect}
         onDragEnd={handleDragEnd}
       >
+        {/* Invisible hit area covering pool + coping */}
+        <Rect
+          x={clickableBounds.x}
+          y={clickableBounds.y}
+          width={clickableBounds.width}
+          height={clickableBounds.height}
+          fill="transparent"
+        />
+
         {/* Render coping pavers with selection capability */}
         {showCoping && isSelected && allPavers.map(paver => (
           <CopingPaverComponent
@@ -495,13 +543,13 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd }: Po
           rotation={-component.rotation}
         />
 
-        {/* Selection border */}
+        {/* Selection border - matches clickable bounds */}
         {isSelected && (
           <Rect
-            x={-10}
-            y={-10}
-            width={poolData.length * scale + 20}
-            height={poolData.width * scale + 20}
+            x={clickableBounds.x}
+            y={clickableBounds.y}
+            width={clickableBounds.width}
+            height={clickableBounds.height}
             stroke="#3B82F6"
             strokeWidth={2}
             dash={[10, 5]}

@@ -127,6 +127,7 @@ export const HouseComponent = ({
         strokeWidth={3}
         lineCap="round"
         lineJoin="round"
+        hitStrokeWidth={10}
       />
 
       {/* Selection indicators - show points */}

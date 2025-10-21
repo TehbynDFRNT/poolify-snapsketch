@@ -50,6 +50,7 @@ export const ReferenceLineComponent: React.FC<Props> = ({
         dash={style.dashed ? [10, 5] : []}
         opacity={component.properties.temporary ? 0.8 : 1}
         listening={!component.properties.temporary}
+        hitStrokeWidth={8}
       />
 
       {/* Arrow caps */}

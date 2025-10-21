@@ -74,8 +74,36 @@ export const PavingAreaComponent = ({ component, isSelected, onSelect, onDelete 
     }
   }, [statistics, component.id, component.properties, updateComponent]);
 
+  // Calculate bounding box for invisible hit area
+  const boundingBox = useMemo(() => {
+    if (boundary.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
+
+    const xCoords = boundary.map(p => p.x);
+    const yCoords = boundary.map(p => p.y);
+    const minX = Math.min(...xCoords);
+    const maxX = Math.max(...xCoords);
+    const minY = Math.min(...yCoords);
+    const maxY = Math.max(...yCoords);
+
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+    };
+  }, [boundary]);
+
   return (
-    <Group onClick={onSelect}>
+    <Group onClick={onSelect} onTap={onSelect}>
+      {/* Invisible hit area covering full polygon bounds */}
+      <Rect
+        x={boundingBox.x}
+        y={boundingBox.y}
+        width={boundingBox.width}
+        height={boundingBox.height}
+        fill="transparent"
+      />
+
       {/* Pavers with clipping - render first */}
       <Group
         clipFunc={(ctx) => {
@@ -137,7 +165,7 @@ export const PavingAreaComponent = ({ component, isSelected, onSelect, onDelete 
         strokeWidth={3}
         dash={[10, 5]}
         closed={true}
-        listening={false}
+        hitStrokeWidth={15}
       />
 
       {/* Delete button when selected */}

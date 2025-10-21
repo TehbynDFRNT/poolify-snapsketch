@@ -118,6 +118,7 @@ export const BoundaryComponent = ({
         dash={[10, 5]}
         lineCap="round"
         lineJoin="round"
+        hitStrokeWidth={10}
       />
 
       {/* Selection indicators - show points */}
