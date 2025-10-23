@@ -43,6 +43,24 @@ export function fillAreaWithPavers(
   showEdgePavers: boolean,
   poolExcludeZones: PoolExcludeZone[] = []
 ): Paver[] {
+  return fillAreaWithPaversFromOrigin(boundary, paverSize, paverOrientation, showEdgePavers, poolExcludeZones);
+}
+
+/**
+ * Fill a polygon area with a rect grid, allowing a custom origin so the grid can
+ * align with an external reference (e.g., pool coping grid).
+ */
+export function fillAreaWithPaversFromOrigin(
+  boundary: Point[],
+  paverSize: '400x400' | '400x600',
+  paverOrientation: 'vertical' | 'horizontal',
+  showEdgePavers: boolean,
+  poolExcludeZones: PoolExcludeZone[] = [],
+  origin?: { x?: number; y?: number },
+  groutMm: number = 0,
+  seamX: number[] = [],
+  seamY: number[] = []
+): Paver[] {
   const pavers: Paver[] = [];
   
   // Get paver dimensions (mm) and convert to canvas pixels
@@ -50,33 +68,51 @@ export function fillAreaWithPavers(
   const pxPerMm = GRID_CONFIG.spacing / 100; // 10px per 100mm => 0.1 px/mm
   const paverWidth = paverWidthMm * pxPerMm;
   const paverHeight = paverHeightMm * pxPerMm;
+  const stepX = (paverWidthMm + groutMm) * pxPerMm;
+  const stepY = (paverHeightMm + groutMm) * pxPerMm;
   
   // Get bounding box (canvas pixels)
   const bbox = getBoundingBox(boundary);
   
   // Calculate grid counts using pixel sizes - add extra row/col to catch edge pavers
-  const cols = Math.ceil(bbox.width / paverWidth) + 1;
-  const rows = Math.ceil(bbox.height / paverHeight) + 1;
-  
-  // Create grid
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const x = bbox.minX + (col * paverWidth);
-      const y = bbox.minY + (row * paverHeight);
+  // Align start to origin (if provided), otherwise to bbox min
+  const xOrigin = origin?.x ?? bbox.minX;
+  const yOrigin = origin?.y ?? bbox.minY;
+  // Choose starting grid line just before bbox.min
+  const startX = xOrigin + Math.floor((bbox.minX - xOrigin) / stepX) * stepX;
+  const startY = yOrigin + Math.floor((bbox.minY - yOrigin) / stepY) * stepY;
+
+  // Build grid lines including optional seam lines
+  const endX = bbox.maxX + stepX * 2;
+  const endY = bbox.maxY + stepY * 2;
+  const xLinesSet = new Set<number>();
+  for (let x = startX; x <= endX; x += stepX) xLinesSet.add(roundPx(x));
+  seamX.forEach((sx) => { if (sx >= startX - stepX && sx <= endX + stepX) xLinesSet.add(roundPx(sx)); });
+  const yLinesSet = new Set<number>();
+  for (let y = startY; y <= endY; y += stepY) yLinesSet.add(roundPx(y));
+  seamY.forEach((sy) => { if (sy >= startY - stepY && sy <= endY + stepY) yLinesSet.add(roundPx(sy)); });
+
+  const xLines = Array.from(xLinesSet).sort((a, b) => a - b);
+  const yLines = Array.from(yLinesSet).sort((a, b) => a - b);
+
+  // Create grid cells from lines
+  for (let r = 0; r < yLines.length - 1; r++) {
+    for (let c = 0; c < xLines.length - 1; c++) {
+      const x = xLines[c];
+      const y = yLines[r];
+      const cellW = xLines[c + 1] - x;
+      const cellH = yLines[r + 1] - y;
       
       // Check corners to determine if paver overlaps boundary
       const corners = [
         { x, y },
-        { x: x + paverWidth, y },
-        { x: x + paverWidth, y: y + paverHeight },
-        { x, y: y + paverHeight },
+        { x: x + cellW, y },
+        { x: x + cellW, y: y + cellH },
+        { x, y: y + cellH },
       ];
       
       // Check center point too
-      const paverCenter = {
-        x: x + paverWidth / 2,
-        y: y + paverHeight / 2,
-      };
+      const paverCenter = { x: x + cellW / 2, y: y + cellH / 2 };
       
       // Check paver against OUTER boundary first
       const cornersInside = corners.filter(corner => isPointInPolygon(corner, boundary));
@@ -113,10 +149,10 @@ export function fillAreaWithPavers(
       // Only add if showing edge pavers OR it's a full paver
       if (showEdgePavers || !isEdge) {
         pavers.push({
-          id: `paver-${row}-${col}`,
+          id: `paver-${r}-${c}`,
           position: { x, y },
-          width: paverWidth,
-          height: paverHeight,
+          width: cellW,
+          height: cellH,
           isEdgePaver: isEdge,
           cutPercentage,
           mmWidth: paverWidthMm,
@@ -392,3 +428,7 @@ function calculatePolygonArea(points: Point[]): number {
   return Math.abs(area / 2);
 }
 
+// Small helper to reduce floating line duplicates
+function roundPx(v: number): number {
+  return Math.round(v * 1000) / 1000; // 0.001 px precision
+}

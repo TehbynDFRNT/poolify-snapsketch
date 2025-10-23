@@ -460,12 +460,6 @@ const PropertiesContent = ({
                         Area: {component.properties.copingCalculation.totalArea.toFixed(2)} m²
                       </div>
                     </div>
-                    
-                    <div className="p-2 bg-blue-50 dark:bg-blue-950/30 rounded-md border border-blue-200 dark:border-blue-800">
-                      <p className="text-[10px] text-blue-700 dark:text-blue-300 leading-tight">
-                        💡 Click individual pavers to select, Ctrl/Cmd+Click for multiple, then drag to extend
-                      </p>
-                    </div>
                   </>
                 )}
               </div>

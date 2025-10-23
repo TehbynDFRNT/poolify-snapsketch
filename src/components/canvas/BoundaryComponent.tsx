@@ -1,11 +1,15 @@
 import { Group, Line, Circle, Text } from 'react-konva';
 import { Component } from '@/types';
+import { useEffect, useRef, useState } from 'react';
+import { useDesignStore } from '@/store/designStore';
+import { GRID_CONFIG } from '@/constants/grid';
 
 interface BoundaryComponentProps {
   component: Component;
   isSelected: boolean;
   onSelect: () => void;
   onDragEnd?: (pos: { x: number; y: number }) => void;
+  onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
 }
 
 export const BoundaryComponent = ({
@@ -13,43 +17,88 @@ export const BoundaryComponent = ({
   isSelected,
   onSelect,
   onDragEnd,
+  onContextMenu,
 }: BoundaryComponentProps) => {
   const points = component.properties.points || [];
   const closed = component.properties.closed || false;
 
+  const groupRef = useRef<any>(null);
+  const updateComponent = useDesignStore((s) => s.updateComponent);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [ghostLocal, setGhostLocal] = useState<Array<{ x: number; y: number }> | null>(null);
+  const [shiftPressed, setShiftPressed] = useState(false);
+  const dragStartPos = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftPressed(true);
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftPressed(false);
+    };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+    };
+  }, []);
+
+  const handleRightClick = (e: any) => {
+    e.evt.preventDefault();
+    if (onContextMenu) {
+      const stage = e.target.getStage();
+      const pointerPos = stage.getPointerPosition();
+      onContextMenu(component, { x: pointerPos.x, y: pointerPos.y });
+    }
+  };
+
   if (points.length < 2) return null;
 
-  // Convert points array to flat array for Konva Line
-  const flatPoints: number[] = [];
-  points.forEach((p) => {
-    flatPoints.push(p.x, p.y);
-  });
+  // Compute local points (relative to group position)
+  const localPts = ghostLocal
+    ? ghostLocal
+    : points.map((p) => ({ x: p.x - component.position.x, y: p.y - component.position.y }));
 
-  // If closed, add first point again
-  if (closed && points.length > 0) {
-    flatPoints.push(points[0].x, points[0].y);
+  // Convert local points to flat array for Konva Line
+  const flatLocalPoints: number[] = [];
+  localPts.forEach((p) => {
+    flatLocalPoints.push(p.x, p.y);
+  });
+  // If closed, add first local point again to close the loop visually
+  if (closed && localPts.length > 0) {
+    flatLocalPoints.push(localPts[0].x, localPts[0].y);
   }
 
-  // Calculate segment measurements
+  const toLocalFromAbs = (abs: { x: number; y: number }) => {
+    const group = groupRef.current;
+    if (!group) return abs;
+    const tr = group.getAbsoluteTransform().copy();
+    const inv = tr.copy().invert();
+    return inv.point(abs);
+  };
+  const toAbsFromLocal = (local: { x: number; y: number }) => {
+    const group = groupRef.current;
+    if (!group) return local;
+    const tr = group.getAbsoluteTransform().copy();
+    return tr.point(local);
+  };
+
+  // Calculate segment measurements using local coordinates
   const renderMeasurements = () => {
     const measurements: JSX.Element[] = [];
-    
-    for (let i = 0; i < points.length - 1; i++) {
-      const p1 = points[i];
-      const p2 = points[i + 1];
-      
-      const midX = (p1.x + p2.x) / 2;
-      const midY = (p1.y + p2.y) / 2;
-      
-      // Calculate length in meters (grid scale: 10 pixels = 100mm = 0.1m)
-      const dx = p2.x - p1.x;
-      const dy = p2.y - p1.y;
-      const lengthInMM = Math.sqrt(dx * dx + dy * dy) * 10;
+    const n = localPts.length;
+
+    const addMeasure = (a: { x: number; y: number }, b: { x: number; y: number }, key: string) => {
+      const midX = (a.x + b.x) / 2;
+      const midY = (a.y + b.y) / 2;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const lengthInMM = Math.sqrt(dx * dx + dy * dy) * 10; // 1px = 10mm
       const lengthInMeters = (lengthInMM / 1000).toFixed(1);
-      
       measurements.push(
         <Text
-          key={`measurement-${i}`}
+          key={`measurement-${key}`}
           x={midX}
           y={midY - 15}
           text={`${lengthInMeters}m`}
@@ -60,59 +109,81 @@ export const BoundaryComponent = ({
           listening={false}
         />
       );
+    };
+
+    for (let i = 0; i < n - 1; i++) {
+      addMeasure(localPts[i], localPts[i + 1], `${i}`);
     }
-    
-    // Add measurement for closing segment if closed
-    if (closed && points.length > 2) {
-      const p1 = points[points.length - 1];
-      const p2 = points[0];
-      
-      const midX = (p1.x + p2.x) / 2;
-      const midY = (p1.y + p2.y) / 2;
-      
-      const dx = p2.x - p1.x;
-      const dy = p2.y - p1.y;
-      const lengthInMM = Math.sqrt(dx * dx + dy * dy) * 10;
-      const lengthInMeters = (lengthInMM / 1000).toFixed(1);
-      
-      measurements.push(
-        <Text
-          key={`measurement-close`}
-          x={midX}
-          y={midY - 15}
-          text={`${lengthInMeters}m`}
-          fontSize={14}
-          fill="#1F2937"
-          align="center"
-          offsetX={20}
-          listening={false}
-        />
-      );
+    if (closed && n > 2) {
+      addMeasure(localPts[n - 1], localPts[0], 'close');
     }
-    
     return measurements;
+  };
+
+  // Ghost overlay for adjacent segments while dragging a node
+  const renderGhostOverlay = () => {
+    if (dragIndex == null || !ghostLocal) return null;
+    const n = localPts.length;
+    const color = '#1e3a8a';
+
+    const segs: Array<[number, number]> = [];
+    if (n >= 2) {
+      const prev = dragIndex - 1 >= 0 ? dragIndex - 1 : (closed ? n - 1 : -1);
+      const next = dragIndex + 1 < n ? dragIndex + 1 : (closed ? 0 : -1);
+      if (prev >= 0) segs.push([prev, dragIndex]);
+      if (next >= 0) segs.push([dragIndex, next]);
+    }
+
+    return (
+      <>
+        {segs.map(([ai, bi], k) => {
+          const a = localPts[ai];
+          const b = localPts[bi];
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const midX = (a.x + b.x) / 2;
+          const midY = (a.y + b.y) / 2;
+          const mm = Math.sqrt(dx * dx + dy * dy) * 10;
+          const meters = (mm / 1000).toFixed(1);
+          return (
+            <Group key={`ghost-${k}`}>
+              <Line points={[a.x, a.y, b.x, b.y]} stroke={color} strokeWidth={3} dash={[8, 6]} opacity={0.8} />
+              <Text x={midX} y={midY - 18} text={`${meters}m`} fontSize={13} fill="#1F2937" align="center" offsetX={20} listening={false} />
+            </Group>
+          );
+        })}
+      </>
+    );
   };
 
   return (
     <Group
+      ref={groupRef}
       x={component.position.x}
       y={component.position.y}
       rotation={component.rotation}
-      draggable={isSelected}
+      draggable={isSelected && !shiftPressed}
       onClick={onSelect}
       onTap={onSelect}
+      onContextMenu={handleRightClick}
+      onDragStart={() => {
+        dragStartPos.current = { x: component.position.x, y: component.position.y };
+      }}
       onDragEnd={(e) => {
-        if (onDragEnd) {
-          onDragEnd({
-            x: e.target.x(),
-            y: e.target.y(),
-          });
-        }
+        const spacing = GRID_CONFIG.spacing;
+        const newX = Math.round(e.target.x() / spacing) * spacing;
+        const newY = Math.round(e.target.y() / spacing) * spacing;
+        const start = dragStartPos.current || { x: component.position.x, y: component.position.y };
+        const dx = newX - start.x;
+        const dy = newY - start.y;
+        const translated = points.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+        updateComponent(component.id, { position: { x: newX, y: newY }, properties: { ...component.properties, points: translated } });
+        dragStartPos.current = null;
       }}
     >
-      {/* Main boundary line */}
+      {/* Main boundary line (local coords) */}
       <Line
-        points={flatPoints}
+        points={flatLocalPoints}
         stroke="#1e3a8a"
         strokeWidth={3}
         dash={[10, 5]}
@@ -121,8 +192,11 @@ export const BoundaryComponent = ({
         hitStrokeWidth={10}
       />
 
-      {/* Selection indicators - show points */}
-      {isSelected && points.map((point, index) => (
+      {/* Ghost dashed overlay + length label while dragging a node */}
+      {renderGhostOverlay()}
+
+      {/* Selection indicators + draggable anchors (Shift to edit) */}
+      {isSelected && localPts.map((point, index) => (
         <Circle
           key={`point-${index}`}
           x={point.x}
@@ -131,6 +205,43 @@ export const BoundaryComponent = ({
           fill="#1e3a8a"
           stroke="#3b82f6"
           strokeWidth={2}
+          draggable={shiftPressed}
+          onMouseDown={() => {
+            setDragIndex(index);
+            setGhostLocal(localPts);
+          }}
+          dragBoundFunc={(pos) => {
+            const s = GRID_CONFIG.spacing;
+            const local = toLocalFromAbs(pos);
+            const snappedLocal = { x: Math.round(local.x / s) * s, y: Math.round(local.y / s) * s };
+            return toAbsFromLocal(snappedLocal) as any;
+          }}
+          onDragMove={(e) => {
+            e.cancelBubble = true;
+            if (dragIndex == null) return;
+            const s = GRID_CONFIG.spacing;
+            const abs = e.target.getAbsolutePosition();
+            const local = toLocalFromAbs(abs);
+            const x = Math.round(local.x / s) * s;
+            const y = Math.round(local.y / s) * s;
+            const copy = localPts.slice();
+            copy[dragIndex] = { x, y };
+            setGhostLocal(copy);
+          }}
+          onDragEnd={(e) => {
+            e.cancelBubble = true;
+            const s = GRID_CONFIG.spacing;
+            const abs = e.target.getAbsolutePosition();
+            const local = toLocalFromAbs(abs);
+            const x = Math.round(local.x / s) * s;
+            const y = Math.round(local.y / s) * s;
+            const updated = localPts.slice();
+            if (dragIndex != null) updated[dragIndex] = { x, y };
+            const absPts = updated.map((p) => ({ x: p.x + component.position.x, y: p.y + component.position.y }));
+            updateComponent(component.id, { properties: { ...component.properties, points: absPts } });
+            setDragIndex(null);
+            setGhostLocal(null);
+          }}
         />
       ))}
 

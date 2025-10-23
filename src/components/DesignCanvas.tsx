@@ -99,7 +99,6 @@ export const DesignCanvas = () => {
       if (e.key === 'f' || e.key === 'F') setActiveTool('fence');
       if (e.key === 'w' || e.key === 'W') setActiveTool('wall');
       if (e.key === 'm' || e.key === 'M') setActiveTool('quick_measure');
-      if (e.key === 'r' || e.key === 'R') setActiveTool('reference_line');
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -395,6 +394,7 @@ export const DesignCanvas = () => {
           activeTool={activeTool}
           onZoomChange={handleZoomChange}
           onDrawingStateChange={handleDrawingStateChange}
+          onToolChange={handleToolChange}
         />
       </main>
 

@@ -126,12 +126,67 @@ export const smartSnap = (
       pointsToCheck.push(...component.properties.boundary);
     }
 
+    // Extract pool outline vertices
+    if (component.type === 'pool' && component.properties.pool) {
+      const pool = component.properties.pool;
+      const scale = 0.1; // mm to canvas pixels
+      const outline = pool.outline || [];
+
+      outline.forEach((p: { x: number; y: number }) => {
+        // Scale and transform by component position/rotation
+        const scaledX = p.x * scale;
+        const scaledY = p.y * scale;
+
+        // Apply rotation if present
+        const rotation = component.rotation || 0;
+        const cos = Math.cos((rotation * Math.PI) / 180);
+        const sin = Math.sin((rotation * Math.PI) / 180);
+
+        const rotatedX = scaledX * cos - scaledY * sin;
+        const rotatedY = scaledX * sin + scaledY * cos;
+
+        // Apply position offset
+        pointsToCheck.push({
+          x: component.position.x + rotatedX,
+          y: component.position.y + rotatedY,
+        });
+      });
+    }
+
+    // Extract rectangular component corners (pavers, single-segment fences/walls/drainage)
+    // Skip pools as they're handled above with their outline
+    if (component.type !== 'pool' && !component.properties.points && !component.properties.boundary && component.dimensions) {
+      const { width, height } = component.dimensions;
+      const rotation = component.rotation || 0;
+      const cos = Math.cos((rotation * Math.PI) / 180);
+      const sin = Math.sin((rotation * Math.PI) / 180);
+
+      // Four corners of rectangle (before rotation)
+      const corners = [
+        { x: 0, y: 0 },
+        { x: width, y: 0 },
+        { x: width, y: height },
+        { x: 0, y: height },
+      ];
+
+      // Rotate and translate each corner
+      corners.forEach(corner => {
+        const rotatedX = corner.x * cos - corner.y * sin;
+        const rotatedY = corner.x * sin + corner.y * cos;
+
+        pointsToCheck.push({
+          x: component.position.x + rotatedX,
+          y: component.position.y + rotatedY,
+        });
+      });
+    }
+
     // Check distance to each point
     pointsToCheck.forEach(p => {
       const distance = Math.sqrt(
         Math.pow(point.x - p.x, 2) + Math.pow(point.y - p.y, 2)
       );
-      
+
       if (distance < minDistance) {
         minDistance = distance;
         closestPoint = p;

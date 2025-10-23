@@ -1,7 +1,7 @@
 import { Group, Line, Rect, Circle, Text } from 'react-konva';
 import { Component } from '@/types';
 import { FENCE_TYPES } from '@/constants/components';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
 
@@ -11,6 +11,7 @@ interface FenceComponentProps {
   onSelect: () => void;
   onDragEnd: (pos: { x: number; y: number }) => void;
   onExtend?: (length: number) => void;
+  onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
 }
 
 export const FenceComponent = ({
@@ -19,8 +20,11 @@ export const FenceComponent = ({
   onSelect,
   onDragEnd,
   onExtend,
+  onContextMenu,
 }: FenceComponentProps) => {
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
+  const [selectedSeg, setSelectedSeg] = useState<{ run: number; seg: number } | null>(null);
+  const [hoverSeg, setHoverSeg] = useState<{ run: number; seg: number } | null>(null);
 
   const groupRef = useRef<any>(null);
 
@@ -30,7 +34,34 @@ export const FenceComponent = ({
   const length = (component.dimensions.width || 2400);
 
   const color = fenceData.color;
+  const metalColor = FENCE_TYPES.metal.color;
   const strokeWidth = fenceType === 'glass' ? 2 : 4;
+  const railGapPx = fenceType === 'glass' ? 8 : 5; // 80mm for glass, 50mm for flat-top metal
+
+  // mm->px at current scale (1:100 => 10px = 100mm)
+  const mmToPx = (mm: number) => mm / 10;
+  // Partitioning configs
+  const GLASS_CFG = {
+    pref: mmToPx(1400),
+    min: mmToPx(340),
+    max: mmToPx(2000),
+    gap: mmToPx(80),
+    startGap: mmToPx(80),
+    endGap: mmToPx(80),
+  };
+  const METAL_CFG = {
+    pref: mmToPx(2000),
+    min: mmToPx(200),
+    max: mmToPx(2500),
+    gap: mmToPx(50),
+    startGap: mmToPx(50),
+    endGap: mmToPx(50),
+    postSize: 12,
+  };
+
+  // Visual thicknesses (scale-accurate mm)
+  const glassPaneStrokeWidth = mmToPx(40); // 40mm glass pane thickness
+  const metalBandStrokeWidth = mmToPx(30); // 30mm flat-top metal band thickness
 
   // Polyline mode
   const polyPoints: Array<{ x: number; y: number }> = component.properties.points || [];
@@ -39,9 +70,76 @@ export const FenceComponent = ({
   const updateComponent = useDesignStore((s) => s.updateComponent);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [ghostLocal, setGhostLocal] = useState<Array<{ x: number; y: number }> | null>(null);
+  const [shiftPressed, setShiftPressed] = useState(false);
+  const dragStartPos = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftPressed(true);
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftPressed(false);
+    };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+    };
+  }, []);
+
+  // Helpers for offsetting a polyline by a constant distance
+  const len = (v: { x: number; y: number }) => Math.hypot(v.x, v.y);
+  const norm = (v: { x: number; y: number }) => {
+    const l = len(v) || 1;
+    return { x: v.x / l, y: v.y / l };
+  };
+  const sub = (a: { x: number; y: number }, b: { x: number; y: number }) => ({ x: a.x - b.x, y: a.y - b.y });
+  const add = (a: { x: number; y: number }, b: { x: number; y: number }) => ({ x: a.x + b.x, y: a.y + b.y });
+  const mul = (v: { x: number; y: number }, s: number) => ({ x: v.x * s, y: v.y * s });
+  const perp = (v: { x: number; y: number }) => ({ x: -v.y, y: v.x });
+  const dot = (a: { x: number; y: number }, b: { x: number; y: number }) => a.x * b.x + a.y * b.y;
+
+  const offsetPolyline = (pts: Array<{ x: number; y: number }>, offset: number) => {
+    const n = pts.length;
+    if (n < 2) return pts.slice();
+    const out: Array<{ x: number; y: number }> = new Array(n);
+    for (let i = 0; i < n; i++) {
+      if (i === 0) {
+        const t = norm(sub(pts[1], pts[0]));
+        const nrm = perp(t);
+        out[i] = add(pts[i], mul(nrm, offset));
+      } else if (i === n - 1) {
+        const t = norm(sub(pts[i], pts[i - 1]));
+        const nrm = perp(t);
+        out[i] = add(pts[i], mul(nrm, offset));
+      } else {
+        const tPrev = norm(sub(pts[i], pts[i - 1]));
+        const tNext = norm(sub(pts[i + 1], pts[i]));
+        const n1 = perp(tPrev);
+        const n2 = perp(tNext);
+        // Compute miter direction
+        let m = add(n1, n2);
+        const mLen = len(m);
+        if (mLen < 1e-6) {
+          // Straight line or 180° turn; fall back to previous normal
+          out[i] = add(pts[i], mul(n2, offset));
+        } else {
+          m = mul(m, 1 / mLen);
+          // Scale to keep constant offset
+          const denom = dot(m, n2);
+          const scale = denom !== 0 ? offset / denom : offset;
+          out[i] = add(pts[i], mul(m, scale));
+        }
+      }
+    }
+    return out;
+  };
 
   if (isPolyline) {
-    const localPts = (ghostLocal ?? polyPoints).map((p) => ({ x: p.x - component.position.x, y: p.y - component.position.y }));
+    const localPts = ghostLocal
+      ? ghostLocal
+      : polyPoints.map((p) => ({ x: p.x - component.position.x, y: p.y - component.position.y }));
     const xs = localPts.map((p) => p.x);
     const ys = localPts.map((p) => p.y);
     const minX = Math.min(...xs);
@@ -49,36 +147,344 @@ export const FenceComponent = ({
     const minY = Math.min(...ys);
     const maxY = Math.max(...ys);
 
+    const toLocalFromAbs = (abs: { x: number; y: number }) => {
+      const group = groupRef.current;
+      if (!group) return abs;
+      const tr = group.getAbsoluteTransform().copy();
+      const inv = tr.copy().invert();
+      return inv.point(abs);
+    };
+    const toAbsFromLocal = (local: { x: number; y: number }) => {
+      const group = groupRef.current;
+      if (!group) return local;
+      const tr = group.getAbsoluteTransform().copy();
+      return tr.point(local);
+    };
+
+    // Build continuous rail polylines by offsetting the centerline
+    const railOffset = railGapPx / 2; // half of visual gap
+    const topRail = offsetPolyline(localPts, -railOffset);
+    const bottomRail = offsetPolyline(localPts, railOffset);
+    const flat = (arr: Array<{ x: number; y: number }>) => arr.flatMap((p) => [p.x, p.y]);
+
+    // Utilities to sample along centerline
+    const segLens = localPts.slice(1).map((p, i) => Math.hypot(p.x - localPts[i].x, p.y - localPts[i].y));
+    const totalLen = segLens.reduce((a, b) => a + b, 0);
+    const getPointAt = (s: number) => {
+      let dist = s;
+      for (let i = 0; i < segLens.length; i++) {
+        const L = segLens[i];
+        const a = localPts[i];
+        const b = localPts[i + 1];
+        if (dist <= L || i === segLens.length - 1) {
+          const t = Math.max(0, Math.min(1, L > 0 ? dist / L : 0));
+          const x = a.x + (b.x - a.x) * t;
+          const y = a.y + (b.y - a.y) * t;
+          const tx = b.x - a.x;
+          const ty = b.y - a.y;
+          const tl = Math.hypot(tx, ty) || 1;
+          return { pos: { x, y }, tangent: { x: tx / tl, y: ty / tl } };
+        }
+        dist -= L;
+      }
+      const last = localPts[localPts.length - 1];
+      const prev = localPts[localPts.length - 2];
+      const tx = last.x - prev.x;
+      const ty = last.y - prev.y;
+      const tl = Math.hypot(tx, ty) || 1;
+      return { pos: last, tangent: { x: tx / tl, y: ty / tl } };
+    };
+
+    // Sub-polyline helper for [s0, s1] along centerline (inclusive)
+    const subPolylineBetween = (s0: number, s1: number) => {
+      const pts: Array<{ x: number; y: number }> = [];
+      const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+      const start = clamp(s0, 0, totalLen);
+      const end = clamp(s1, 0, totalLen);
+      const stepEnds: number[] = [];
+      let acc = 0;
+      for (let i = 0; i < segLens.length; i++) {
+        acc += segLens[i];
+        stepEnds.push(acc);
+      }
+      const addPointAt = (s: number) => {
+        const { pos } = getPointAt(s);
+        if (pts.length === 0 || pts[pts.length - 1].x !== pos.x || pts[pts.length - 1].y !== pos.y) {
+          pts.push(pos);
+        }
+      };
+      addPointAt(start);
+      let s = start;
+      while (s < end - 1e-6) {
+        // Find next original vertex distance after s
+        const nextEnd = stepEnds.find((d) => d > s);
+        const nextS = nextEnd == null ? end : Math.min(end, nextEnd);
+        if (Math.abs(nextS - end) < 1e-6) {
+          addPointAt(end);
+          break;
+        } else {
+          // push that vertex position (exact)
+          const idx = stepEnds.indexOf(nextEnd!);
+          const v = localPts[idx + 1];
+          if (v) pts.push({ x: v.x, y: v.y });
+          s = nextS;
+        }
+      }
+      return pts;
+    };
+
     return (
       <Group
         ref={groupRef}
         x={component.position.x}
         y={component.position.y}
         rotation={component.rotation}
-        draggable={!isDraggingHandle}
+        draggable={isSelected && !shiftPressed}
         onClick={onSelect}
         onTap={onSelect}
+        onDragStart={(e) => {
+          dragStartPos.current = { x: component.position.x, y: component.position.y };
+        }}
         onDragEnd={(e) => {
-          onDragEnd({ x: e.target.x(), y: e.target.y() });
+          const spacing = GRID_CONFIG.spacing;
+          const newX = Math.round(e.target.x() / spacing) * spacing;
+          const newY = Math.round(e.target.y() / spacing) * spacing;
+          const start = dragStartPos.current || { x: component.position.x, y: component.position.y };
+          const dx = newX - start.x;
+          const dy = newY - start.y;
+          const translated = polyPoints.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+          updateComponent(component.id, { position: { x: newX, y: newY }, properties: { ...component.properties, points: translated } });
+          dragStartPos.current = null;
         }}
       >
-        {localPts.map((p, i) => {
-          if (i === 0) return null;
-          const a = localPts[i - 1];
-          const b = localPts[i];
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const segLen = Math.sqrt(dx * dx + dy * dy);
-          if (segLen < 1) return null;
-          const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-          const fenceColor = color;
-          return (
-            <Group key={`seg-${i}`} x={a.x} y={a.y} rotation={angle}>
-              <Line points={[0, -6, segLen, -6]} stroke={fenceColor} strokeWidth={strokeWidth} hitStrokeWidth={16} opacity={ghostLocal ? 0.6 : 1} />
-              <Line points={[0, 6, segLen, 6]} stroke={fenceColor} strokeWidth={strokeWidth} hitStrokeWidth={16} opacity={ghostLocal ? 0.6 : 1} />
-            </Group>
-          );
-        })}
+        {/* Rails */}
+        {fenceType !== 'glass' && fenceType !== 'metal' && (
+          <>
+            <Line points={flat(topRail)} stroke={color} strokeWidth={strokeWidth} lineCap="butt" lineJoin="round" hitStrokeWidth={16} opacity={ghostLocal ? 0.6 : 1} />
+            <Line points={flat(bottomRail)} stroke={color} strokeWidth={strokeWidth} lineCap="butt" lineJoin="round" hitStrokeWidth={16} opacity={ghostLocal ? 0.6 : 1} />
+          </>
+        )}
+
+        {/* Flat-top metal as a solid band (no mid-gap), scale-accurate thickness */}
+        {fenceType === 'metal' && (
+          <Line
+            points={flat(localPts)}
+            stroke={color}
+            strokeWidth={metalBandStrokeWidth}
+            lineCap="butt"
+            lineJoin="round"
+            hitStrokeWidth={20}
+            opacity={1}
+          />
+        )}
+
+        {fenceType === 'glass' && (
+          <>
+            {(() => {
+              // Partition per straight run (node-to-node) using min/max/preferred.
+              const rails: JSX.Element[] = [];
+              const posts: JSX.Element[] = [];
+              const cfg = GLASS_CFG;
+              for (let i = 1; i < localPts.length; i++) {
+                const A0 = localPts[i - 1];
+                const B0 = localPts[i];
+                const dx = B0.x - A0.x;
+                const dy = B0.y - A0.y;
+                const L = Math.hypot(dx, dy);
+                if (L < 1e-3) continue;
+                const tdir = { x: dx / L, y: dy / L };
+                const nrm = { x: -tdir.y, y: tdir.x };
+                const Leff = Math.max(0, L - cfg.startGap - cfg.endGap);
+                if (Leff <= 0) continue;
+                const Nmin = Math.max(1, Math.ceil((Leff + cfg.gap) / (cfg.max + cfg.gap)));
+                const Nmax = Math.max(1, Math.floor((Leff + cfg.gap) / (cfg.min + cfg.gap)));
+                let N = Math.max(1, Math.round((Leff + cfg.gap) / (cfg.pref + cfg.gap)));
+                N = Math.min(Math.max(N, Nmin), Nmax);
+                let Lpanel = (Leff - (N - 1) * cfg.gap) / N;
+                if (Lpanel > cfg.max + 1e-6) { N += 1; Lpanel = (Leff - (N - 1) * cfg.gap) / N; }
+                if (Lpanel < cfg.min - 1e-6 && N > 1) { N -= 1; Lpanel = (Leff - (N - 1) * cfg.gap) / N; }
+
+                let s = cfg.startGap;
+                for (let k = 0; k < N; k++) {
+                  const s0 = s;
+                  const s1 = s0 + Lpanel;
+                  const a = { x: A0.x + tdir.x * s0, y: A0.y + tdir.y * s0 };
+                  const b = { x: A0.x + tdir.x * s1, y: A0.y + tdir.y * s1 };
+                  // Single centered pane line (scale-accurate 40mm)
+                  rails.push(
+                    <Line
+                      key={`gp-${i}-${k}`}
+                      points={[a.x, a.y, b.x, b.y]}
+                      stroke={color}
+                      strokeWidth={glassPaneStrokeWidth}
+                      lineCap="round"
+                    />
+                  );
+                  // Invisible hit to enable Shift-click selection
+                  rails.push(
+                    <Line
+                      key={`ghit-${i}-${k}`}
+                      points={[a.x, a.y, b.x, b.y]}
+                      stroke={color}
+                      strokeWidth={1}
+                      opacity={0.01}
+                      hitStrokeWidth={Math.max(20, glassPaneStrokeWidth + 8)}
+                      onMouseDown={(e) => {
+                        if (e.evt.shiftKey) {
+                          e.cancelBubble = true;
+                          setSelectedSeg({ run: i - 1, seg: k });
+                        }
+                      }}
+                      onMouseEnter={(e) => {
+                        if (e.evt.shiftKey) {
+                          setHoverSeg({ run: i - 1, seg: k });
+                          document.body.style.cursor = 'pointer';
+                        }
+                      }}
+                      onMouseLeave={() => {
+                        setHoverSeg(null);
+                        document.body.style.cursor = 'default';
+                      }}
+                    />
+                  );
+
+                  // Feet at 25% and 75% along the panel
+                  const f1 = { x: A0.x + tdir.x * (s0 + Lpanel * 0.25), y: A0.y + tdir.y * (s0 + Lpanel * 0.25) };
+                  const f2 = { x: A0.x + tdir.x * (s0 + Lpanel * 0.75), y: A0.y + tdir.y * (s0 + Lpanel * 0.75) };
+                  const crossExtent = glassPaneStrokeWidth / 2 + 3;
+                  const cross = (C: { x: number; y: number }) => [
+                    C.x - nrm.x * crossExtent,
+                    C.y - nrm.y * crossExtent,
+                    C.x + nrm.x * crossExtent,
+                    C.y + nrm.y * crossExtent,
+                  ];
+                  posts.push(<Line key={`gf1-${i}-${k}`} points={cross(f1)} stroke={metalColor} strokeWidth={strokeWidth + 2} />);
+                  posts.push(<Line key={`gf2-${i}-${k}`} points={cross(f2)} stroke={metalColor} strokeWidth={strokeWidth + 2} />);
+
+                  // Highlight if selected/hovered
+                  const isActive = (selectedSeg && selectedSeg.run === i - 1 && selectedSeg.seg === k) || (hoverSeg && hoverSeg.run === i - 1 && hoverSeg.seg === k);
+                  if (isActive) {
+                    rails.push(
+                      <Line key={`ghl-${i}-${k}`} points={[a.x, a.y, b.x, b.y]} stroke={selectedSeg ? '#2563EB' : '#60A5FA'} strokeWidth={glassPaneStrokeWidth + 6} opacity={selectedSeg ? 0.5 : 0.35} lineCap="round" />
+                    );
+                    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+                    const meters = (Math.hypot(b.x - a.x, b.y - a.y) / 100).toFixed(1);
+                    rails.push(<Text key={`glen-${i}-${k}`} x={mid.x} y={mid.y - glassPaneStrokeWidth - 10} text={`${meters}m`} fontSize={12} fill="#2563EB" align="center" offsetX={14} />);
+                  }
+
+                  s = s1 + cfg.gap;
+                }
+              }
+              return [...posts, ...rails];
+            })()}
+            {/* Wide invisible hit area along centerline for easier selection */}
+            <Line
+              points={flat(localPts)}
+              stroke={color}
+              strokeWidth={1}
+              opacity={0.01}
+              hitStrokeWidth={20}
+            />
+          </>
+        )}
+
+        {/* (glass markers moved into segmented renderer above) */}
+
+        {/* Metal: posts at per-run panel boundaries based on min/max/preferred */}
+        {fenceType === 'metal' && (
+          <>
+            {(() => {
+              const elems: JSX.Element[] = [];
+              const size = METAL_CFG.postSize;
+              let offset = 0;
+              const placed = new Set<string>();
+              const keyFor = (p: { x: number; y: number }) => `${Math.round(p.x)}:${Math.round(p.y)}`;
+              const placeGlobalAt = (dist: number) => {
+                const { pos } = getPointAt(Math.max(0, Math.min(totalLen, dist)));
+                const key = keyFor(pos);
+                if (placed.has(key)) return;
+                placed.add(key);
+                elems.push(<Rect key={`mp-${key}`} x={pos.x - size / 2} y={pos.y - size / 2} width={size} height={size} fill={color} />);
+              };
+              for (let i = 1; i < localPts.length; i++) {
+                const runLen = segLens[i - 1];
+                const cfg = METAL_CFG;
+                const Leff = Math.max(0, runLen - cfg.startGap - cfg.endGap);
+                if (Leff > 0) {
+                  const Nmin = Math.max(1, Math.ceil((Leff + cfg.gap) / (cfg.max + cfg.gap)));
+                  const Nmax = Math.max(1, Math.floor((Leff + cfg.gap) / (cfg.min + cfg.gap)));
+                  let N = Math.max(1, Math.round((Leff + cfg.gap) / (cfg.pref + cfg.gap)));
+                  N = Math.min(Math.max(N, Nmin), Nmax);
+                  let Lpanel = (Leff - (N - 1) * cfg.gap) / N;
+                  if (Lpanel > cfg.max + 1e-6) { N += 1; Lpanel = (Leff - (N - 1) * cfg.gap) / N; }
+                  if (Lpanel < cfg.min - 1e-6 && N > 1) { N -= 1; Lpanel = (Leff - (N - 1) * cfg.gap) / N; }
+
+                  // Corner at start of run
+                  placeGlobalAt(offset + 0);
+                  // Build selectable segments and place internal boundary posts (shared at corners)
+                  let sPanel = cfg.startGap;
+                  for (let k = 0; k < N; k++) {
+                    const s0 = sPanel;
+                    const s1 = s0 + Lpanel;
+                    const aPt = getPointAt(offset + s0).pos;
+                    const bPt = getPointAt(offset + s1).pos;
+                    // Invisible hit to allow Shift-click selection
+                    elems.push(
+                      <Line
+                        key={`mh-${i}-${k}`}
+                        points={[aPt.x, aPt.y, bPt.x, bPt.y]}
+                        stroke={color}
+                        strokeWidth={1}
+                        opacity={0.01}
+                        hitStrokeWidth={Math.max(20, metalBandStrokeWidth + 8)}
+                        onMouseDown={(e) => {
+                          if (e.evt.shiftKey) {
+                            e.cancelBubble = true;
+                            setSelectedSeg({ run: i - 1, seg: k });
+                          }
+                        }}
+                        onMouseEnter={(e) => {
+                          if (e.evt.shiftKey) {
+                            setHoverSeg({ run: i - 1, seg: k });
+                            document.body.style.cursor = 'pointer';
+                          }
+                        }}
+                        onMouseLeave={() => {
+                          setHoverSeg(null);
+                          document.body.style.cursor = 'default';
+                        }}
+                      />
+                    );
+                    // Highlight overlay if selected
+                    const isActive = (selectedSeg && selectedSeg.run === i - 1 && selectedSeg.seg === k) || (hoverSeg && hoverSeg.run === i - 1 && hoverSeg.seg === k);
+                    if (isActive) {
+                      elems.push(
+                        <Line
+                          key={`mhl-${i}-${k}`}
+                          points={[aPt.x, aPt.y, bPt.x, bPt.y]}
+                          stroke={selectedSeg ? '#2563EB' : '#60A5FA'}
+                          strokeWidth={metalBandStrokeWidth + 6}
+                          opacity={selectedSeg ? 0.5 : 0.35}
+                          lineCap="round"
+                        />
+                      );
+                      const meters = (Math.hypot(bPt.x - aPt.x, bPt.y - aPt.y) / 100).toFixed(1);
+                      const mid = { x: (aPt.x + bPt.x) / 2, y: (aPt.y + bPt.y) / 2 };
+                      elems.push(<Text key={`mlen-${i}-${k}`} x={mid.x} y={mid.y - metalBandStrokeWidth - 10} text={`${meters}m`} fontSize={12} fill="#2563EB" align="center" offsetX={14} />);
+                    }
+                    // Internal post at panel end (shared due to dedupe)
+                    if (k < N - 1) placeGlobalAt(offset + s1);
+                    sPanel = s1 + cfg.gap;
+                  }
+                  // Corner at end of run
+                  placeGlobalAt(offset + runLen);
+                }
+                offset += runLen;
+              }
+              return elems;
+            })()}
+          </>
+        )}
 
         {/* Ghost overlay and label on affected segments while dragging */}
         {dragIndex != null && ghostLocal && (
@@ -124,10 +530,10 @@ export const FenceComponent = ({
             x={pt.x}
             y={pt.y}
             radius={6}
-            fill="#ffffff"
+            fill={dragIndex === idx ? '#3B82F6' : '#ffffff'}
             stroke="#3B82F6"
             strokeWidth={2}
-            draggable
+            draggable={shiftPressed}
             onDragStart={(e) => {
               e.cancelBubble = true;
               setDragIndex(idx);
@@ -135,14 +541,18 @@ export const FenceComponent = ({
             }}
             dragBoundFunc={(pos) => {
               const s = GRID_CONFIG.spacing;
-              return { x: Math.round(pos.x / s) * s, y: Math.round(pos.y / s) * s } as any;
+              const local = toLocalFromAbs(pos);
+              const snappedLocal = { x: Math.round(local.x / s) * s, y: Math.round(local.y / s) * s };
+              return toAbsFromLocal(snappedLocal) as any;
             }}
             onDragMove={(e) => {
               e.cancelBubble = true;
               if (dragIndex == null) return;
               const s = GRID_CONFIG.spacing;
-              const x = Math.round(e.target.x() / s) * s;
-              const y = Math.round(e.target.y() / s) * s;
+              const abs = e.target.getAbsolutePosition();
+              const local = toLocalFromAbs(abs);
+              const x = Math.round(local.x / s) * s;
+              const y = Math.round(local.y / s) * s;
               const copy = localPts.slice();
               copy[dragIndex] = { x, y };
               setGhostLocal(copy);
@@ -150,12 +560,14 @@ export const FenceComponent = ({
             onDragEnd={(e) => {
               e.cancelBubble = true;
               const s = GRID_CONFIG.spacing;
-              const x = Math.round(e.target.x() / s) * s;
-              const y = Math.round(e.target.y() / s) * s;
+              const abs = e.target.getAbsolutePosition();
+              const local = toLocalFromAbs(abs);
+              const x = Math.round(local.x / s) * s;
+              const y = Math.round(local.y / s) * s;
               const updated = localPts.slice();
               if (dragIndex != null) updated[dragIndex] = { x, y };
-              const abs = updated.map((p) => ({ x: p.x + component.position.x, y: p.y + component.position.y }));
-              updateComponent(component.id, { properties: { ...component.properties, points: abs } });
+              const absPts = updated.map((p) => ({ x: p.x + component.position.x, y: p.y + component.position.y }));
+              updateComponent(component.id, { properties: { ...component.properties, points: absPts } });
               setDragIndex(null);
               setGhostLocal(null);
             }}
@@ -164,6 +576,15 @@ export const FenceComponent = ({
       </Group>
     );
   }
+
+  const handleRightClick = (e: any) => {
+    e.evt.preventDefault();
+    if (onContextMenu) {
+      const stage = e.target.getStage();
+      const pointerPos = stage.getPointerPosition();
+      onContextMenu(component, { x: pointerPos.x, y: pointerPos.y });
+    }
+  };
 
   return (
       <Group
@@ -174,32 +595,82 @@ export const FenceComponent = ({
         draggable={!isDraggingHandle}
         onClick={onSelect}
         onTap={onSelect}
+        onContextMenu={handleRightClick}
         onDragEnd={(e) => {
           onDragEnd({ x: e.target.x(), y: e.target.y() });
         }}
       >
       {/* No broad hit area; rely on rails and hitStrokeWidth for interaction */}
 
-      {/* Base line */}
-      <Line points={[0, 0, length, 0]} stroke={color} strokeWidth={strokeWidth} hitStrokeWidth={16} />
-      <Line points={[0, 12, length, 12]} stroke={color} strokeWidth={strokeWidth} hitStrokeWidth={16} />
+      {/* Base rendering */}
+      {fenceType === 'metal' ? (
+        <Line points={[0, 0, length, 0]} stroke={color} strokeWidth={metalBandStrokeWidth} lineCap="butt" hitStrokeWidth={20} />
+      ) : (
+        <>
+          {/* Glass straight segment as single pane centered, scale-accurate 40mm */}
+          <Line points={[0, 0, length, 0]} stroke={color} strokeWidth={glassPaneStrokeWidth} lineCap="round" hitStrokeWidth={16} />
+        </>
+      )}
 
-      {/* Pickets */}
-      {(() => {
+      {/* Metal posts (straight segment) using min/max/preferred */}
+      {fenceType === 'metal' && (() => {
         const elems = [] as JSX.Element[];
-        const picketSpacing = 10;
-        for (let i = 0; i <= length; i += picketSpacing) {
-          elems.push(
-            <Line
-              key={i}
-              points={[i, 0, i, 12]}
-              stroke={color}
-              strokeWidth={strokeWidth === 2 ? 1 : 2}
-              opacity={fenceType === 'glass' ? 0.5 : 1}
-            />
-          );
+        const cfg = METAL_CFG;
+        const size = cfg.postSize;
+        const Leff = Math.max(0, length - cfg.startGap - cfg.endGap);
+        if (Leff > 0) {
+          const Nmin = Math.max(1, Math.ceil((Leff + cfg.gap) / (cfg.max + cfg.gap)));
+          const Nmax = Math.max(1, Math.floor((Leff + cfg.gap) / (cfg.min + cfg.gap)));
+          let N = Math.max(1, Math.round((Leff + cfg.gap) / (cfg.pref + cfg.gap)));
+          N = Math.min(Math.max(N, Nmin), Nmax);
+          let Lpanel = (Leff - (N - 1) * cfg.gap) / N;
+          if (Lpanel > cfg.max + 1e-6) { N += 1; Lpanel = (Leff - (N - 1) * cfg.gap) / N; }
+          if (Lpanel < cfg.min - 1e-6 && N > 1) { N -= 1; Lpanel = (Leff - (N - 1) * cfg.gap) / N; }
+          let s = cfg.startGap;
+          const place = (d: number) => elems.push(<Rect key={`mp-${d.toFixed(1)}`} x={d - size / 2} y={-size / 2} width={size} height={size} fill={color} />);
+          place(s);
+          for (let k = 0; k < N - 1; k++) { s += Lpanel; place(s); s += cfg.gap; }
+          place(length - cfg.endGap);
         }
         return elems;
+      })()}
+
+      {fenceType === 'glass' && (() => {
+        const rails: JSX.Element[] = [];
+        const posts: JSX.Element[] = [];
+        const cfg = GLASS_CFG;
+        const Leff = Math.max(0, length - cfg.startGap - cfg.endGap);
+        if (Leff > 0) {
+          const Nmin = Math.max(1, Math.ceil((Leff + cfg.gap) / (cfg.max + cfg.gap)));
+          const Nmax = Math.max(1, Math.floor((Leff + cfg.gap) / (cfg.min + cfg.gap)));
+          let N = Math.max(1, Math.round((Leff + cfg.gap) / (cfg.pref + cfg.gap)));
+          N = Math.min(Math.max(N, Nmin), Nmax);
+          let Lpanel = (Leff - (N - 1) * cfg.gap) / N;
+          if (Lpanel > cfg.max + 1e-6) { N += 1; Lpanel = (Leff - (N - 1) * cfg.gap) / N; }
+          if (Lpanel < cfg.min - 1e-6 && N > 1) { N -= 1; Lpanel = (Leff - (N - 1) * cfg.gap) / N; }
+          let s = cfg.startGap;
+          for (let k = 0; k < N; k++) {
+            const s0 = s;
+            const s1 = s0 + Lpanel;
+            rails.push(
+              <Line
+                key={`gp-${k}`}
+                points={[s0, 0, s1, 0]}
+                stroke={color}
+                strokeWidth={glassPaneStrokeWidth}
+                lineCap="round"
+              />
+            );
+            const f1 = s0 + Lpanel * 0.25;
+            const f2 = s0 + Lpanel * 0.75;
+            const crossExtent = glassPaneStrokeWidth / 2 + 3;
+            posts.push(<Line key={`gp1-${k}`} points={[f1, -crossExtent, f1, crossExtent]} stroke={metalColor} strokeWidth={strokeWidth + 2} />);
+            posts.push(<Line key={`gp2-${k}`} points={[f2, -crossExtent, f2, crossExtent]} stroke={metalColor} strokeWidth={strokeWidth + 2} />);
+            s = s1 + cfg.gap;
+          }
+        }
+        const hit = (<Line key="glass-hit" points={[0, 0, length, 0]} stroke={color} strokeWidth={1} opacity={0.01} hitStrokeWidth={20} />);
+        return [...posts, ...rails, hit];
       })()}
 
       {/* Selection border and handle */}

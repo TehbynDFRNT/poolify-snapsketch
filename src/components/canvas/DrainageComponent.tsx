@@ -1,7 +1,7 @@
 import { Group, Rect, Circle, Line, Text } from 'react-konva';
 import { Component } from '@/types';
 import { DRAINAGE_TYPES } from '@/constants/components';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
 
@@ -11,6 +11,7 @@ interface DrainageComponentProps {
   onSelect: () => void;
   onDragEnd: (pos: { x: number; y: number }) => void;
   onExtend?: (length: number) => void;
+  onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
 }
 
 export const DrainageComponent = ({
@@ -19,6 +20,7 @@ export const DrainageComponent = ({
   onSelect,
   onDragEnd,
   onExtend,
+  onContextMenu,
 }: DrainageComponentProps) => {
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
 
@@ -40,9 +42,28 @@ export const DrainageComponent = ({
   const updateComponent = useDesignStore((s) => s.updateComponent);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [ghostLocal, setGhostLocal] = useState<Array<{ x: number; y: number }> | null>(null);
+  const [shiftPressed, setShiftPressed] = useState(false);
+  const dragStartPos = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftPressed(true);
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftPressed(false);
+    };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+    };
+  }, []);
 
   if (isPolyline) {
-    const localPts = (ghostLocal ?? polyPoints).map((p) => ({ x: p.x - component.position.x, y: p.y - component.position.y }));
+    const localPts = ghostLocal
+      ? ghostLocal
+      : polyPoints.map((p) => ({ x: p.x - component.position.x, y: p.y - component.position.y }));
     const xs = localPts.map((p) => p.x);
     const ys = localPts.map((p) => p.y);
     const minX = Math.min(...xs);
@@ -50,17 +71,42 @@ export const DrainageComponent = ({
     const minY = Math.min(...ys);
     const maxY = Math.max(...ys);
 
+    const toLocalFromAbs = (abs: { x: number; y: number }) => {
+      const group = groupRef.current;
+      if (!group) return abs;
+      const tr = group.getAbsoluteTransform().copy();
+      const inv = tr.copy().invert();
+      return inv.point(abs);
+    };
+    const toAbsFromLocal = (local: { x: number; y: number }) => {
+      const group = groupRef.current;
+      if (!group) return local;
+      const tr = group.getAbsoluteTransform().copy();
+      return tr.point(local);
+    };
+
     return (
       <Group
         ref={groupRef}
         x={component.position.x}
         y={component.position.y}
         rotation={component.rotation}
-        draggable={!isDraggingHandle}
+        draggable={isSelected && !shiftPressed}
         onClick={onSelect}
         onTap={onSelect}
+        onDragStart={() => {
+          dragStartPos.current = { x: component.position.x, y: component.position.y };
+        }}
         onDragEnd={(e) => {
-          onDragEnd({ x: e.target.x(), y: e.target.y() });
+          const spacing = GRID_CONFIG.spacing;
+          const newX = Math.round(e.target.x() / spacing) * spacing;
+          const newY = Math.round(e.target.y() / spacing) * spacing;
+          const start = dragStartPos.current || { x: component.position.x, y: component.position.y };
+          const dx = newX - start.x;
+          const dy = newY - start.y;
+          const translated = polyPoints.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+          updateComponent(component.id, { position: { x: newX, y: newY }, properties: { ...component.properties, points: translated } });
+          dragStartPos.current = null;
         }}
       >
         {localPts.map((p, i) => {
@@ -74,7 +120,7 @@ export const DrainageComponent = ({
           const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
           return (
             <Group key={`seg-${i}`} x={a.x} y={a.y} rotation={angle}>
-              <Line points={[0, 0, segLen, 0]} stroke={color} strokeWidth={width} hitStrokeWidth={Math.max(16, width)} opacity={ghostLocal ? 0.5 : 0.7} />
+              <Line points={[0, 0, segLen, 0]} stroke={color} strokeWidth={width} lineCap="square" hitStrokeWidth={Math.max(16, width)} opacity={ghostLocal ? 0.5 : 0.7} />
               {drainageType === 'rock' && Array.from({ length: Math.max(1, Math.floor(segLen / 20)) }).map((_, idx) => (
                 <Line key={idx} points={[idx * 20 + 10, -width / 2, idx * 20 + 10, width / 2]} stroke="black" strokeWidth={2} opacity={0.6} />
               ))}
@@ -125,10 +171,10 @@ export const DrainageComponent = ({
             x={pt.x}
             y={pt.y}
             radius={6}
-            fill="#ffffff"
+            fill={dragIndex === idx ? '#3B82F6' : '#ffffff'}
             stroke="#3B82F6"
             strokeWidth={2}
-            draggable
+            draggable={shiftPressed}
             onDragStart={(e) => {
               e.cancelBubble = true;
               setDragIndex(idx);
@@ -136,14 +182,18 @@ export const DrainageComponent = ({
             }}
             dragBoundFunc={(pos) => {
               const s = GRID_CONFIG.spacing;
-              return { x: Math.round(pos.x / s) * s, y: Math.round(pos.y / s) * s } as any;
+              const local = toLocalFromAbs(pos);
+              const snappedLocal = { x: Math.round(local.x / s) * s, y: Math.round(local.y / s) * s };
+              return toAbsFromLocal(snappedLocal) as any;
             }}
             onDragMove={(e) => {
               e.cancelBubble = true;
               if (dragIndex == null) return;
               const s = GRID_CONFIG.spacing;
-              const x = Math.round(e.target.x() / s) * s;
-              const y = Math.round(e.target.y() / s) * s;
+              const abs = e.target.getAbsolutePosition();
+              const local = toLocalFromAbs(abs);
+              const x = Math.round(local.x / s) * s;
+              const y = Math.round(local.y / s) * s;
               const copy = localPts.slice();
               copy[dragIndex] = { x, y };
               setGhostLocal(copy);
@@ -151,12 +201,14 @@ export const DrainageComponent = ({
             onDragEnd={(e) => {
               e.cancelBubble = true;
               const s = GRID_CONFIG.spacing;
-              const x = Math.round(e.target.x() / s) * s;
-              const y = Math.round(e.target.y() / s) * s;
+              const abs = e.target.getAbsolutePosition();
+              const local = toLocalFromAbs(abs);
+              const x = Math.round(local.x / s) * s;
+              const y = Math.round(local.y / s) * s;
               const updated = localPts.slice();
               if (dragIndex != null) updated[dragIndex] = { x, y };
-              const abs = updated.map((p) => ({ x: p.x + component.position.x, y: p.y + component.position.y }));
-              updateComponent(component.id, { properties: { ...component.properties, points: abs } });
+              const absPts = updated.map((p) => ({ x: p.x + component.position.x, y: p.y + component.position.y }));
+              updateComponent(component.id, { properties: { ...component.properties, points: absPts } });
               setDragIndex(null);
               setGhostLocal(null);
             }}
@@ -165,6 +217,15 @@ export const DrainageComponent = ({
       </Group>
     );
   }
+
+  const handleRightClick = (e: any) => {
+    e.evt.preventDefault();
+    if (onContextMenu) {
+      const stage = e.target.getStage();
+      const pointerPos = stage.getPointerPosition();
+      onContextMenu(component, { x: pointerPos.x, y: pointerPos.y });
+    }
+  };
 
   return (
     <Group
@@ -175,6 +236,7 @@ export const DrainageComponent = ({
       draggable={!isDraggingHandle}
       onClick={onSelect}
       onTap={onSelect}
+      onContextMenu={handleRightClick}
       onDragEnd={(e) => {
         onDragEnd({ x: e.target.x(), y: e.target.y() });
       }}
@@ -182,7 +244,7 @@ export const DrainageComponent = ({
       {/* No broad hit area; rely on thick stroke and hitStrokeWidth */}
 
       {/* Drainage line */}
-      <Line points={[0, 0, length, 0]} stroke={color} strokeWidth={width} hitStrokeWidth={Math.max(16, width)} opacity={0.7} />
+      <Line points={[0, 0, length, 0]} stroke={color} strokeWidth={width} lineCap="square" hitStrokeWidth={Math.max(16, width)} opacity={0.7} />
 
       {/* Black drainage lines/gaps */}
       {drainageType === 'rock' && Array.from({ length: Math.floor(length / 20) }).map((_, i) => (

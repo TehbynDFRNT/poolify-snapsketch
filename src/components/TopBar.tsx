@@ -1,23 +1,21 @@
 import { Link } from 'react-router-dom';
-import { 
-  Home, 
-  Undo2, 
-  Redo2, 
-  Save, 
-  Download, 
+import {
+  Home,
+  Undo2,
+  Redo2,
+  Save,
+  Download,
   Menu,
   MousePointer2,
   Hand,
-  Square,
-  Box,
+  Pentagon,
+  Waves,
   Droplets,
   Fence,
-  Blocks,
-  Ruler,
+  LayoutGrid,
   ScanLine,
-  Move,
-  Maximize2,
-  Grid3x3
+  Construction,
+  Blocks
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ToolType } from '@/types';
@@ -41,15 +39,14 @@ interface TopBarProps {
 const tools: Array<{ id: ToolType; icon: React.ReactNode; name: string; shortcut: string }> = [
   { id: 'select', icon: <MousePointer2 className="w-5 h-5" />, name: 'Select', shortcut: 'V' },
   { id: 'hand', icon: <Hand className="w-5 h-5" />, name: 'Pan', shortcut: 'H' },
-  { id: 'boundary', icon: <Square className="w-5 h-5" />, name: 'Boundary', shortcut: 'B' },
+  { id: 'boundary', icon: <Pentagon className="w-5 h-5" />, name: 'Boundary', shortcut: 'B' },
   { id: 'house', icon: <Home className="w-5 h-5" />, name: 'House', shortcut: 'U' },
-  { id: 'pool', icon: <Box className="w-5 h-5" />, name: 'Pool', shortcut: 'O' },
+  { id: 'pool', icon: <Waves className="w-5 h-5" />, name: 'Pool', shortcut: 'O' },
   { id: 'paver', icon: <Blocks className="w-5 h-5" />, name: 'Paver', shortcut: 'A' },
-  { id: 'paving_area', icon: <Grid3x3 className="w-5 h-5" />, name: 'Paving Area', shortcut: 'P' },
+  { id: 'paving_area', icon: <LayoutGrid className="w-5 h-5" />, name: 'Paving Area', shortcut: 'P' },
   { id: 'drainage', icon: <Droplets className="w-5 h-5" />, name: 'Drainage', shortcut: 'D' },
   { id: 'fence', icon: <Fence className="w-5 h-5" />, name: 'Fence', shortcut: 'F' },
-  { id: 'wall', icon: <Blocks className="w-5 h-5" />, name: 'Wall', shortcut: 'W' },
-  { id: 'reference_line', icon: <Ruler className="w-5 h-5" />, name: 'Reference', shortcut: 'R' },
+  { id: 'wall', icon: <Construction className="w-5 h-5" />, name: 'Wall', shortcut: 'W' },
   { id: 'quick_measure', icon: <ScanLine className="w-5 h-5" />, name: 'Measure', shortcut: 'M' },
 ];
 

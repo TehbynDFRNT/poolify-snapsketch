@@ -6,6 +6,7 @@ interface HouseComponentProps {
   isSelected: boolean;
   onSelect: () => void;
   onDragEnd?: (pos: { x: number; y: number }) => void;
+  onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
 }
 
 export const HouseComponent = ({
@@ -13,9 +14,19 @@ export const HouseComponent = ({
   isSelected,
   onSelect,
   onDragEnd,
+  onContextMenu,
 }: HouseComponentProps) => {
   const points = component.properties.points || [];
   const closed = component.properties.closed || false;
+
+  const handleRightClick = (e: any) => {
+    e.evt.preventDefault();
+    if (onContextMenu) {
+      const stage = e.target.getStage();
+      const pointerPos = stage.getPointerPosition();
+      onContextMenu(component, { x: pointerPos.x, y: pointerPos.y });
+    }
+  };
 
   if (points.length < 2) return null;
 
@@ -101,6 +112,7 @@ export const HouseComponent = ({
       draggable={isSelected}
       onClick={onSelect}
       onTap={onSelect}
+      onContextMenu={handleRightClick}
       onDragEnd={(e) => {
         if (onDragEnd) {
           onDragEnd({

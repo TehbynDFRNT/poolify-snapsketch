@@ -47,7 +47,9 @@ export const calculateMeasurements = (components: Component[]): Summary => {
       case 'paver': {
         const size = component.properties.paverSize || '400x400';
         const count = component.properties.paverCount || { rows: 1, cols: 1 };
-        const totalCount = count.rows * count.cols;
+        const extra = component.properties.paverExtraBlocks || [];
+        const totalExtra = extra.reduce((acc, b) => acc + (Math.max(0, b.rows) * Math.max(0, b.cols)), 0);
+        const totalCount = count.rows * count.cols + totalExtra;
         const paverDim = PAVER_SIZES[size] || PAVER_SIZES['400x400'];
         const label = paverDim.label;
         const area = (totalCount * paverDim.width * paverDim.height) / 1000000; // m²

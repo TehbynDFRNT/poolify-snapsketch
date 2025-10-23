@@ -8,30 +8,28 @@ export interface Project {
   components: Component[];
 }
 
-export type ToolType = 
-  | 'select' 
+export type ToolType =
+  | 'select'
   | 'hand'
-  | 'pool' 
-  | 'paver' 
+  | 'pool'
+  | 'paver'
   | 'paving_area'
-  | 'drainage' 
-  | 'fence' 
-  | 'wall' 
+  | 'drainage'
+  | 'fence'
+  | 'wall'
   | 'boundary'
   | 'house'
-  | 'reference_line'
   | 'quick_measure';
 
-export type ComponentType = 
-  | 'pool' 
-  | 'paver' 
+export type ComponentType =
+  | 'pool'
+  | 'paver'
   | 'paving_area'
-  | 'drainage' 
-  | 'fence' 
-  | 'wall' 
+  | 'drainage'
+  | 'fence'
+  | 'wall'
   | 'boundary'
   | 'house'
-  | 'reference_line'
   | 'quick_measure';
 
 export interface Component {
@@ -90,33 +88,28 @@ export interface ComponentProperties {
   showCoping?: boolean;
   copingConfig?: any;
   copingCalculation?: CopingCalculation;
-  copingSelection?: {
-    selectedPaverIds: string[];
-    extensionPavers: Array<{
-      id: string;
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      isPartial: boolean;
-      edge: string;
-      rowIndex: number;
-      columnIndex: number;
-      isCorner: boolean;
-      extensionDirection?: string;
-    }>;
-    cornerDirectionOverrides: Array<[string, string]>; // serialized Map
-    deletedPaverIds?: string[]; // IDs of deleted pavers (base or extension)
-    deletedRows?: Array<{ edge: 'leftSide' | 'rightSide' | 'shallowEnd' | 'deepEnd'; rowIndex: number }>; // Deleted rows
-  };
-  
+  // Coping extensions: manually extended coping tiles (in pool-local mm coordinates)
+  copingExtensions?: Array<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    isPartial: boolean;
+    side: 'top' | 'bottom' | 'left' | 'right';
+  }>;
   // Paver
   paverSize?: '400x400' | '400x600';
   paverCount?: { rows: number; cols: number };
+  // Optional: additional paver blocks to allow partial extensions while keeping one component
+  paverExtraBlocks?: Array<{ col: number; row: number; cols: number; rows: number }>;
+  // Base grid offset in tile units (for left/top extensions)
+  baseOffset?: { col: number; row: number };
   
   // Paving Area
   boundary?: Array<{ x: number; y: number }>;
   paverOrientation?: 'vertical' | 'horizontal';
+  // When set, align grid origin to the coping grid of this pool component
+  alignToPoolId?: string;
   pavers?: Array<{
     id: string;
     position: { x: number; y: number };

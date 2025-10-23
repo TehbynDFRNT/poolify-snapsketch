@@ -61,30 +61,15 @@ The project uses Supabase for authentication and cloud project storage. Migratio
   - Click detection uses `hitStrokeWidth` on line-based components (boundaries, houses, references) to avoid blocking clicks to lower layers
 
 ### Pool Coping System
-**Critical Feature**: The pool coping calculation is a complex, corner-first system:
+The pool coping calculation is a corner-first system that provides visual display and material calculations:
 - **Configuration**: `src/utils/copingCalculation.ts`
   - Global tile orientation (x/y dimensions)
   - Per-edge row counts (sides, shallow, deep)
   - MIN_CUT_MM = 200, GROUT_MM = 5
   - Corner-first layout with center-only cuts
   - Mirrored left/right and shallow/deep
-
-- **Interactive Extension**: `src/interaction/CopingExtendController.ts` & `CopingPaverSelection.ts`
-  - Users can select coping pavers and extend them outward
-  - Corner direction picking with visual picker UI
-  - Extension pavers tracked separately from base coping
-  - Supports row/individual paver deletion
-
-- **Storage**: Pool components store `copingSelection` in properties:
-  ```typescript
-  {
-    selectedPaverIds: string[];
-    extensionPavers: Array<{id, x, y, width, height, edge, rowIndex, ...}>;
-    cornerDirectionOverrides: [string, string][]; // serialized Map
-    deletedPaverIds: string[];
-    deletedRows: Array<{edge, rowIndex}>;
-  }
-  ```
+- **Display**: Static visual representation of coping around pool edges
+- **Calculations**: Provides full/partial paver counts and total area for materials summary
 
 ### Paving Area System
 - **Fill Algorithm**: `src/utils/pavingFill.ts`

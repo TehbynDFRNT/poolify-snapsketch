@@ -1,15 +1,14 @@
-import { 
+import {
   MousePointer2,
   Hand,
-  Square, 
-  Grid3x3, 
-  Droplet, 
-  Fence as FenceIcon, 
-  Box,
-  Hexagon,
+  Waves,
+  LayoutGrid,
+  Droplets,
+  Fence as FenceIcon,
+  Construction,
+  Pentagon,
   Home,
-  Ruler,
-  Move
+  ScanLine
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -46,18 +45,17 @@ export const Toolbar = ({ activeTool = 'select', onToolChange }: ToolbarProps) =
   const tools = [
     { id: 'select' as ToolType, icon: MousePointer2, label: 'Select/Move', shortcut: 'V' },
     { id: 'hand' as ToolType, icon: Hand, label: 'Pan Canvas', shortcut: 'H' },
-    { id: 'pool' as ToolType, icon: Square, label: 'Pool', shortcut: '1' },
-    { id: 'paver' as ToolType, icon: Grid3x3, label: 'Paving', shortcut: '2' },
-    { id: 'drainage' as ToolType, icon: Droplet, label: 'Drainage', shortcut: '3' },
+    { id: 'pool' as ToolType, icon: Waves, label: 'Pool', shortcut: '1' },
+    { id: 'paver' as ToolType, icon: LayoutGrid, label: 'Paving', shortcut: '2' },
+    { id: 'drainage' as ToolType, icon: Droplets, label: 'Drainage', shortcut: '3' },
     { id: 'fence' as ToolType, icon: FenceIcon, label: 'Fence', shortcut: '4' },
-    { id: 'wall' as ToolType, icon: Box, label: 'Wall', shortcut: '5' },
-    { id: 'boundary' as ToolType, icon: Hexagon, label: 'Boundary', shortcut: '6' },
+    { id: 'wall' as ToolType, icon: Construction, label: 'Wall', shortcut: '5' },
+    { id: 'boundary' as ToolType, icon: Pentagon, label: 'Boundary', shortcut: '6' },
     { id: 'house' as ToolType, icon: Home, label: 'House Outline', shortcut: '7' },
   ];
 
   const measureTools = [
-    { id: 'quick_measure' as ToolType, icon: Move, label: 'Quick Measure', shortcut: 'M' },
-    { id: 'reference_line' as ToolType, icon: Ruler, label: 'Reference Line', shortcut: 'L' },
+    { id: 'quick_measure' as ToolType, icon: ScanLine, label: 'Measure', shortcut: 'M' },
   ];
 
   return (
@@ -110,9 +108,6 @@ export const Toolbar = ({ activeTool = 'select', onToolChange }: ToolbarProps) =
               <p>{tool.label}</p>
               <p className="text-xs text-muted-foreground">Press {tool.shortcut}</p>
               {tool.id === 'quick_measure' && (
-                <p className="text-xs text-muted-foreground mt-1">Temporary (3s)</p>
-              )}
-              {tool.id === 'reference_line' && (
                 <p className="text-xs text-muted-foreground mt-1">Hold Shift to lock axis</p>
               )}
             </TooltipContent>

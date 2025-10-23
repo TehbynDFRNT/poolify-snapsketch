@@ -1,12 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Group, Line, Circle, Label, Tag, Text } from 'react-konva';
 import { Component } from '@/types';
+import { useDesignStore } from '@/store/designStore';
+import { smartSnap } from '@/utils/snap';
 
 interface Props {
   component: Component;
   selected: boolean;
   onSelect: () => void;
   onDelete: () => void;
+  onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
 }
 
 export const ReferenceLineComponent: React.FC<Props> = ({
@@ -14,7 +17,11 @@ export const ReferenceLineComponent: React.FC<Props> = ({
   selected,
   onSelect,
   onDelete,
+  onContextMenu,
 }) => {
+  const updateComponent = useDesignStore((s) => s.updateComponent);
+  const components = useDesignStore((s) => s.components);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const points = component.properties.points || [];
   if (points.length < 2) return null;
 
@@ -39,9 +46,29 @@ export const ReferenceLineComponent: React.FC<Props> = ({
 
   const showMeasurement = component.properties.showMeasurement !== false;
   const label = component.properties.label;
+  const annotation = component.properties.annotation;
+
+  // Calculate line angle for annotation rotation
+  const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+  // Calculate perpendicular offset (15px above the line)
+  const perpAngle = Math.atan2(dy, dx) + Math.PI / 2; // 90 degrees perpendicular
+  const annotationOffset = 15;
+  const annotationX = midPoint.x + Math.cos(perpAngle) * annotationOffset;
+  const annotationY = midPoint.y + Math.sin(perpAngle) * annotationOffset;
+
+  // Handle right-click context menu
+  const handleRightClick = (e: any) => {
+    e.evt.preventDefault();
+    if (onContextMenu) {
+      const stage = e.target.getStage();
+      const pointerPos = stage.getPointerPosition();
+      onContextMenu(component, { x: pointerPos.x, y: pointerPos.y });
+    }
+  };
 
   return (
-    <Group onClick={onSelect} onTap={onSelect}>
+    <Group onClick={onSelect} onTap={onSelect} onContextMenu={handleRightClick}>
       {/* Main line */}
       <Line
         points={[start.x, start.y, end.x, end.y]}
@@ -110,30 +137,94 @@ export const ReferenceLineComponent: React.FC<Props> = ({
         </Label>
       )}
 
-      {/* Delete handle when selected */}
-      {selected && !component.properties.temporary && (
-        <Group
-          x={end.x + 10}
-          y={end.y - 10}
-          onClick={(e) => {
-            e.cancelBubble = true;
-            onDelete();
-          }}
-          onTap={(e) => {
-            e.cancelBubble = true;
-            onDelete();
-          }}
-        >
-          <Circle radius={12} fill="white" stroke="#ef4444" strokeWidth={2} />
-          <Text
-            text="×"
-            fontSize={18}
-            fill="#ef4444"
-            offsetX={5}
-            offsetY={8}
-            fontStyle="bold"
+      {/* Annotation along the line */}
+      {annotation && (
+        <Text
+          x={annotationX}
+          y={annotationY}
+          text={annotation}
+          fontSize={12}
+          fill={style.color}
+          fontStyle="italic"
+          rotation={angle}
+          offsetX={0}
+          offsetY={6}
+        />
+      )}
+
+      {/* Draggable endpoint handles (only when selected) */}
+      {selected && (
+        <>
+          {/* Start point handle */}
+          <Circle
+            x={start.x}
+            y={start.y}
+            radius={6}
+            fill={dragIndex === 0 ? '#3B82F6' : '#ffffff'}
+            stroke="#3B82F6"
+            strokeWidth={2}
+            draggable
+            onDragStart={(e) => {
+              e.cancelBubble = true;
+              setDragIndex(0);
+            }}
+            onDragMove={(e) => {
+              e.cancelBubble = true;
+              const pos = e.target.position();
+              const snapped = smartSnap({ x: pos.x, y: pos.y }, components);
+
+              // Update the start point
+              const newPoints = [...points];
+              newPoints[0] = { x: snapped.x, y: snapped.y };
+
+              updateComponent(component.id, {
+                properties: {
+                  ...component.properties,
+                  points: newPoints,
+                }
+              });
+            }}
+            onDragEnd={(e) => {
+              e.cancelBubble = true;
+              setDragIndex(null);
+            }}
           />
-        </Group>
+
+          {/* End point handle */}
+          <Circle
+            x={end.x}
+            y={end.y}
+            radius={6}
+            fill={dragIndex === 1 ? '#3B82F6' : '#ffffff'}
+            stroke="#3B82F6"
+            strokeWidth={2}
+            draggable
+            onDragStart={(e) => {
+              e.cancelBubble = true;
+              setDragIndex(1);
+            }}
+            onDragMove={(e) => {
+              e.cancelBubble = true;
+              const pos = e.target.position();
+              const snapped = smartSnap({ x: pos.x, y: pos.y }, components);
+
+              // Update the end point
+              const newPoints = [...points];
+              newPoints[1] = { x: snapped.x, y: snapped.y };
+
+              updateComponent(component.id, {
+                properties: {
+                  ...component.properties,
+                  points: newPoints,
+                }
+              });
+            }}
+            onDragEnd={(e) => {
+              e.cancelBubble = true;
+              setDragIndex(null);
+            }}
+          />
+        </>
       )}
     </Group>
   );

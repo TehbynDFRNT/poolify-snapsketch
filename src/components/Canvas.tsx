@@ -13,7 +13,6 @@ import { BoundaryComponent } from './canvas/BoundaryComponent';
 import { HouseComponent } from './canvas/HouseComponent';
 import { ReferenceLineComponent } from './canvas/ReferenceLineComponent';
 import { PavingAreaComponent } from './canvas/PavingAreaComponent';
-import { CornerDirectionPicker } from './canvas/CornerDirectionPicker';
 import { PavingAreaDialog, PavingConfig } from './PavingAreaDialog';
 import { fillAreaWithPavers, calculateStatistics, validateBoundary } from '@/utils/pavingFill';
 import { snapToGrid, smartSnap } from '@/utils/snap';
@@ -22,14 +21,18 @@ import { PAVER_SIZES } from '@/constants/components';
 import { PoolSelector } from './PoolSelector';
 import { Pool } from '@/constants/pools';
 import { lockToAxis, detectAxisLock, calculateDistance } from '@/utils/canvas';
+import type { ToolType, Component } from '@/types';
 import { WALL_MATERIALS, FENCE_TYPES, DRAINAGE_TYPES } from '@/constants/components';
 import { sortComponentsByRenderOrder } from '@/constants/renderOrder';
+import { ComponentContextMenu } from './ComponentContextMenu';
+import type { ContextMenuAction } from '@/types/contextMenu';
 
 export const Canvas = ({ 
   activeTool = 'select',
   onZoomChange,
   onZoomLockedChange,
   onDrawingStateChange,
+  onToolChange,
 }: { 
   activeTool?: string;
   onZoomChange?: (zoom: number, locked: boolean, handlers: {
@@ -40,6 +43,7 @@ export const Canvas = ({
   }) => void;
   onZoomLockedChange?: (locked: boolean) => void;
   onDrawingStateChange?: (isDrawing: boolean, pointsCount: number, isMeasuring: boolean, shiftPressed: boolean, measureStart: any, measureEnd: any, ghostDistance: number | null) => void;
+  onToolChange?: (tool: ToolType) => void;
 }) => {
   const stageRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -56,12 +60,21 @@ export const Canvas = ({
   // Paving area dialog state
   const [showPavingDialog, setShowPavingDialog] = useState(false);
   const [pavingBoundary, setPavingBoundary] = useState<Array<{ x: number; y: number }>>([]);
+  // Removed extend-from-pool right-click mode and context menu
   
   // Measurement tool states
   const [measureStart, setMeasureStart] = useState<{ x: number; y: number } | null>(null);
   const [measureEnd, setMeasureEnd] = useState<{ x: number; y: number } | null>(null);
   const [isMeasuring, setIsMeasuring] = useState(false);
   const [shiftPressed, setShiftPressed] = useState(false);
+
+  // Universal context menu state
+  const [contextMenuState, setContextMenuState] = useState<{ open: boolean; x: number; y: number; component: Component | null }>({
+    open: false,
+    x: 0,
+    y: 0,
+    component: null
+  });
   
   const {
     zoom,
@@ -184,7 +197,7 @@ export const Canvas = ({
     }
     
     // Update measurement end point for measuring tools
-    if ((activeTool === 'quick_measure' || activeTool === 'reference_line') && measureStart) {
+    if (activeTool === 'quick_measure' && measureStart) {
       const pos = e.target.getStage().getPointerPosition();
       const canvasX = (pos.x - pan.x) / zoom;
       const canvasY = (pos.y - pan.y) / zoom;
@@ -225,76 +238,8 @@ export const Canvas = ({
       y: snapToGrid(canvasY),
     };
 
-    // Always handle measurement tools regardless of click target (allow over shapes)
-    if (activeTool === 'quick_measure' || activeTool === 'reference_line') {
-      if (!isMeasuring) {
-        // Start measuring (smart snap start point)
-        const startSmart = smartSnap({ x: canvasX, y: canvasY }, components);
-        setMeasureStart({ x: startSmart.x, y: startSmart.y });
-        setMeasureEnd({ x: startSmart.x, y: startSmart.y });
-        setIsMeasuring(true);
-      } else {
-        // Finish measuring
-        if (measureStart && measureEnd) {
-          let finalEnd = measureEnd;
-
-          // Apply axis lock if Shift is pressed
-          if (shiftPressed) {
-            finalEnd = lockToAxis(measureStart, measureEnd);
-          }
-
-          const distance = calculateDistance(measureStart, finalEnd);
-          const locked = shiftPressed ? detectAxisLock(measureStart, finalEnd) : null;
-
-          // Create the component
-          const component = {
-            type: activeTool as 'quick_measure' | 'reference_line',
-            position: { x: 0, y: 0 },
-            rotation: 0,
-            dimensions: { width: 0, height: 0 },
-            properties: {
-              points: [measureStart, finalEnd],
-              measurement: distance,
-              style: {
-                color: activeTool === 'quick_measure' ? '#eab308' : '#dc2626',
-                dashed: activeTool === 'reference_line',
-                lineWidth: 2,
-                arrowEnds: true,
-              },
-              locked,
-              showMeasurement: true,
-              exportToPDF: activeTool === 'reference_line',
-              temporary: activeTool === 'quick_measure',
-              createdAt: Date.now(),
-            },
-          };
-
-          addComponent(component);
-
-          // Auto-delete quick measurements after 3 seconds
-          if (activeTool === 'quick_measure') {
-            const componentId = components.length > 0 ? components[components.length - 1].id : null;
-            setTimeout(() => {
-              if (componentId) {
-                const currentComponents = useDesignStore.getState().components;
-                const componentStillExists = currentComponents.find(c => c.id === componentId);
-                if (componentStillExists) {
-                  useDesignStore.getState().deleteComponent(componentId);
-                }
-              }
-            }, 3000);
-          }
-        }
-
-        setMeasureStart(null);
-        setMeasureEnd(null);
-        setIsMeasuring(false);
-      }
-      return;
-    }
-
-    // For other tools, only handle clicks on empty canvas area
-    if (e.target === stage) {
+    // Helper to handle clicks as if on empty background (used by overlay too)
+    const handleBackgroundPrimaryClick = (x: number, y: number) => {
       // Handle drawing tools (polyline)
       const isPolylineTool =
         activeTool === 'boundary' ||
@@ -306,7 +251,7 @@ export const Canvas = ({
 
       if (isPolylineTool) {
         // Smart snap for all polyline tools
-        const smart = smartSnap({ x: canvasX, y: canvasY }, components);
+        const smart = smartSnap({ x, y }, components);
         let pointToAdd = { x: smart.x, y: smart.y };
 
         // Apply axis lock commit when Shift is pressed and we have a prior point
@@ -347,21 +292,88 @@ export const Canvas = ({
         // Add point to drawing
         setDrawingPoints([...drawingPoints, pointToAdd]);
         setIsDrawing(true);
+        return;
       }
+
       // Deselect in select mode
-      else if (activeTool === 'select') {
+      if (activeTool === 'select') {
         selectComponent(null);
+        return;
       }
+
       // Show pool selector for pool tool
-      else if (activeTool === 'pool') {
-        setPendingPoolPosition(snapped);
+      if (activeTool === 'pool') {
+        setPendingPoolPosition({ x: snapToGrid(x), y: snapToGrid(y) });
         setShowPoolSelector(true);
+        return;
       }
+
       // Place component for one-click tools (keep Paver only)
-      else if (activeTool !== 'hand' && activeTool === 'paver') {
+      if (activeTool !== 'hand' && activeTool === 'paver') {
         selectComponent(null);
-        handleToolPlace(snapped);
+        handleToolPlace({ x: snapToGrid(x), y: snapToGrid(y) });
+        return;
       }
+    };
+
+    // Always handle measurement tools regardless of click target (allow over shapes)
+    if (activeTool === 'quick_measure') {
+      if (!isMeasuring) {
+        // Start measuring (smart snap start point)
+        const startSmart = smartSnap({ x: canvasX, y: canvasY }, components);
+        setMeasureStart({ x: startSmart.x, y: startSmart.y });
+        setMeasureEnd({ x: startSmart.x, y: startSmart.y });
+        setIsMeasuring(true);
+      } else {
+        // Finish measuring
+        if (measureStart && measureEnd) {
+          let finalEnd = measureEnd;
+
+          // Apply axis lock if Shift is pressed
+          if (shiftPressed) {
+            finalEnd = lockToAxis(measureStart, measureEnd);
+          }
+
+          const distance = calculateDistance(measureStart, finalEnd);
+          const locked = shiftPressed ? detectAxisLock(measureStart, finalEnd) : null;
+
+          // Create the component
+          const component = {
+            type: 'quick_measure' as const,
+            position: { x: 0, y: 0 },
+            rotation: 0,
+            dimensions: { width: 0, height: 0 },
+            properties: {
+              points: [measureStart, finalEnd],
+              measurement: distance,
+              style: {
+                color: '#dc2626',
+                dashed: false,
+                lineWidth: 2,
+                arrowEnds: true,
+              },
+              locked,
+              showMeasurement: true,
+              exportToPDF: true,
+              temporary: false,
+              createdAt: Date.now(),
+            },
+          };
+
+          addComponent(component);
+        }
+
+        setMeasureStart(null);
+        setMeasureEnd(null);
+        setIsMeasuring(false);
+        onToolChange?.('select');
+      }
+      return;
+    }
+
+    // For other tools, only handle clicks on empty canvas area
+    if (e.target === stage) {
+      handleBackgroundPrimaryClick(canvasX, canvasY);
     }
   };
   // Handle paving area configuration
@@ -422,6 +434,7 @@ export const Canvas = ({
     } else {
       toast.success(`Paving created: ${pavers.length} full pavers (no cuts needed)`);
     }
+    onToolChange?.('select');
   };
 
   // Finish drawing and create component(s)
@@ -503,6 +516,7 @@ export const Canvas = ({
     setDrawingPoints([]);
     setIsDrawing(false);
     setGhostPoint(null);
+    onToolChange?.('select');
   };
 
   // Keyboard shortcuts for drawing
@@ -585,7 +599,7 @@ export const Canvas = ({
       setIsDrawing(false);
       setGhostPoint(null);
     }
-    if (activeTool !== 'quick_measure' && activeTool !== 'reference_line') {
+    if (activeTool !== 'quick_measure') {
       setMeasureStart(null);
       setMeasureEnd(null);
       setIsMeasuring(false);
@@ -608,8 +622,61 @@ export const Canvas = ({
         },
       });
       setPendingPoolPosition(null);
+      onToolChange?.('select');
     }
   };
+
+  // Removed pool right-click extend handler
+
+  // Universal component context menu handler
+  const handleComponentContextMenu = (component: Component, screenPos: { x: number; y: number }) => {
+    setContextMenuState({
+      open: true,
+      x: screenPos.x,
+      y: screenPos.y,
+      component
+    });
+  };
+
+  const handleContextMenuAction = (action: ContextMenuAction, data?: any) => {
+    if (!contextMenuState.component) return;
+
+    switch (action) {
+      case 'delete':
+        deleteComponent(contextMenuState.component.id);
+        break;
+
+      case 'add_annotation':
+        updateComponent(contextMenuState.component.id, {
+          properties: {
+            ...contextMenuState.component.properties,
+            annotation: data
+          }
+        });
+        break;
+
+      case 'duplicate':
+        // TODO: Implement duplicate functionality
+        toast.info('Duplicate feature coming soon');
+        break;
+
+      case 'bring_to_front':
+        // TODO: Implement bring to front
+        toast.info('Bring to front feature coming soon');
+        break;
+
+      case 'send_to_back':
+        // TODO: Implement send to back
+        toast.info('Send to back feature coming soon');
+        break;
+    }
+  };
+
+  const handleContextMenuClose = () => {
+    setContextMenuState({ open: false, x: 0, y: 0, component: null });
+  };
+
+  // Removed extend-from-pool finalize
 
   const handleToolPlace = (pos: { x: number; y: number }) => {
     switch (activeTool) {
@@ -628,6 +695,7 @@ export const Canvas = ({
             paverCount: { rows: 1, cols: 1 },
           },
         });
+        onToolChange?.('select');
         break;
         
       case 'drainage':
@@ -641,6 +709,7 @@ export const Canvas = ({
             length: 1000,
           },
         });
+        onToolChange?.('select');
         break;
         
       case 'fence':
@@ -654,6 +723,7 @@ export const Canvas = ({
             gates: [],
           },
         });
+        onToolChange?.('select');
         break;
         
       case 'wall':
@@ -666,6 +736,7 @@ export const Canvas = ({
             wallMaterial: 'timber',
           },
         });
+        onToolChange?.('select');
         break;
     }
   };
@@ -877,9 +948,9 @@ export const Canvas = ({
   // Render measurement preview line
   const renderMeasurementPreview = () => {
     if (!isMeasuring || !measureStart || !measureEnd) return null;
-    
-    const color = activeTool === 'quick_measure' ? '#eab308' : '#dc2626';
-    
+
+    const color = '#dc2626';
+
     return (
       <>
         {/* Measurement line */}
@@ -887,7 +958,7 @@ export const Canvas = ({
           points={[measureStart.x, measureStart.y, measureEnd.x, measureEnd.y]}
           stroke={color}
           strokeWidth={2}
-          dash={activeTool === 'reference_line' ? [10, 5] : []}
+          dash={[]}
           opacity={0.7}
           listening={false}
         />
@@ -928,6 +999,15 @@ export const Canvas = ({
     );
   };
 
+  // Disable selection/listening on components while drawing/placing/measuring
+  const blockSelection = (() => {
+    const interceptTools = new Set([
+      'boundary', 'house', 'paving_area', 'wall', 'fence', 'drainage',
+      'paver', 'quick_measure'
+    ]);
+    return isDrawing || isMeasuring || interceptTools.has(activeTool);
+  })();
+
   return (
     <div ref={containerRef} className="relative z-0 w-full h-full bg-canvas-bg">
       <Stage
@@ -948,7 +1028,7 @@ export const Canvas = ({
           }
         }}
       >
-        <Layer>
+        <Layer listening={!blockSelection}>
           {renderGrid()}
           
           {/* Drawing preview */}
@@ -971,6 +1051,7 @@ export const Canvas = ({
                       key={component.id}
                       component={component}
                       isSelected={isSelected}
+                      activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDragEnd={(pos) => {
                         const snapped = {
@@ -979,6 +1060,7 @@ export const Canvas = ({
                         };
                         updateComponent(component.id, { position: snapped });
                       }}
+                      onContextMenu={handleComponentContextMenu}
                     />
                   );
                   
@@ -988,6 +1070,7 @@ export const Canvas = ({
                       key={component.id}
                       component={component}
                       isSelected={isSelected}
+                      activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDragEnd={(pos) => {
                         const snapped = {
@@ -1084,6 +1167,7 @@ export const Canvas = ({
                           },
                         });
                       }}
+                      onContextMenu={handleComponentContextMenu}
                     />
                   );
 
@@ -1093,6 +1177,7 @@ export const Canvas = ({
                       key={component.id}
                       component={component}
                       isSelected={isSelected}
+                      activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDragEnd={(pos) => {
                         const snapped = {
@@ -1107,6 +1192,7 @@ export const Canvas = ({
                           dimensions: { ...component.dimensions, width: length },
                         })
                       }
+                      onContextMenu={handleComponentContextMenu}
                     />
                   );
                   
@@ -1116,6 +1202,7 @@ export const Canvas = ({
                       key={component.id}
                       component={component}
                       isSelected={isSelected}
+                      activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDragEnd={(pos) => {
                         const snapped = {
@@ -1129,6 +1216,7 @@ export const Canvas = ({
                           dimensions: { ...component.dimensions, width: length },
                         })
                       }
+                      onContextMenu={handleComponentContextMenu}
                     />
                   );
                   
@@ -1138,6 +1226,7 @@ export const Canvas = ({
                       key={component.id}
                       component={component}
                       isSelected={isSelected}
+                      activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDragEnd={(pos) => {
                         const snapped = {
@@ -1151,6 +1240,7 @@ export const Canvas = ({
                           dimensions: { ...component.dimensions, width: length },
                         })
                       }
+                      onContextMenu={handleComponentContextMenu}
                     />
                   );
                   
@@ -1160,6 +1250,7 @@ export const Canvas = ({
                       key={component.id}
                       component={component}
                       isSelected={isSelected}
+                      activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDragEnd={(pos) => {
                         const snapped = {
@@ -1168,6 +1259,7 @@ export const Canvas = ({
                         };
                         updateComponent(component.id, { position: snapped });
                       }}
+                      onContextMenu={handleComponentContextMenu}
                     />
                   );
                   
@@ -1177,6 +1269,7 @@ export const Canvas = ({
                       key={component.id}
                       component={component}
                       isSelected={isSelected}
+                      activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDragEnd={(pos) => {
                         const snapped = {
@@ -1185,18 +1278,20 @@ export const Canvas = ({
                         };
                         updateComponent(component.id, { position: snapped });
                       }}
+                      onContextMenu={handleComponentContextMenu}
                     />
                   );
                 
-                case 'reference_line':
                 case 'quick_measure':
                   return (
                     <ReferenceLineComponent
                       key={component.id}
                       component={component}
                       selected={isSelected}
+                      activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDelete={() => deleteComponent(component.id)}
+                      onContextMenu={handleComponentContextMenu}
                     />
                   );
                 
@@ -1206,8 +1301,10 @@ export const Canvas = ({
                       key={component.id}
                       component={component}
                       isSelected={isSelected}
+                      activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDelete={() => deleteComponent(component.id)}
+                      onContextMenu={handleComponentContextMenu}
                     />
                   );
                   
@@ -1221,6 +1318,16 @@ export const Canvas = ({
           {renderMeasurementPreview()}
         </Layer>
       </Stage>
+
+      {/* Universal context menu for all components */}
+      {contextMenuState.open && contextMenuState.component && (
+        <ComponentContextMenu
+          component={contextMenuState.component}
+          position={{ x: contextMenuState.x, y: contextMenuState.y }}
+          onAction={handleContextMenuAction}
+          onClose={handleContextMenuClose}
+        />
+      )}
 
       {/* Pool Selector Modal */}
       {showPoolSelector && (
@@ -1242,23 +1349,6 @@ export const Canvas = ({
           onConfirm={handlePavingConfig}
         />
       )}
-      
-      {/* Corner Direction Picker (rendered outside Konva context) */}
-      {(() => {
-        const poolWithPicker = components.find(c => c.type === 'pool' && (c as any)._cornerPickerState);
-        if (poolWithPicker) {
-          const pickerState = (poolWithPicker as any)._cornerPickerState;
-          return (
-            <CornerDirectionPicker
-              paver={pickerState.paver}
-              position={pickerState.position}
-              onSelectDirection={pickerState.onSelectDirection}
-              onCancel={pickerState.onCancel}
-            />
-          );
-        }
-        return null;
-      })()}
     </div>
   );
 };

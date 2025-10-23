@@ -37,7 +37,6 @@ export const RENDER_ORDER: Record<ComponentType, number> = {
   house: 6,
 
   // Layer 7: Measurement tools (highest/front)
-  reference_line: 7,
   quick_measure: 7,
 };
 
