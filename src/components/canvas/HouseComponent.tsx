@@ -4,6 +4,7 @@ import { Component } from '@/types';
 interface HouseComponentProps {
   component: Component;
   isSelected: boolean;
+  activeTool?: string;
   onSelect: () => void;
   onDragEnd?: (pos: { x: number; y: number }) => void;
   onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
@@ -12,6 +13,7 @@ interface HouseComponentProps {
 export const HouseComponent = ({
   component,
   isSelected,
+  activeTool,
   onSelect,
   onDragEnd,
   onContextMenu,
@@ -109,7 +111,7 @@ export const HouseComponent = ({
       x={component.position.x}
       y={component.position.y}
       rotation={component.rotation}
-      draggable={isSelected}
+      draggable={activeTool !== 'hand' && isSelected}
       onClick={onSelect}
       onTap={onSelect}
       onContextMenu={handleRightClick}

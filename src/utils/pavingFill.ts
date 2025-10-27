@@ -1,4 +1,6 @@
 import { GRID_CONFIG } from '@/constants/grid';
+import { GROUT_MM } from '@/utils/copingCalculation';
+import { TILE_SIZES, TileSize, TileOrientation, getTileDimensions } from '@/constants/tileConfig';
 
 interface Point {
   x: number;
@@ -22,28 +24,31 @@ interface Paver {
 }
 
 export function getPaverDimensions(
-  paverSize: '400x400' | '400x600',
-  orientation: 'vertical' | 'horizontal'
+  paverSize: TileSize,
+  orientation: TileOrientation
 ): { width: number; height: number } {
-  if (paverSize === '400x400') {
-    return { width: 400, height: 400 };
-  }
-  
-  if (orientation === 'vertical') {
-    return { width: 400, height: 600 };
-  } else {
-    return { width: 600, height: 400 };
-  }
+  // Use centralized getTileDimensions
+  return getTileDimensions(paverSize, orientation);
 }
 
 export function fillAreaWithPavers(
   boundary: Point[],
-  paverSize: '400x400' | '400x600',
-  paverOrientation: 'vertical' | 'horizontal',
+  paverSize: TileSize,
+  paverOrientation: TileOrientation,
   showEdgePavers: boolean,
-  poolExcludeZones: PoolExcludeZone[] = []
+  poolExcludeZones: PoolExcludeZone[] = [],
+  groutMmOpt?: number
 ): Paver[] {
-  return fillAreaWithPaversFromOrigin(boundary, paverSize, paverOrientation, showEdgePavers, poolExcludeZones);
+  // Standardize grout to match coping (GROUT_MM) unless overridden
+  return fillAreaWithPaversFromOrigin(
+    boundary,
+    paverSize,
+    paverOrientation,
+    showEdgePavers,
+    poolExcludeZones,
+    undefined,
+    groutMmOpt ?? GROUT_MM
+  );
 }
 
 /**
@@ -52,8 +57,8 @@ export function fillAreaWithPavers(
  */
 export function fillAreaWithPaversFromOrigin(
   boundary: Point[],
-  paverSize: '400x400' | '400x600',
-  paverOrientation: 'vertical' | 'horizontal',
+  paverSize: TileSize,
+  paverOrientation: TileOrientation,
   showEdgePavers: boolean,
   poolExcludeZones: PoolExcludeZone[] = [],
   origin?: { x?: number; y?: number },
@@ -347,9 +352,9 @@ function isPointInPolygon(point: Point, polygon: Point[]): boolean {
 }
 
 export function validateBoundary(
-  points: Point[], 
-  paverSize?: '400x400' | '400x600',
-  orientation?: 'vertical' | 'horizontal'
+  points: Point[],
+  paverSize?: TileSize,
+  orientation?: TileOrientation
 ): { valid: boolean; error?: string } {
   if (points.length < 3) {
     return { valid: false, error: 'Need at least 3 points' };
@@ -358,12 +363,9 @@ export function validateBoundary(
   if (hasIntersectingEdges(points)) {
     return { valid: false, error: 'Boundary lines cannot cross each other' };
   }
-  
+
   const area = calculatePolygonArea(points);
-  if (area < 100000) {
-    return { valid: false, error: 'Area too small (minimum 0.1 m²)' };
-  }
-  
+
   if (area > 10000000000) {
     return { valid: false, error: 'Area too large (maximum 10,000 m²)' };
   }

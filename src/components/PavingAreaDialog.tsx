@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { validateBoundary, fillAreaWithPavers, calculateStatistics } from '@/utils/pavingFill';
+import { TILE_SIZES, TileSize, TileOrientation } from '@/constants/tileConfig';
 
 interface Point {
   x: number;
@@ -21,15 +22,15 @@ interface PavingAreaDialogProps {
 }
 
 export interface PavingConfig {
-  paverSize: '400x400' | '400x600';
-  paverOrientation: 'vertical' | 'horizontal';
+  paverSize: TileSize;
+  paverOrientation: TileOrientation;
   showEdgePavers: boolean;
   wastagePercentage: number;
 }
 
 export const PavingAreaDialog = ({ open, onOpenChange, boundary, onConfirm }: PavingAreaDialogProps) => {
-  const [paverSize, setPaverSize] = useState<'400x400' | '400x600'>('400x400');
-  const [paverOrientation, setPaverOrientation] = useState<'vertical' | 'horizontal'>('vertical');
+  const [paverSize, setPaverSize] = useState<TileSize>('400x400');
+  const [paverOrientation, setPaverOrientation] = useState<TileOrientation>('vertical');
   const [showEdgePavers, setShowEdgePavers] = useState(true);
   const [includeWastage, setIncludeWastage] = useState(true);
   const [wastagePercentage, setWastagePercentage] = useState(15);
@@ -72,37 +73,33 @@ export const PavingAreaDialog = ({ open, onOpenChange, boundary, onConfirm }: Pa
           {/* Paver Size */}
           <div className="space-y-3">
             <Label>Paver Size</Label>
-            <RadioGroup value={paverSize} onValueChange={(value) => setPaverSize(value as '400x400' | '400x600')}>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="400x400" id="size-400x400" />
-                <Label htmlFor="size-400x400" className="cursor-pointer font-normal">
-                  400 × 400mm (square)
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="400x600" id="size-400x600" />
-                <Label htmlFor="size-400x600" className="cursor-pointer font-normal">
-                  400 × 600mm (rectangle)
-                </Label>
-              </div>
+            <RadioGroup value={paverSize} onValueChange={(value) => setPaverSize(value as TileSize)}>
+              {Object.entries(TILE_SIZES).map(([key, tile]) => (
+                <div key={key} className="flex items-center space-x-2">
+                  <RadioGroupItem value={key} id={`size-${key}`} />
+                  <Label htmlFor={`size-${key}`} className="cursor-pointer font-normal">
+                    {tile.label} {tile.width === tile.height ? '(square)' : '(rectangle)'}
+                  </Label>
+                </div>
+              ))}
             </RadioGroup>
           </div>
 
-          {/* Orientation (only for 400x600) */}
-          {paverSize === '400x600' && (
+          {/* Orientation (only for non-square tiles) */}
+          {TILE_SIZES[paverSize].width !== TILE_SIZES[paverSize].height && (
             <div className="space-y-3">
               <Label>Paver Orientation</Label>
-              <RadioGroup value={paverOrientation} onValueChange={(value) => setPaverOrientation(value as 'vertical' | 'horizontal')}>
+              <RadioGroup value={paverOrientation} onValueChange={(value) => setPaverOrientation(value as TileOrientation)}>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="vertical" id="orient-vertical" />
                   <Label htmlFor="orient-vertical" className="cursor-pointer font-normal">
-                    Vertical (400mm wide × 600mm long)
+                    Vertical ({TILE_SIZES[paverSize].width}mm wide × {TILE_SIZES[paverSize].height}mm long)
                   </Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="horizontal" id="orient-horizontal" />
                   <Label htmlFor="orient-horizontal" className="cursor-pointer font-normal">
-                    Horizontal (600mm wide × 400mm long)
+                    Horizontal ({TILE_SIZES[paverSize].height}mm wide × {TILE_SIZES[paverSize].width}mm long)
                   </Label>
                 </div>
               </RadioGroup>
@@ -193,8 +190,8 @@ export const PavingAreaDialog = ({ open, onOpenChange, boundary, onConfirm }: Pa
 // Helper function to calculate preview statistics
 function calculatePreviewStats(
   boundary: Point[],
-  paverSize: '400x400' | '400x600',
-  orientation: 'vertical' | 'horizontal',
+  paverSize: TileSize,
+  orientation: TileOrientation,
   showEdgePavers: boolean,
   wastagePercentage: number
 ) {
@@ -220,13 +217,14 @@ function calculatePreviewStats(
   };
 }
 
-function getPaverDimensions(paverSize: '400x400' | '400x600', orientation: 'vertical' | 'horizontal') {
-  if (paverSize === '400x400') {
-    return { width: 400, height: 400 };
+function getPaverDimensions(paverSize: TileSize, orientation: TileOrientation) {
+  const tile = TILE_SIZES[paverSize];
+  if (tile.width === tile.height) {
+    return { width: tile.width, height: tile.height };
   }
-  return orientation === 'vertical' 
-    ? { width: 400, height: 600 } 
-    : { width: 600, height: 400 };
+  return orientation === 'vertical'
+    ? { width: tile.width, height: tile.height }
+    : { width: tile.height, height: tile.width };
 }
 
 function getBoundingBox(points: Point[]) {

@@ -8,6 +8,7 @@ import { GRID_CONFIG } from '@/constants/grid';
 interface FenceComponentProps {
   component: Component;
   isSelected: boolean;
+  activeTool?: string;
   onSelect: () => void;
   onDragEnd: (pos: { x: number; y: number }) => void;
   onExtend?: (length: number) => void;
@@ -17,6 +18,7 @@ interface FenceComponentProps {
 export const FenceComponent = ({
   component,
   isSelected,
+  activeTool,
   onSelect,
   onDragEnd,
   onExtend,
@@ -27,6 +29,18 @@ export const FenceComponent = ({
   const [hoverSeg, setHoverSeg] = useState<{ run: number; seg: number } | null>(null);
 
   const groupRef = useRef<any>(null);
+  const selectFenceSegment = useDesignStore((s) => s.selectFenceSegment);
+  const selectedFenceGlobal = useDesignStore((s) => s.selectedFenceSegment);
+
+  // Local context menu handler (needs to be defined before JSX usage)
+  const handleContextMenuLocal = (e: any) => {
+    e.evt.preventDefault();
+    if (onContextMenu) {
+      const stage = e.target.getStage();
+      const pointerPos = stage.getPointerPosition();
+      onContextMenu(component, { x: pointerPos.x, y: pointerPos.y });
+    }
+  };
 
   const scale = 0.1;
   const fenceType = component.properties.fenceType || 'glass';
@@ -76,6 +90,10 @@ export const FenceComponent = ({
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === 'Shift') setShiftPressed(true);
+      if (e.key === 'Escape') {
+        setSelectedSeg(null);
+        selectFenceSegment(null);
+      }
     };
     const up = (e: KeyboardEvent) => {
       if (e.key === 'Shift') setShiftPressed(false);
@@ -165,6 +183,8 @@ export const FenceComponent = ({
     const railOffset = railGapPx / 2; // half of visual gap
     const topRail = offsetPolyline(localPts, -railOffset);
     const bottomRail = offsetPolyline(localPts, railOffset);
+    const pxPerMm = GRID_CONFIG.spacing / 100;
+    const hitWidthPx = 10 * pxPerMm; // standard 10mm clickable width
     const flat = (arr: Array<{ x: number; y: number }>) => arr.flatMap((p) => [p.x, p.y]);
 
     // Utilities to sample along centerline
@@ -239,9 +259,10 @@ export const FenceComponent = ({
         x={component.position.x}
         y={component.position.y}
         rotation={component.rotation}
-        draggable={isSelected && !shiftPressed}
+        draggable={activeTool !== 'hand' && isSelected && !shiftPressed}
         onClick={onSelect}
         onTap={onSelect}
+        onContextMenu={handleContextMenuLocal}
         onDragStart={(e) => {
           dragStartPos.current = { x: component.position.x, y: component.position.y };
         }}
@@ -310,7 +331,7 @@ export const FenceComponent = ({
                   const s1 = s0 + Lpanel;
                   const a = { x: A0.x + tdir.x * s0, y: A0.y + tdir.y * s0 };
                   const b = { x: A0.x + tdir.x * s1, y: A0.y + tdir.y * s1 };
-                  // Single centered pane line (scale-accurate 40mm)
+                  // Gates removed from fence rendering; always draw continuous pane segment.
                   rails.push(
                     <Line
                       key={`gp-${i}-${k}`}
@@ -320,33 +341,7 @@ export const FenceComponent = ({
                       lineCap="round"
                     />
                   );
-                  // Invisible hit to enable Shift-click selection
-                  rails.push(
-                    <Line
-                      key={`ghit-${i}-${k}`}
-                      points={[a.x, a.y, b.x, b.y]}
-                      stroke={color}
-                      strokeWidth={1}
-                      opacity={0.01}
-                      hitStrokeWidth={Math.max(20, glassPaneStrokeWidth + 8)}
-                      onMouseDown={(e) => {
-                        if (e.evt.shiftKey) {
-                          e.cancelBubble = true;
-                          setSelectedSeg({ run: i - 1, seg: k });
-                        }
-                      }}
-                      onMouseEnter={(e) => {
-                        if (e.evt.shiftKey) {
-                          setHoverSeg({ run: i - 1, seg: k });
-                          document.body.style.cursor = 'pointer';
-                        }
-                      }}
-                      onMouseLeave={() => {
-                        setHoverSeg(null);
-                        document.body.style.cursor = 'default';
-                      }}
-                    />
-                  );
+                  // Segment selection disabled
 
                   // Feet at 25% and 75% along the panel
                   const f1 = { x: A0.x + tdir.x * (s0 + Lpanel * 0.25), y: A0.y + tdir.y * (s0 + Lpanel * 0.25) };
@@ -361,8 +356,9 @@ export const FenceComponent = ({
                   posts.push(<Line key={`gf1-${i}-${k}`} points={cross(f1)} stroke={metalColor} strokeWidth={strokeWidth + 2} />);
                   posts.push(<Line key={`gf2-${i}-${k}`} points={cross(f2)} stroke={metalColor} strokeWidth={strokeWidth + 2} />);
 
-                  // Highlight if selected/hovered
-                  const isActive = (selectedSeg && selectedSeg.run === i - 1 && selectedSeg.seg === k) || (hoverSeg && hoverSeg.run === i - 1 && hoverSeg.seg === k);
+                  // Highlight if selected/hovered (also honor global selection to survive re-renders)
+                  const isGlobal = !!(selectedFenceGlobal && selectedFenceGlobal.componentId === component.id && selectedFenceGlobal.run === i - 1 && selectedFenceGlobal.seg === k);
+                  const isActive = isGlobal || (selectedSeg && selectedSeg.run === i - 1 && selectedSeg.seg === k) || (hoverSeg && hoverSeg.run === i - 1 && hoverSeg.seg === k);
                   if (isActive) {
                     rails.push(
                       <Line key={`ghl-${i}-${k}`} points={[a.x, a.y, b.x, b.y]} stroke={selectedSeg ? '#2563EB' : '#60A5FA'} strokeWidth={glassPaneStrokeWidth + 6} opacity={selectedSeg ? 0.5 : 0.35} lineCap="round" />
@@ -428,35 +424,10 @@ export const FenceComponent = ({
                     const s1 = s0 + Lpanel;
                     const aPt = getPointAt(offset + s0).pos;
                     const bPt = getPointAt(offset + s1).pos;
-                    // Invisible hit to allow Shift-click selection
-                    elems.push(
-                      <Line
-                        key={`mh-${i}-${k}`}
-                        points={[aPt.x, aPt.y, bPt.x, bPt.y]}
-                        stroke={color}
-                        strokeWidth={1}
-                        opacity={0.01}
-                        hitStrokeWidth={Math.max(20, metalBandStrokeWidth + 8)}
-                        onMouseDown={(e) => {
-                          if (e.evt.shiftKey) {
-                            e.cancelBubble = true;
-                            setSelectedSeg({ run: i - 1, seg: k });
-                          }
-                        }}
-                        onMouseEnter={(e) => {
-                          if (e.evt.shiftKey) {
-                            setHoverSeg({ run: i - 1, seg: k });
-                            document.body.style.cursor = 'pointer';
-                          }
-                        }}
-                        onMouseLeave={() => {
-                          setHoverSeg(null);
-                          document.body.style.cursor = 'default';
-                        }}
-                      />
-                    );
-                    // Highlight overlay if selected
-                    const isActive = (selectedSeg && selectedSeg.run === i - 1 && selectedSeg.seg === k) || (hoverSeg && hoverSeg.run === i - 1 && hoverSeg.seg === k);
+                    // Segment selection disabled
+                    // Highlight overlay if selected (also honor global selection)
+                    const isGlobal = !!(selectedFenceGlobal && selectedFenceGlobal.componentId === component.id && selectedFenceGlobal.run === i - 1 && selectedFenceGlobal.seg === k);
+                    const isActive = isGlobal || (selectedSeg && selectedSeg.run === i - 1 && selectedSeg.seg === k) || (hoverSeg && hoverSeg.run === i - 1 && hoverSeg.seg === k);
                     if (isActive) {
                       elems.push(
                         <Line
@@ -472,6 +443,7 @@ export const FenceComponent = ({
                       const mid = { x: (aPt.x + bPt.x) / 2, y: (aPt.y + bPt.y) / 2 };
                       elems.push(<Text key={`mlen-${i}-${k}`} x={mid.x} y={mid.y - metalBandStrokeWidth - 10} text={`${meters}m`} fontSize={12} fill="#2563EB" align="center" offsetX={14} />);
                     }
+                    // If a gate exists, skip drawing band across gate later (band uses continuous line already above). For preview here we keep only selection cues.
                     // Internal post at panel end (shared due to dedupe)
                     if (k < N - 1) placeGlobalAt(offset + s1);
                     sPanel = s1 + cfg.gap;
@@ -577,14 +549,7 @@ export const FenceComponent = ({
     );
   }
 
-  const handleRightClick = (e: any) => {
-    e.evt.preventDefault();
-    if (onContextMenu) {
-      const stage = e.target.getStage();
-      const pointerPos = stage.getPointerPosition();
-      onContextMenu(component, { x: pointerPos.x, y: pointerPos.y });
-    }
-  };
+  // removed old handleRightClick (replaced with handleContextMenuLocal above)
 
   return (
       <Group
@@ -592,10 +557,10 @@ export const FenceComponent = ({
         x={component.position.x}
         y={component.position.y}
         rotation={component.rotation}
-        draggable={!isDraggingHandle}
+        draggable={activeTool !== 'hand' && !isDraggingHandle}
         onClick={onSelect}
         onTap={onSelect}
-        onContextMenu={handleRightClick}
+        onContextMenu={handleContextMenuLocal}
         onDragEnd={(e) => {
           onDragEnd({ x: e.target.x(), y: e.target.y() });
         }}
@@ -661,6 +626,13 @@ export const FenceComponent = ({
                 lineCap="round"
               />
             );
+            // Segment selection disabled
+            const isGlobal = !!(selectedFenceGlobal && selectedFenceGlobal.componentId === component.id && selectedFenceGlobal.run === 0 && selectedFenceGlobal.seg === k);
+            const isActive = isGlobal || (selectedSeg && selectedSeg.run === 0 && selectedSeg.seg === k) || (hoverSeg && hoverSeg.run === 0 && hoverSeg.seg === k);
+            if (isActive) {
+              rails.push(<Line key={`ghl-s-${k}`} points={[s0, 0, s1, 0]} stroke={selectedSeg ? '#2563EB' : '#60A5FA'} strokeWidth={glassPaneStrokeWidth + 6} opacity={selectedSeg ? 0.5 : 0.35} lineCap="round" />);
+              rails.push(<Text key={`glen-s-${k}`} x={(s0 + s1) / 2} y={-glassPaneStrokeWidth - 10} text={`${((s1 - s0) / 100).toFixed(1)}m`} fontSize={12} fill="#2563EB" align="center" offsetX={14} />);
+            }
             const f1 = s0 + Lpanel * 0.25;
             const f2 = s0 + Lpanel * 0.75;
             const crossExtent = glassPaneStrokeWidth / 2 + 3;

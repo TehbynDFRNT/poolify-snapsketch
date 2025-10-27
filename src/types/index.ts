@@ -13,13 +13,15 @@ export type ToolType =
   | 'hand'
   | 'pool'
   | 'paver'
+  | 'gate'
   | 'paving_area'
   | 'drainage'
   | 'fence'
   | 'wall'
   | 'boundary'
   | 'house'
-  | 'quick_measure';
+  | 'quick_measure'
+  | 'decoration';
 
 export type ComponentType =
   | 'pool'
@@ -27,10 +29,12 @@ export type ComponentType =
   | 'paving_area'
   | 'drainage'
   | 'fence'
+  | 'gate'
   | 'wall'
   | 'boundary'
   | 'house'
-  | 'quick_measure';
+  | 'quick_measure'
+  | 'decoration';
 
 export interface Component {
   id: string;
@@ -126,6 +130,8 @@ export interface ComponentProperties {
     totalArea: number;
     orderQuantity: number;
   };
+  // Generic area (concrete/grass)
+  areaSurface?: 'concrete' | 'grass';
   
   // Drainage
   drainageType?: 'rock' | 'ultradrain';
@@ -133,7 +139,6 @@ export interface ComponentProperties {
   
   // Fence
   fenceType?: 'glass' | 'metal' | 'boundary';
-  gates?: Array<{ position: number; width: number }>;
   
   // Wall
   wallMaterial?: 'timber' | 'concrete' | 'concrete_sleeper' | 'sandstone';
@@ -168,6 +173,10 @@ export interface ComponentProperties {
   temporary?: boolean;
   createdAt?: number;
   measurement?: number;
+
+  // Decoration
+  decorationType?: 'bush' | 'umbrella' | 'waterfeature' | 'deckchairs';
+  imagePath?: string;
 }
 
 export interface Summary {
@@ -197,7 +206,6 @@ export interface Summary {
   fencing: Array<{
     type: string;
     length: number;
-    gates: number;
   }>;
   walls: Array<{
     material: string;

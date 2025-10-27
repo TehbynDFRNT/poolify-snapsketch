@@ -12,6 +12,7 @@ interface DesignStore {
   // Canvas
   components: Component[];
   selectedComponentId: string | null;
+  selectedFenceSegment: { componentId: string; run: number; seg: number } | null;
   
   // View
   zoom: number;
@@ -24,11 +25,23 @@ interface DesignStore {
   history: Component[][];
   historyIndex: number;
   
+  // Tile selection (paver/coping) for footer UI
+  tileSelection: null | {
+    scope: 'paver';
+    componentId: string;
+    count: number;
+    widthMm: number;
+    heightMm: number;
+    tileWidthMm: number;
+    tileHeightMm: number;
+  };
+  
   // Actions
   addComponent: (component: Omit<Component, 'id'>) => void;
   updateComponent: (id: string, updates: Partial<Component>) => void;
   deleteComponent: (id: string) => void;
   selectComponent: (id: string | null) => void;
+  selectFenceSegment: (sel: { componentId: string; run: number; seg: number } | null) => void;
   duplicateComponent: (id: string) => void;
   rotateComponent: (id: string, degrees: number) => void;
   
@@ -46,12 +59,14 @@ interface DesignStore {
   updateCurrentProject: (updates: Partial<Project>) => void;
   loadProjectById: (id: string) => void;
   clearAll: () => void;
+  setTileSelection: (info: DesignStore['tileSelection']) => void;
 }
 
 export const useDesignStore = create<DesignStore>((set, get) => ({
   currentProject: null,
   components: [],
   selectedComponentId: null,
+  selectedFenceSegment: null,
   
   zoom: 1,
   pan: { x: 0, y: 0 },
@@ -61,6 +76,8 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   
   history: [[]],
   historyIndex: 0,
+  
+  tileSelection: null,
   
   setCurrentProject: (project) => {
     set({ 
@@ -124,6 +141,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   },
   
   selectComponent: (id) => set({ selectedComponentId: id }),
+  selectFenceSegment: (sel) => set({ selectedFenceSegment: sel }),
   
   duplicateComponent: (id) => {
     const component = get().components.find(c => c.id === id);
@@ -183,6 +201,23 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     const { components } = get();
     return calculateMeasurements(components);
   },
+  
+  setTileSelection: (info) => set((state) => {
+    const prev = state.tileSelection;
+    const same = (
+      (prev === null && info === null) ||
+      (prev !== null && info !== null &&
+        prev.scope === info.scope &&
+        prev.componentId === info.componentId &&
+        prev.count === info.count &&
+        prev.widthMm === info.widthMm &&
+        prev.heightMm === info.heightMm &&
+        prev.tileWidthMm === info.tileWidthMm &&
+        prev.tileHeightMm === info.tileHeightMm)
+    );
+    if (same) return state;
+    return { tileSelection: info };
+  }),
   
   saveCurrentProject: () => {
     const { currentProject, components } = get();

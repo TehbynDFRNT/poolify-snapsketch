@@ -13,6 +13,8 @@ import { BoundaryComponent } from './canvas/BoundaryComponent';
 import { HouseComponent } from './canvas/HouseComponent';
 import { ReferenceLineComponent } from './canvas/ReferenceLineComponent';
 import { PavingAreaComponent } from './canvas/PavingAreaComponent';
+import { GateComponent } from './canvas/GateComponent';
+import { DecorationComponent, getDecorationDimensions } from './canvas/DecorationComponent';
 import { PavingAreaDialog, PavingConfig } from './PavingAreaDialog';
 import { fillAreaWithPavers, calculateStatistics, validateBoundary } from '@/utils/pavingFill';
 import { snapToGrid, smartSnap } from '@/utils/snap';
@@ -26,15 +28,22 @@ import { WALL_MATERIALS, FENCE_TYPES, DRAINAGE_TYPES } from '@/constants/compone
 import { sortComponentsByRenderOrder } from '@/constants/renderOrder';
 import { ComponentContextMenu } from './ComponentContextMenu';
 import type { ContextMenuAction } from '@/types/contextMenu';
+import { useDesignStore as useStoreRef } from '@/store/designStore';
 
-export const Canvas = ({ 
+export const Canvas = ({
   activeTool = 'select',
+  selectedDecorationType = 'bush',
+  selectedFenceType = 'glass',
+  selectedAreaType = 'pavers',
   onZoomChange,
   onZoomLockedChange,
   onDrawingStateChange,
   onToolChange,
-}: { 
+}: {
   activeTool?: string;
+  selectedDecorationType?: 'bush' | 'umbrella' | 'waterfeature' | 'deckchairs';
+  selectedFenceType?: 'glass' | 'metal';
+  selectedAreaType?: 'pavers' | 'concrete' | 'grass';
   onZoomChange?: (zoom: number, locked: boolean, handlers: {
     zoomIn: () => void;
     zoomOut: () => void;
@@ -74,6 +83,17 @@ export const Canvas = ({
     x: 0,
     y: 0,
     component: null
+  });
+
+  // Removed fence tool right-click menu; handled on TopBar now
+
+  // Coping tile context menu (HTML overlay outside Stage)
+  const [tileMenuState, setTileMenuState] = useState<{ open: boolean; x: number; y: number; component: Component | null; tileKey: string | null }>({
+    open: false,
+    x: 0,
+    y: 0,
+    component: null,
+    tileKey: null,
   });
   
   const {
@@ -169,6 +189,7 @@ export const Canvas = ({
       activeTool === 'boundary' ||
       activeTool === 'house' ||
       activeTool === 'paving_area' ||
+      activeTool === 'area' ||
       activeTool === 'wall' ||
       activeTool === 'fence' ||
       activeTool === 'drainage';
@@ -270,19 +291,23 @@ export const Canvas = ({
           // Close the shape
           if (activeTool === 'paving_area') {
             // Show paving dialog instead of creating component directly
-            const validation = validateBoundary(drawingPoints);
-            if (!validation.valid) {
-              toast.error(validation.error || 'Invalid boundary');
+            if (selectedAreaType === 'pavers') {
+              const validation = validateBoundary(drawingPoints);
+              if (!validation.valid) {
+                toast.error(validation.error || 'Invalid boundary');
+                setDrawingPoints([]);
+                setIsDrawing(false);
+                setGhostPoint(null);
+                return;
+              }
+              setPavingBoundary(drawingPoints);
+              setShowPavingDialog(true);
               setDrawingPoints([]);
               setIsDrawing(false);
               setGhostPoint(null);
-              return;
+            } else {
+              finishDrawing(true);
             }
-            setPavingBoundary(drawingPoints);
-            setShowPavingDialog(true);
-            setDrawingPoints([]);
-            setIsDrawing(false);
-            setGhostPoint(null);
           } else {
             finishDrawing(true);
           }
@@ -308,10 +333,21 @@ export const Canvas = ({
         return;
       }
 
-      // Place component for one-click tools (keep Paver only)
-      if (activeTool !== 'hand' && activeTool === 'paver') {
+      // Place component for one-click tools (paver, gate, decoration)
+      if (activeTool !== 'hand' && (activeTool === 'paver' || activeTool === 'gate' || activeTool === 'decoration')) {
         selectComponent(null);
-        handleToolPlace({ x: snapToGrid(x), y: snapToGrid(y) });
+        if (activeTool === 'paver' || activeTool === 'decoration') {
+          handleToolPlace({ x: snapToGrid(x), y: snapToGrid(y) });
+        } else if (activeTool === 'gate') {
+          addComponent({
+            type: 'gate',
+            position: { x: snapToGrid(x), y: snapToGrid(y) },
+            rotation: 0,
+            dimensions: { width: 1000, height: 0 },
+            properties: { length: 1000, gateType: 'glass' },
+          });
+          onToolChange?.('select');
+        }
         return;
       }
     };
@@ -379,7 +415,16 @@ export const Canvas = ({
   // Handle paving area configuration
   const handlePavingConfig = (config: PavingConfig) => {
     if (pavingBoundary.length < 3) return;
-    
+
+    // Stable origin for atomic tile array (mask behavior):
+    // choose the top-left of the initial boundary so moving nodes reveals/hides tiles
+    const xs = pavingBoundary.map(p => p.x);
+    const ys = pavingBoundary.map(p => p.y);
+    const tileOrigin = {
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+    };
+
     // Fill the area with pavers (initial calculation without pool exclusions)
     const pavers = fillAreaWithPavers(
       pavingBoundary,
@@ -388,14 +433,14 @@ export const Canvas = ({
       config.showEdgePavers,
       [] // No pool exclusions at creation time
     );
-    
+
     // Warn if no pavers were generated
     if (pavers.length === 0) {
       toast.error('Area is too small to fit any pavers. Please draw a larger area.');
       setPavingBoundary([]);
       return;
     }
-    
+
     // Calculate statistics
     const statistics = calculateStatistics(pavers, config.wastagePercentage);
     
@@ -423,6 +468,7 @@ export const Canvas = ({
         paverOrientation: config.paverOrientation,
         showEdgePavers: config.showEdgePavers,
         wastagePercentage: config.wastagePercentage,
+        tileOrigin, // << anchor array; boundary acts as a mask over this origin
         statistics, // Initial statistics, will be updated when pools change
       },
     });
@@ -445,7 +491,18 @@ export const Canvas = ({
       return;
     }
 
-    if (activeTool === 'boundary' || activeTool === 'house') {
+    if (activeTool === 'paving_area' && selectedAreaType !== 'pavers') {
+      addComponent({
+        type: 'paving_area',
+        position: { x: 0, y: 0 },
+        rotation: 0,
+        dimensions: { width: 0, height: 0 },
+        properties: {
+          boundary: drawingPoints,
+          areaSurface: selectedAreaType,
+        },
+      });
+    } else if (activeTool === 'boundary' || activeTool === 'house') {
       // Calculate area for house
       let area = 0;
       if (closed && activeTool === 'house' && drawingPoints.length >= 3) {
@@ -493,7 +550,7 @@ export const Canvas = ({
           rotation: 0,
           dimensions: { width: 0, height: 0 },
           properties: {
-            fenceType: 'glass',
+            fenceType: selectedFenceType as 'glass' | 'metal',
             gates: [],
             ...baseProps,
           },
@@ -537,20 +594,24 @@ export const Canvas = ({
       if (isDrawing) {
         if (e.key === 'Enter') {
           if (activeTool === 'paving_area' && drawingPoints.length >= 3) {
-            // Show paving dialog
-            const validation = validateBoundary(drawingPoints);
-            if (!validation.valid) {
-              toast.error(validation.error || 'Invalid boundary');
+            if (selectedAreaType === 'pavers') {
+              // Show paving dialog
+              const validation = validateBoundary(drawingPoints);
+              if (!validation.valid) {
+                toast.error(validation.error || 'Invalid boundary');
+                setDrawingPoints([]);
+                setIsDrawing(false);
+                setGhostPoint(null);
+                return;
+              }
+              setPavingBoundary(drawingPoints);
+              setShowPavingDialog(true);
               setDrawingPoints([]);
               setIsDrawing(false);
               setGhostPoint(null);
-              return;
+            } else {
+              finishDrawing(false);
             }
-            setPavingBoundary(drawingPoints);
-            setShowPavingDialog(true);
-            setDrawingPoints([]);
-            setIsDrawing(false);
-            setGhostPoint(null);
           } else {
             finishDrawing(false);
           }
@@ -591,6 +652,7 @@ export const Canvas = ({
       activeTool !== 'boundary' &&
       activeTool !== 'house' &&
       activeTool !== 'paving_area' &&
+      activeTool !== 'area' &&
       activeTool !== 'wall' &&
       activeTool !== 'fence' &&
       activeTool !== 'drainage'
@@ -719,7 +781,7 @@ export const Canvas = ({
           rotation: 0,
           dimensions: { width: 100, height: 12 },
           properties: {
-            fenceType: 'glass',
+            fenceType: selectedFenceType as 'glass' | 'metal',
             gates: [],
           },
         });
@@ -734,6 +796,24 @@ export const Canvas = ({
           dimensions: { width: 100, height: 15 },
           properties: {
             wallMaterial: 'timber',
+          },
+        });
+        onToolChange?.('select');
+        break;
+
+      case 'decoration':
+        // Apply 1:0.35 scale: 1px = 0.35mm (100px = 35mm)
+        const decorationDimensions = getDecorationDimensions(selectedDecorationType);
+        addComponent({
+          type: 'decoration',
+          position: pos,
+          rotation: 0,
+          dimensions: {
+            width: decorationDimensions.width,
+            height: decorationDimensions.height,
+          },
+          properties: {
+            decorationType: selectedDecorationType,
           },
         });
         onToolChange?.('select');
@@ -851,7 +931,7 @@ export const Canvas = ({
       );
       labelColor = wallColor;
     } else if (tool === 'fence') {
-      const fenceColor = FENCE_TYPES.glass.color;
+      const fenceColor = FENCE_TYPES[selectedFenceType as 'glass' | 'metal' | 'boundary'].color;
       content = (
         <Group x={start.x} y={start.y} rotation={angle} opacity={0.6} listening={false} key={key}>
           <Line points={[0, -6, length, -6]} stroke={fenceColor} strokeWidth={2} />
@@ -925,20 +1005,18 @@ export const Canvas = ({
     const items: JSX.Element[] = [];
     for (let i = 1; i < drawingPoints.length; i++) {
       items.push(
-        <>
-          {renderSegmentGhost(drawingPoints[i - 1], drawingPoints[i], activeTool, `sg-${i}`)}
-        </>
+        renderSegmentGhost(drawingPoints[i - 1], drawingPoints[i], activeTool, `sg-${i}`) as any
       );
     }
 
     // Points
     const pointColor = activeTool === 'boundary' ? 'hsl(220, 80%, 30%)' : '#92400E';
     items.push(
-      <>
+      <Group key="drawing-points" listening={false}>
         {drawingPoints.map((point, index) => (
           <Circle key={`drawing-point-${index}`} x={point.x} y={point.y} radius={5} fill={pointColor} stroke="#fff" strokeWidth={2} listening={false} />
         ))}
-      </>
+      </Group>
     );
 
     return <>{items}</>;
@@ -999,13 +1077,12 @@ export const Canvas = ({
     );
   };
 
-  // Disable selection/listening on components while drawing/placing/measuring
+  // Disable selection/listening on components while drawing/placing/measuring for polyline tools
   const blockSelection = (() => {
-    const interceptTools = new Set([
-      'boundary', 'house', 'paving_area', 'wall', 'fence', 'drainage',
-      'paver', 'quick_measure'
+    const polylineTools = new Set([
+      'boundary', 'house', 'paving_area', 'area', 'wall', 'fence', 'drainage', 'quick_measure'
     ]);
-    return isDrawing || isMeasuring || interceptTools.has(activeTool);
+    return isDrawing || isMeasuring || polylineTools.has(activeTool);
   })();
 
   return (
@@ -1039,7 +1116,8 @@ export const Canvas = ({
           {/* Render all components in fixed type-based order */}
           {(() => {
             // Sort components by render order (pavers -> pools -> walls -> ... -> measurements)
-            const sortedComponents = sortComponentsByRenderOrder(components);
+            // Selected component is moved to top layer for easy editing
+            const sortedComponents = sortComponentsByRenderOrder(components, selectedComponentId);
 
             return sortedComponents.map((component) => {
               const isSelected = component.id === selectedComponentId;
@@ -1052,6 +1130,7 @@ export const Canvas = ({
                       component={component}
                       isSelected={isSelected}
                       activeTool={activeTool}
+                      onTileContextMenu={(comp, tileKey, screenPos) => setTileMenuState({ open: true, x: screenPos.x, y: screenPos.y, component: comp, tileKey })}
                       onSelect={() => selectComponent(component.id)}
                       onDragEnd={(pos) => {
                         const snapped = {
@@ -1219,6 +1298,20 @@ export const Canvas = ({
                       onContextMenu={handleComponentContextMenu}
                     />
                   );
+                case 'gate':
+                  return (
+                    <GateComponent
+                      key={component.id}
+                      component={component}
+                      isSelected={isSelected}
+                      activeTool={activeTool}
+                      onSelect={() => selectComponent(component.id)}
+                      onDragEnd={(pos) => {
+                        const snapped = { x: snapToGrid(pos.x), y: snapToGrid(pos.y) };
+                        updateComponent(component.id, { position: snapped });
+                      }}
+                    />
+                  );
                   
                 case 'wall':
                   return (
@@ -1307,7 +1400,23 @@ export const Canvas = ({
                       onContextMenu={handleComponentContextMenu}
                     />
                   );
-                  
+
+
+                case 'decoration':
+                  return (
+                    <DecorationComponent
+                      key={component.id}
+                      component={component}
+                      isSelected={isSelected}
+                      activeTool={activeTool}
+                      onSelect={() => selectComponent(component.id)}
+                      onDragEnd={(pos) => {
+                        updateComponent(component.id, { position: pos });
+                      }}
+                      onContextMenu={handleComponentContextMenu}
+                    />
+                  );
+
                 default:
                   return null;
               }
@@ -1318,6 +1427,34 @@ export const Canvas = ({
           {renderMeasurementPreview()}
         </Layer>
       </Stage>
+
+      {/* No fence tool context menu here; TopBar handles tool options */}
+
+      {/* Coping tile context menu */}
+      {tileMenuState.open && tileMenuState.component && tileMenuState.tileKey && (
+        <div
+          style={{ position: 'fixed', left: tileMenuState.x, top: tileMenuState.y, zIndex: 60 }}
+          className="bg-popover border rounded-md shadow-md p-1 text-sm"
+          onMouseLeave={() => setTileMenuState({ open: false, x: 0, y: 0, component: null, tileKey: null })}
+        >
+          <button
+            className="w-full text-left px-3 py-1.5 hover:bg-accent rounded"
+            onClick={() => {
+              const m = tileMenuState.tileKey!.match(/:ext:(\d+)$/);
+              if (m) {
+                const idx = parseInt(m[1], 10);
+                const comp = tileMenuState.component!;
+                const oldExt = (comp.properties.copingExtensions || []) as any[];
+                const newExt = oldExt.filter((_, i) => i !== idx);
+                updateComponent(comp.id, { properties: { ...comp.properties, copingExtensions: newExt } });
+              }
+              setTileMenuState({ open: false, x: 0, y: 0, component: null, tileKey: null });
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      )}
 
       {/* Universal context menu for all components */}
       {contextMenuState.open && contextMenuState.component && (

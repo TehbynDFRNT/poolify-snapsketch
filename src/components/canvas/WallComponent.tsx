@@ -8,6 +8,7 @@ import { GRID_CONFIG } from '@/constants/grid';
 interface WallComponentProps {
   component: Component;
   isSelected: boolean;
+  activeTool?: string;
   onSelect: () => void;
   onDragEnd: (pos: { x: number; y: number }) => void;
   onExtend?: (length: number) => void;
@@ -17,6 +18,7 @@ interface WallComponentProps {
 export const WallComponent = ({
   component,
   isSelected,
+  activeTool,
   onSelect,
   onDragEnd,
   onExtend,
@@ -100,7 +102,7 @@ export const WallComponent = ({
         x={component.position.x}
         y={component.position.y}
         rotation={component.rotation}
-        draggable={isSelected && !shiftPressed}
+        draggable={activeTool !== 'hand' && isSelected && !shiftPressed}
         onClick={onSelect}
         onTap={onSelect}
         onContextMenu={handleRightClick}
@@ -244,7 +246,7 @@ export const WallComponent = ({
         x={component.position.x}
         y={component.position.y}
         rotation={component.rotation}
-        draggable={!isDraggingHandle}
+        draggable={activeTool !== 'hand' && !isDraggingHandle}
         onClick={onSelect}
         onTap={onSelect}
         onContextMenu={handleRightClick}

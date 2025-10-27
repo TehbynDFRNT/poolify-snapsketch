@@ -1,7 +1,5 @@
-export const PAVER_SIZES = {
-  '400x400': { width: 400, height: 400, label: '400×400mm' },
-  '400x600': { width: 400, height: 600, label: '400×600mm' },
-};
+// Re-export from centralized tile config for backward compatibility
+export { PAVER_SIZES } from './tileConfig';
 
 export const DRAINAGE_TYPES = {
   rock: { width: 100, label: 'Rock Drainage', color: 'hsl(215, 8%, 62%)' },

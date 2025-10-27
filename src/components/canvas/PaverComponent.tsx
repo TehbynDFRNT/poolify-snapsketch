@@ -1,12 +1,14 @@
 import { Group, Rect, Line, Circle } from 'react-konva';
 import { Component } from '@/types';
-import { PAVER_SIZES } from '@/constants/components';
+import { TILE_SIZES, TILE_COLORS, TILE_GAP, TileSize } from '@/constants/tileConfig';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { useDesignStore } from '@/store/designStore';
+import { snapRectPx } from '@/utils/canvasSnap';
 
 interface PaverComponentProps {
   component: Component;
   isSelected: boolean;
+  activeTool?: string;
   onSelect: () => void;
   onDragEnd: (pos: { x: number; y: number }) => void;
   onReplicateRight?: (count: number) => void;
@@ -19,6 +21,7 @@ interface PaverComponentProps {
 export const PaverComponent = ({
   component,
   isSelected,
+  activeTool,
   onSelect,
   onDragEnd,
   onReplicateRight,
@@ -43,10 +46,14 @@ export const PaverComponent = ({
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
 
   const scale = 0.1; // 1 unit = 10mm
-  const paverSize = component.properties.paverSize || '400x400';
-  const { width, height } = PAVER_SIZES[paverSize];
-  const scaledWidth = width * scale;
-  const scaledHeight = height * scale;
+  const paverSize = (component.properties.paverSize || '400x400') as TileSize;
+  const { width, height } = TILE_SIZES[paverSize];
+  const tileWpx = width * scale;
+  const tileHpx = height * scale;
+  // Apply gap configuration (padding around each tile)
+  const gap = TILE_GAP.size * scale;
+  const stepX = (width + TILE_GAP.size) * scale;
+  const stepY = (height + TILE_GAP.size) * scale;
 
   const count = component.properties.paverCount || { rows: 1, cols: 1 };
   const baseOffset = component.properties.baseOffset || { col: 0, row: 0 };
@@ -90,17 +97,14 @@ export const PaverComponent = ({
   // Draw grid of pavers: fill rectangles and overlays (selection), and collect edges for grout lines
   const fills: JSX.Element[] = [];
   const overlays: JSX.Element[] = [];
-  const groutStrokePx = 2;
-  const roundHalf = (px: number) => Math.round(px * 2) / 2;
-  const floorHalf = (px: number) => Math.floor(px * 2) / 2;
-  type Seg = { x1:number; y1:number; x2:number; y2:number };
-  const edgeMap = new Map<string, Seg & { count: number }>();
-  const addEdge = (x1:number,y1:number,x2:number,y2:number) => {
-    const rx1 = roundHalf(x1), ry1 = roundHalf(y1);
-    const rx2 = roundHalf(x2), ry2 = roundHalf(y2);
-    const key = `${Math.min(rx1,rx2)},${Math.min(ry1,ry2)},${Math.max(rx1,rx2)},${Math.max(ry1,ry2)}`;
-    const cur = edgeMap.get(key);
-    if (cur) cur.count += 1; else edgeMap.set(key, { x1: rx1, y1: ry1, x2: rx2, y2: ry2, count: 1 });
+
+  // Helper to snap a tile rect based on its column and row
+  const snapTileRectPx = (col: number, row: number) => {
+    // Convert tile grid -> mm (including gap if configured)
+    const xMm = col * (width + TILE_GAP.size);
+    const yMm = row * (height + TILE_GAP.size);
+    // Use snapRectPx to ensure both edges are snapped to 0.5px
+    return snapRectPx(xMm, yMm, width, height, scale);
   };
   for (let row = 0; row < count.rows; row++) {
     for (let col = 0; col < count.cols; col++) {
@@ -109,18 +113,16 @@ export const PaverComponent = ({
       const key = `${absRow}-${absCol}`;
       const isBoundary = isBoundaryAt(absRow, absCol);
       const isSelected = selectedCells.has(key);
-      const pxX = floorHalf(absCol * scaledWidth);
-      const pxY = floorHalf(absRow * scaledHeight);
-      const w = Math.round(scaledWidth);
-      const h = Math.round(scaledHeight);
+      // Use snapTileRectPx for consistent snapping
+      const { x: pxX, y: pxY, width: w, height: h } = snapTileRectPx(absCol, absRow);
       fills.push(
         <Rect
           key={`fill-${key}`}
           x={pxX}
           y={pxY}
-          width={w}
-          height={h}
-          fill="#F3EBD9"
+          width={Math.max(0, w)}
+          height={Math.max(0, h)}
+          fill={TILE_COLORS.extendedTile}
           onClick={(e: any) => {
             if (e.evt && e.evt.shiftKey) {
               e.cancelBubble = true;
@@ -139,10 +141,10 @@ export const PaverComponent = ({
         overlays.push(
           <Rect
             key={`ovl-${key}`}
-            x={pxX + groutStrokePx/2}
-            y={pxY + groutStrokePx/2}
-            width={Math.max(0, w - groutStrokePx)}
-            height={Math.max(0, h - groutStrokePx)}
+            x={pxX}
+            y={pxY}
+            width={Math.max(0, w)}
+            height={Math.max(0, h)}
             fill="rgba(59,130,246,0.15)"
             stroke="#3B82F6"
             strokeWidth={2}
@@ -151,11 +153,6 @@ export const PaverComponent = ({
           />
         );
       }
-      // Collect edges for grout lines
-      addEdge(pxX, pxY, pxX + w, pxY);
-      addEdge(pxX, pxY + h, pxX + w, pxY + h);
-      addEdge(pxX, pxY, pxX, pxY + h);
-      addEdge(pxX + w, pxY, pxX + w, pxY + h);
     }
   }
 
@@ -168,18 +165,16 @@ export const PaverComponent = ({
         const key = `${absRow}-${absCol}`;
         const isBoundary = isBoundaryAt(absRow, absCol);
         const isSelected = selectedCells.has(key);
-        const pxX = floorHalf(absCol * scaledWidth);
-        const pxY = floorHalf(absRow * scaledHeight);
-        const w = Math.round(scaledWidth);
-        const h = Math.round(scaledHeight);
+        // Use snapTileRectPx for consistent snapping
+        const { x: pxX, y: pxY, width: w, height: h } = snapTileRectPx(absCol, absRow);
         fills.push(
           <Rect
             key={`fill-extra-${bi}-${r}-${c}`}
             x={pxX}
             y={pxY}
-            width={w}
-            height={h}
-            fill="#F3EBD9"
+            width={Math.max(0, w)}
+            height={Math.max(0, h)}
+            fill={TILE_COLORS.extendedTile}
             onClick={(e: any) => {
               if (e.evt && e.evt.shiftKey) {
                 e.cancelBubble = true;
@@ -198,10 +193,10 @@ export const PaverComponent = ({
           overlays.push(
             <Rect
               key={`ovl-extra-${bi}-${r}-${c}`}
-              x={pxX + groutStrokePx/2}
-              y={pxY + groutStrokePx/2}
-              width={Math.max(0, w - groutStrokePx)}
-              height={Math.max(0, h - groutStrokePx)}
+              x={pxX}
+              y={pxY}
+              width={Math.max(0, w)}
+              height={Math.max(0, h)}
               fill="rgba(59,130,246,0.15)"
               stroke="#3B82F6"
               strokeWidth={2}
@@ -210,10 +205,6 @@ export const PaverComponent = ({
             />
           );
         }
-        addEdge(pxX, pxY, pxX + w, pxY);
-        addEdge(pxX, pxY + h, pxX + w, pxY + h);
-        addEdge(pxX, pxY, pxX, pxY + h);
-        addEdge(pxX + w, pxY, pxX + w, pxY + h);
       }
     }
   });
@@ -250,6 +241,49 @@ export const PaverComponent = ({
     return { minRow, maxRow, minCol, maxCol, width, height, isRectangular };
   }, [selectedCells]);
 
+  // Publish selection to the global store for BottomPanel footer
+  useEffect(() => {
+    const setTileSelection = useDesignStore.getState().setTileSelection;
+    if (!isSelected || selectedCells.size === 0) {
+      setTileSelection(null);
+      return;
+    }
+    // Compute mm dimensions
+    const tileWmm = width;
+    const tileHmm = height;
+    if (selectionInfo && selectionInfo.isRectangular) {
+      const selWidthMm = selectionInfo.width * tileWmm;
+      const selHeightMm = selectionInfo.height * tileHmm;
+      setTileSelection({
+        scope: 'paver',
+        componentId: component.id,
+        count: selectedCells.size,
+        widthMm: selWidthMm,
+        heightMm: selHeightMm,
+        tileWidthMm: tileWmm,
+        tileHeightMm: tileHmm,
+      });
+    } else {
+      // Non-rectangular: approximate by tile dims
+      setTileSelection({
+        scope: 'paver',
+        componentId: component.id,
+        count: selectedCells.size,
+        widthMm: tileWmm,
+        heightMm: tileHmm,
+        tileWidthMm: tileWmm,
+        tileHeightMm: tileHmm,
+      });
+    }
+  }, [isSelected, selectedCells, selectionInfo, component.id, width, height]);
+
+  useEffect(() => {
+    return () => {
+      const setTileSelection = useDesignStore.getState().setTileSelection;
+      setTileSelection(null);
+    };
+  }, []);
+
   // Normalize and commit new extra blocks into this component, updating dimensions and position
   const normalizeAndCommit = (newBlocks: Array<{ col: number; row: number; cols: number; rows: number }>) => {
     const blocks = [...extraBlocks, ...newBlocks];
@@ -285,8 +319,8 @@ export const PaverComponent = ({
     const newHeightMm = heightTiles * height;
 
     // Pixel shift for component position to keep world placement stable
-    const pxShiftX = minCol * scaledWidth; // move origin by minCol tiles
-    const pxShiftY = minRow * scaledHeight;
+    const pxShiftX = minCol * stepX; // move origin by minCol tiles (include grout spacing)
+    const pxShiftY = minRow * stepY;
 
     updateComponentStore(component.id, {
       position: {
@@ -317,7 +351,7 @@ export const PaverComponent = ({
       x={component.position.x}
       y={component.position.y}
       rotation={component.rotation}
-      draggable={!isDraggingHandle}
+      draggable={activeTool !== 'hand' && !isDraggingHandle}
       onClick={onSelect}
       onTap={onSelect}
       onContextMenu={handleRightClick}
@@ -337,22 +371,61 @@ export const PaverComponent = ({
           maxCol = Math.max(maxCol, b.col + b.cols - 1);
           maxRow = Math.max(maxRow, b.row + b.rows - 1);
         });
-        const x = minCol * scaledWidth - 5;
-        const y = minRow * scaledHeight - 5;
-        const w = (maxCol - minCol + 1) * scaledWidth + 10;
-        const h = (maxRow - minRow + 1) * scaledHeight + 10;
+        const x = minCol * stepX - 5;
+        const y = minRow * stepY - 5;
+        const w = (maxCol - minCol + 1) * stepX + 10;
+        const h = (maxRow - minRow + 1) * stepY + 10;
         return <Rect x={x} y={y} width={w} height={h} fill="transparent" listening={false} />;
       })()}
 
-      {/* Fill tiles */}
+      {/* Grout underlay - shows through gaps between tiles */}
+      {TILE_GAP.renderGap && TILE_GAP.size > 0 && (() => {
+        // Compute union bounding box for fill rect size
+        let minCol = baseOffset.col;
+        let maxCol = baseOffset.col + count.cols - 1;
+        let minRow = baseOffset.row;
+        let maxRow = baseOffset.row + count.rows - 1;
+        extraBlocks.forEach(b => {
+          minCol = Math.min(minCol, b.col);
+          minRow = Math.min(minRow, b.row);
+          maxCol = Math.max(maxCol, b.col + b.cols - 1);
+          maxRow = Math.max(maxRow, b.row + b.rows - 1);
+        });
+        const unionX = minCol * stepX;
+        const unionY = minRow * stepY;
+        const unionW = (maxCol - minCol) * stepX + tileWpx;
+        const unionH = (maxRow - minRow) * stepY + tileHpx;
+        return (
+          <Group
+            listening={false}
+            clipFunc={(ctx) => {
+              // base grid
+              for (let r = 0; r < count.rows; r++) {
+                for (let c = 0; c < count.cols; c++) {
+                  const { x, y, width: w, height: h } = snapTileRectPx(baseOffset.col + c, baseOffset.row + r);
+                  ctx.rect(x, y, w, h);
+                }
+              }
+              // extra blocks
+              extraBlocks.forEach((b) => {
+                for (let r = 0; r < b.rows; r++) {
+                  for (let c = 0; c < b.cols; c++) {
+                    const { x, y, width: w, height: h } = snapTileRectPx(b.col + c, b.row + r);
+                    ctx.rect(x, y, w, h);
+                  }
+                }
+              });
+            }}
+          >
+            <Rect x={unionX} y={unionY} width={unionW} height={unionH} fill={TILE_COLORS.groutColor} listening={false} />
+          </Group>
+        );
+      })()}
+
+      {/* Fill tiles (inset to show grout) */}
       {fills}
 
-      {/* Unified grout lines */}
-      <Group listening={false}>
-        {Array.from(edgeMap.values()).map((seg, idx) => (
-          <Line key={`grout-${idx}`} points={[seg.x1, seg.y1, seg.x2, seg.y2]} stroke="#D4C5A9" strokeWidth={groutStrokePx} />
-        ))}
-      </Group>
+      {/* No stroke grout lines; gaps show grout background */}
 
       {/* Selection overlays */}
       <Group listening={false}>{overlays}</Group>
@@ -375,11 +448,11 @@ export const PaverComponent = ({
                 if (unionTiles.has(`${r},${c}`)) continue;
                 ghostPavers.push(
                   <Rect key={`ghost-${r}-${c}`}
-                        x={c * scaledWidth}
-                        y={r * scaledHeight}
-                        width={scaledWidth}
-                        height={scaledHeight}
-                        fill="#F3EBD9"
+                        x={c * stepX}
+                        y={r * stepY}
+                        width={tileWpx}
+                        height={tileHpx}
+                        fill={TILE_COLORS.extendedTile}
                         stroke="#3B82F6"
                         strokeWidth={2}
                         dash={[5, 5]}
@@ -401,11 +474,11 @@ export const PaverComponent = ({
                 if (unionTiles.has(`${r},${c}`)) continue;
                 ghostPavers.push(
                   <Rect key={`ghost-${r}-${c}`}
-                        x={c * scaledWidth}
-                        y={r * scaledHeight}
-                        width={scaledWidth}
-                        height={scaledHeight}
-                        fill="#F3EBD9"
+                        x={c * stepX}
+                        y={r * stepY}
+                        width={tileWpx}
+                        height={tileHpx}
+                        fill={TILE_COLORS.extendedTile}
                         stroke="#3B82F6"
                         strokeWidth={2}
                         dash={[5, 5]}
@@ -432,11 +505,11 @@ export const PaverComponent = ({
               if (isExisting) continue;
               ghostPavers.push(
                 <Rect key={`ghost-${row}-${col}`}
-                      x={absC * scaledWidth}
-                      y={absR * scaledHeight}
-                      width={scaledWidth}
-                      height={scaledHeight}
-                      fill="#F3EBD9"
+                      x={absC * stepX}
+                      y={absR * stepY}
+                      width={tileWpx}
+                      height={tileHpx}
+                      fill={TILE_COLORS.extendedTile}
                       stroke="#3B82F6"
                       strokeWidth={2}
                       dash={[5, 5]}
@@ -466,10 +539,10 @@ export const PaverComponent = ({
               maxRow = Math.max(maxRow, b.row + b.rows - 1);
             });
 
-            const x = minCol * scaledWidth - 5;
-            const y = minRow * scaledHeight - 5;
-            const w = (maxCol - minCol + 1) * scaledWidth + 10;
-            const h = (maxRow - minRow + 1) * scaledHeight + 10;
+            const x = minCol * stepX - 5;
+            const y = minRow * stepY - 5;
+            const w = (maxCol - minCol + 1) * stepX + 10;
+            const h = (maxRow - minRow + 1) * stepY + 10;
 
             return (
               <Rect
@@ -497,10 +570,10 @@ export const PaverComponent = ({
               maxCol = Math.max(maxCol, b.col + b.cols - 1);
               maxRow = Math.max(maxRow, b.row + b.rows - 1);
             });
-            const leftX = minCol * scaledWidth;
-            const rightX = (maxCol + 1) * scaledWidth;
-            const topY = minRow * scaledHeight;
-            const bottomY = (maxRow + 1) * scaledHeight;
+            const leftX = minCol * stepX;
+            const rightX = (maxCol + 1) * stepX;
+            const topY = minRow * stepY;
+            const bottomY = (maxRow + 1) * stepY;
             const midX = (leftX + rightX) / 2;
             const midY = (topY + bottomY) / 2;
             return (
@@ -521,7 +594,7 @@ export const PaverComponent = ({
                     const inv = tr.copy().invert();
                     const local = inv.point(pos);
                     local.y = midY;
-                    local.x = Math.max(rightX + scaledWidth, Math.min(rightX + 20 * scaledWidth, local.x));
+                    local.x = Math.max(rightX + stepX, Math.min(rightX + 20 * stepX, local.x));
                     return tr.point(local);
                   }}
                   onDragStart={(e) => {
@@ -531,7 +604,7 @@ export const PaverComponent = ({
                   onDragMove={(e) => {
                     e.cancelBubble = true;
                     const dx = e.target.x() - rightX;
-                    const steps = Math.max(0, Math.round(dx / scaledWidth));
+                    const steps = Math.max(0, Math.round(dx / stepX));
                     const useSel = selectionInfo && selectionInfo.isRectangular;
                     const addCols = steps * (useSel ? selectionInfo!.width : 1);
                     const newCols = Math.max(1, count.cols + addCols);
@@ -541,7 +614,7 @@ export const PaverComponent = ({
                   onDragEnd={(e) => {
                     e.cancelBubble = true;
                     const dx = e.target.x() - rightX;
-                    const steps = Math.max(0, Math.round(dx / scaledWidth));
+                    const steps = Math.max(0, Math.round(dx / stepX));
                     const useSel = selectionInfo && selectionInfo.isRectangular;
                     if (useSel && steps > 0) {
                       const sel = selectionInfo!;
@@ -591,7 +664,7 @@ export const PaverComponent = ({
                     const inv = tr.copy().invert();
                     const local = inv.point(pos);
                     local.x = midX;
-                    local.y = Math.max(bottomY + scaledHeight, Math.min(bottomY + 20 * scaledHeight, local.y));
+                    local.y = Math.max(bottomY + stepY, Math.min(bottomY + 20 * stepY, local.y));
                     return tr.point(local);
                   }}
                   onDragStart={(e) => {
@@ -601,7 +674,7 @@ export const PaverComponent = ({
                   onDragMove={(e) => {
                     e.cancelBubble = true;
                     const dy = e.target.y() - bottomY;
-                    const steps = Math.max(0, Math.round(dy / scaledHeight));
+                    const steps = Math.max(0, Math.round(dy / stepY));
                     const useSel = selectionInfo && selectionInfo.isRectangular;
                     const addRows = steps * (useSel ? selectionInfo!.height : 1);
                     const newRows = Math.max(1, count.rows + addRows);
@@ -611,7 +684,7 @@ export const PaverComponent = ({
                   onDragEnd={(e) => {
                     e.cancelBubble = true;
                     const dy = e.target.y() - bottomY;
-                    const steps = Math.max(0, Math.round(dy / scaledHeight));
+                    const steps = Math.max(0, Math.round(dy / stepY));
                     const useSel = selectionInfo && selectionInfo.isRectangular;
                     if (useSel && steps > 0) {
                       const sel = selectionInfo!;
@@ -660,7 +733,7 @@ export const PaverComponent = ({
                     const inv = tr.copy().invert();
                     const local = inv.point(pos);
                     local.y = midY;
-                    local.x = Math.max(leftX - 20 * scaledWidth, Math.min(leftX, local.x));
+                    local.x = Math.max(leftX - 20 * stepX, Math.min(leftX, local.x));
                     return tr.point(local);
                   }}
                   onDragStart={(e) => {
@@ -670,7 +743,7 @@ export const PaverComponent = ({
                   onDragMove={(e) => {
                     e.cancelBubble = true;
                     const dx = leftX - e.target.x();
-                    const steps = Math.max(0, Math.round(dx / scaledWidth));
+                    const steps = Math.max(0, Math.round(dx / stepX));
                     const useSel = selectionInfo && selectionInfo.isRectangular;
                     const additionalCols = steps * (useSel ? selectionInfo!.width : 1);
                     const newCols = count.cols + additionalCols;
@@ -680,7 +753,7 @@ export const PaverComponent = ({
                   onDragEnd={(e) => {
                     e.cancelBubble = true;
                     const dx = leftX - e.target.x();
-                    const steps = Math.max(0, Math.round(dx / scaledWidth));
+                    const steps = Math.max(0, Math.round(dx / stepX));
                     const useSel = selectionInfo && selectionInfo.isRectangular;
                     if (useSel && steps > 0) {
                       const sel = selectionInfo!;
@@ -729,7 +802,7 @@ export const PaverComponent = ({
                     const inv = tr.copy().invert();
                     const local = inv.point(pos);
                     local.x = midX;
-                    local.y = Math.max(topY - 20 * scaledHeight, Math.min(topY, local.y));
+                    local.y = Math.max(topY - 20 * stepY, Math.min(topY, local.y));
                     return tr.point(local);
                   }}
                   onDragStart={(e) => {
@@ -739,7 +812,7 @@ export const PaverComponent = ({
                   onDragMove={(e) => {
                     e.cancelBubble = true;
                     const dy = topY - e.target.y();
-                    const steps = Math.max(0, Math.round(dy / scaledHeight));
+                    const steps = Math.max(0, Math.round(dy / stepY));
                     const useSel = selectionInfo && selectionInfo.isRectangular;
                     const additionalRows = steps * (useSel ? selectionInfo!.height : 1);
                     const newRows = count.rows + additionalRows;
@@ -749,7 +822,7 @@ export const PaverComponent = ({
                   onDragEnd={(e) => {
                     e.cancelBubble = true;
                     const dy = topY - e.target.y();
-                    const steps = Math.max(0, Math.round(dy / scaledHeight));
+                    const steps = Math.max(0, Math.round(dy / stepY));
                     const useSel = selectionInfo && selectionInfo.isRectangular;
                     if (useSel && steps > 0) {
                       const sel = selectionInfo!;

@@ -5,7 +5,9 @@
 // - Per‑axis MIN_CUT = max(200, floor(along/2))  => 600‑along → 300 mm
 //
 
-export const GROUT_MM = 5;
+import { TILE_GAP, TILE_SIZES } from '@/constants/tileConfig';
+
+export const GROUT_MM = TILE_GAP.size; // Use centralized gap configuration
 export const MIN_CUT_MM = 200;
 
 export interface Pool {
@@ -42,19 +44,19 @@ export const COPING_OPTIONS: CopingConfig[] = [
   {
     id: 'coping-400x400',
     name: 'Coping 400×400 (global square)',
-    tile: { x: 400, y: 400 },
+    tile: TILE_SIZES['400x400'].globalTile,
     rows: { sides: 1, shallow: 1, deep: 2 },
   },
   {
     id: 'coping-600x400',
     name: 'Coping 600×400 (global long‑X)',
-    tile: { x: 600, y: 400 },               // ✅ ends rows = 600, sides rows = 400
+    tile: TILE_SIZES['600x400'].globalTile,               // ✅ ends rows = 600, sides rows = 400
     rows: { sides: 1, shallow: 1, deep: 2 },
   },
   {
     id: 'coping-400x600',
     name: 'Coping 400×600 (global long‑Y)',
-    tile: { x: 400, y: 600 },               // ✅ ends rows = 400, sides rows = 600
+    tile: TILE_SIZES['400x600'].globalTile,               // ✅ ends rows = 400, sides rows = 600
     rows: { sides: 1, shallow: 1, deep: 2 },
   },
 ];
@@ -207,18 +209,18 @@ export function planPoolCopingGlobal(pool: Pool, config: CopingConfig): CopingPl
   const { tile, rows } = config;
 
   // Per‑edge row depths (perpendicular to that edge) under global orientation:
-  // - Sides (long edges, horizontal): rows project in Y → depth = tile.y
-  // - Ends  (short edges, vertical) : rows project in X → depth = tile.x
-  const sideRowDepth = tile.y;
-  const endRowDepth  = tile.x;
+  // - Sides (long edges, horizontal): rows project in Y → depth = tile.y + grout
+  // - Ends  (short edges, vertical) : rows project in X → depth = tile.x + grout
+  const sideRowDepth = tile.y + GROUT_MM;
+  const endRowDepth  = tile.x + GROUT_MM;
 
   // Ends span pool.width + "corner returns" created by side rows on both ends
   const cornerExtension = rows.sides * sideRowDepth;
   const widthEdgeLength = pool.width + 2 * cornerExtension;
 
   // Axis plans (reused for mirrored edges)
-  const lengthAxis = planAxis(pool.length, /*along*/ tile.x, GROUT_MM); // top & bottom
-  const widthAxis  = planAxis(widthEdgeLength, /*along*/ tile.y, GROUT_MM); // shallow & deep
+  const lengthAxis = planAxis(pool.length, /*along*/ tile.x); // top & bottom - uses GROUT_MM (2.5mm)
+  const widthAxis  = planAxis(widthEdgeLength, /*along*/ tile.y); // shallow & deep - uses GROUT_MM (2.5mm)
 
   // Totals per edge (apply rows)
   const leftSide: EdgeTotals = {
@@ -324,20 +326,20 @@ export interface LegacyCopingConfig {
 export const DEFAULT_COPING_OPTIONS: LegacyCopingConfig[] = [
   {
     id: 'coping-400x400',
-    name: 'Coping 400×400',
-    tile: { along: 400, inward: 400 },
+    name: TILE_SIZES['400x400'].label,
+    tile: { along: TILE_SIZES['400x400'].width, inward: TILE_SIZES['400x400'].height },
     rows: { sides: 1, shallow: 1, deep: 2 },
   },
   {
     id: 'coping-600x400',
-    name: 'Coping 600×400',
-    tile: { along: 600, inward: 400 },
+    name: TILE_SIZES['600x400'].label,
+    tile: { along: TILE_SIZES['600x400'].width, inward: TILE_SIZES['600x400'].height },
     rows: { sides: 1, shallow: 1, deep: 2 },
   },
   {
     id: 'coping-400x600',
-    name: 'Coping 400×600',
-    tile: { along: 400, inward: 600 },
+    name: TILE_SIZES['400x600'].label,
+    tile: { along: TILE_SIZES['400x600'].width, inward: TILE_SIZES['400x600'].height },
     rows: { sides: 1, shallow: 1, deep: 2 },
   }
 ];
@@ -363,9 +365,10 @@ const generatePaverPositions = (
     // Place pavers from LEFT/TOP corner
     for (let i = 0; i < p; i++) {
       const offset = i * U;
+      const rowOffset = row * (paverWidth + GROUT_MM);
       positions.push({
-        x: startX + (isHorizontal ? offset : row * paverWidth),
-        y: startY + (isHorizontal ? row * paverWidth : offset),
+        x: startX + (isHorizontal ? offset : rowOffset),
+        y: startY + (isHorizontal ? rowOffset : offset),
         width: isHorizontal ? A : paverWidth,
         height: isHorizontal ? paverWidth : A,
         isPartial: false,
@@ -375,9 +378,10 @@ const generatePaverPositions = (
     // Place pavers from RIGHT/BOTTOM corner
     for (let i = 0; i < p; i++) {
       const offset = axisPlan.edgeLength - (i + 1) * U + G;
+      const rowOffset = row * (paverWidth + GROUT_MM);
       positions.push({
-        x: startX + (isHorizontal ? offset : row * paverWidth),
-        y: startY + (isHorizontal ? row * paverWidth : offset),
+        x: startX + (isHorizontal ? offset : rowOffset),
+        y: startY + (isHorizontal ? rowOffset : offset),
         width: isHorizontal ? A : paverWidth,
         height: isHorizontal ? paverWidth : A,
         isPartial: false,
@@ -390,21 +394,23 @@ const generatePaverPositions = (
     if (axisPlan.centreMode === 'single_cut') {
       const cutSize = axisPlan.cutSizes[0];
       const cutPosition = centreStart + G;
+      const rowOffset = row * (paverWidth + GROUT_MM);
       positions.push({
-        x: startX + (isHorizontal ? cutPosition : row * paverWidth),
-        y: startY + (isHorizontal ? row * paverWidth : cutPosition),
+        x: startX + (isHorizontal ? cutPosition : rowOffset),
+        y: startY + (isHorizontal ? rowOffset : cutPosition),
         width: isHorizontal ? cutSize : paverWidth,
         height: isHorizontal ? paverWidth : cutSize,
         isPartial: true,
       });
     } else if (axisPlan.centreMode === 'double_cut') {
       const [cLeft, cRight] = axisPlan.cutSizes;
-      
+      const rowOffset = row * (paverWidth + GROUT_MM);
+
       // First cut (left/top)
       const leftCutPosition = centreStart + G;
       positions.push({
-        x: startX + (isHorizontal ? leftCutPosition : row * paverWidth),
-        y: startY + (isHorizontal ? row * paverWidth : leftCutPosition),
+        x: startX + (isHorizontal ? leftCutPosition : rowOffset),
+        y: startY + (isHorizontal ? rowOffset : leftCutPosition),
         width: isHorizontal ? cLeft : paverWidth,
         height: isHorizontal ? paverWidth : cLeft,
         isPartial: true,
@@ -413,8 +419,8 @@ const generatePaverPositions = (
       // Second cut (right/bottom) with grout line between
       const rightCutPosition = leftCutPosition + cLeft + G;
       positions.push({
-        x: startX + (isHorizontal ? rightCutPosition : row * paverWidth),
-        y: startY + (isHorizontal ? row * paverWidth : rightCutPosition),
+        x: startX + (isHorizontal ? rightCutPosition : rowOffset),
+        y: startY + (isHorizontal ? rowOffset : rightCutPosition),
         width: isHorizontal ? cRight : paverWidth,
         height: isHorizontal ? paverWidth : cRight,
         isPartial: true,
@@ -455,11 +461,13 @@ export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | Co
   const plan = planPoolCopingGlobal(pool, globalConfig);
   
   // Row depths per edge type (same as in planPoolCopingGlobal)
-  const sideRowDepth = globalConfig.tile.y;
-  const endRowDepth  = globalConfig.tile.x;
+  const sideRowDepth = globalConfig.tile.y + GROUT_MM;
+  const endRowDepth  = globalConfig.tile.x + GROUT_MM;
   const cornerExtension = copingConfig.rows.sides * sideRowDepth;
 
   // Generate positions for each side using the new approach
+  // NOTE: Only LEFT and RIGHT (vertical) sides should have a gap to the pool edge.
+  // TOP and BOTTOM (horizontal) sides should sit flush against the pool.
   const deepEnd: CopingSide = {
     rows: copingConfig.rows.deep,
     width: endRowDepth * copingConfig.rows.deep,
@@ -467,7 +475,7 @@ export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | Co
     fullPavers: plan.deepEnd.fullPavers,
     partialPaver: plan.widthAxis.cutSizes.length > 0 ? plan.widthAxis.gapBeforeCentre : null,
     paverPositions: generatePaverPositions(
-      pool.length,
+      pool.length + GROUT_MM, // gap at RIGHT side against pool
       -cornerExtension,
       plan.widthAxis,
       endRowDepth,
@@ -483,7 +491,7 @@ export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | Co
     fullPavers: plan.shallowEnd.fullPavers,
     partialPaver: plan.widthAxis.cutSizes.length > 0 ? plan.widthAxis.gapBeforeCentre : null,
     paverPositions: generatePaverPositions(
-      -endRowDepth * copingConfig.rows.shallow,
+      -endRowDepth * copingConfig.rows.shallow - GROUT_MM, // gap at LEFT side against pool
       -cornerExtension,
       plan.widthAxis,
       endRowDepth,
@@ -500,7 +508,7 @@ export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | Co
     partialPaver: plan.lengthAxis.cutSizes.length > 0 ? plan.lengthAxis.gapBeforeCentre : null,
     paverPositions: generatePaverPositions(
       0,
-      -sideRowDepth * copingConfig.rows.sides,
+      -sideRowDepth * copingConfig.rows.sides,  // flush at TOP against pool
       plan.lengthAxis,
       sideRowDepth,
       true,
@@ -516,7 +524,7 @@ export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | Co
     partialPaver: plan.lengthAxis.cutSizes.length > 0 ? plan.lengthAxis.gapBeforeCentre : null,
     paverPositions: generatePaverPositions(
       0,
-      pool.width,
+      pool.width,  // flush at BOTTOM against pool
       plan.lengthAxis,
       sideRowDepth,
       true,

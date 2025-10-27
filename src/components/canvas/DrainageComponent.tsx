@@ -8,6 +8,7 @@ import { GRID_CONFIG } from '@/constants/grid';
 interface DrainageComponentProps {
   component: Component;
   isSelected: boolean;
+  activeTool?: string;
   onSelect: () => void;
   onDragEnd: (pos: { x: number; y: number }) => void;
   onExtend?: (length: number) => void;
@@ -17,6 +18,7 @@ interface DrainageComponentProps {
 export const DrainageComponent = ({
   component,
   isSelected,
+  activeTool,
   onSelect,
   onDragEnd,
   onExtend,
@@ -32,8 +34,9 @@ export const DrainageComponent = ({
   const length = (component.properties.length || 1000) * scale;
   const width = drainageData.width * scale;
 
-  const color = drainageData.color;
-  const pattern = drainageType === 'rock' ? 'dots' : 'solid';
+  // Use silver/stainless steel color for modern drainage grate
+  const color = '#C0C0C0'; // Silver/stainless steel
+  const slotColor = '#2C2C2C'; // Dark gray for the slots
 
   // Polyline mode
   const polyPoints: Array<{ x: number; y: number }> = component.properties.points || [];
@@ -91,7 +94,7 @@ export const DrainageComponent = ({
         x={component.position.x}
         y={component.position.y}
         rotation={component.rotation}
-        draggable={isSelected && !shiftPressed}
+        draggable={activeTool !== 'hand' && isSelected && !shiftPressed}
         onClick={onSelect}
         onTap={onSelect}
         onDragStart={() => {
@@ -118,11 +121,34 @@ export const DrainageComponent = ({
           const segLen = Math.sqrt(dx * dx + dy * dy);
           if (segLen < 1) return null;
           const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+
+          // Calculate vertical slats: 2mm wide, 50mm long (in real units)
+          // At scale 0.1: 2mm = 0.2px, 50mm = 5px
+          const slotWidthPx = 0.2 * scale * 10; // 2mm in pixels
+          const slotHeightPx = 5 * scale * 10; // 50mm in pixels
+          const slotSpacingPx = 8; // Space between slots (~80mm in real units)
+          const numSlots = Math.floor(segLen / slotSpacingPx);
+
           return (
             <Group key={`seg-${i}`} x={a.x} y={a.y} rotation={angle}>
-              <Line points={[0, 0, segLen, 0]} stroke={color} strokeWidth={width} lineCap="square" hitStrokeWidth={Math.max(16, width)} opacity={ghostLocal ? 0.5 : 0.7} />
-              {drainageType === 'rock' && Array.from({ length: Math.max(1, Math.floor(segLen / 20)) }).map((_, idx) => (
-                <Line key={idx} points={[idx * 20 + 10, -width / 2, idx * 20 + 10, width / 2]} stroke="black" strokeWidth={2} opacity={0.6} />
+              {/* Silver drainage grate base */}
+              <Line
+                points={[0, 0, segLen, 0]}
+                stroke={color}
+                strokeWidth={width}
+                lineCap="square"
+                hitStrokeWidth={Math.max(16, width)}
+                opacity={ghostLocal ? 0.5 : 0.9}
+              />
+              {/* Vertical slats (perpendicular to drain length) */}
+              {Array.from({ length: Math.max(1, numSlots) }).map((_, idx) => (
+                <Line
+                  key={idx}
+                  points={[idx * slotSpacingPx + 4, -slotHeightPx / 2, idx * slotSpacingPx + 4, slotHeightPx / 2]}
+                  stroke={slotColor}
+                  strokeWidth={slotWidthPx}
+                  opacity={0.7}
+                />
               ))}
             </Group>
           );
@@ -233,7 +259,7 @@ export const DrainageComponent = ({
       x={component.position.x}
       y={component.position.y}
       rotation={component.rotation}
-      draggable={!isDraggingHandle}
+      draggable={activeTool !== 'hand' && !isDraggingHandle}
       onClick={onSelect}
       onTap={onSelect}
       onContextMenu={handleRightClick}
@@ -243,19 +269,33 @@ export const DrainageComponent = ({
     >
       {/* No broad hit area; rely on thick stroke and hitStrokeWidth */}
 
-      {/* Drainage line */}
-      <Line points={[0, 0, length, 0]} stroke={color} strokeWidth={width} lineCap="square" hitStrokeWidth={Math.max(16, width)} opacity={0.7} />
+      {/* Silver drainage grate base */}
+      <Line
+        points={[0, 0, length, 0]}
+        stroke={color}
+        strokeWidth={width}
+        lineCap="square"
+        hitStrokeWidth={Math.max(16, width)}
+        opacity={0.9}
+      />
 
-      {/* Black drainage lines/gaps */}
-      {drainageType === 'rock' && Array.from({ length: Math.floor(length / 20) }).map((_, i) => (
-        <Line
-          key={i}
-          points={[i * 20 + 10, 0, i * 20 + 10, width]}
-          stroke="black"
-          strokeWidth={2}
-          opacity={0.6}
-        />
-      ))}
+      {/* Vertical slats (perpendicular to drain length) - 2mm wide, 50mm long */}
+      {(() => {
+        const slotWidthPx = 0.2 * scale * 10; // 2mm in pixels
+        const slotHeightPx = 5 * scale * 10; // 50mm in pixels
+        const slotSpacingPx = 8; // Space between slots (~80mm in real units)
+        const numSlots = Math.floor(length / slotSpacingPx);
+
+        return Array.from({ length: Math.max(1, numSlots) }).map((_, i) => (
+          <Line
+            key={i}
+            points={[i * slotSpacingPx + 4, -slotHeightPx / 2, i * slotSpacingPx + 4, slotHeightPx / 2]}
+            stroke={slotColor}
+            strokeWidth={slotWidthPx}
+            opacity={0.7}
+          />
+        ));
+      })()}
 
       {/* Selection border and handle */}
       {isSelected && (

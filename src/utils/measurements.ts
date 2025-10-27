@@ -134,14 +134,12 @@ export const calculateMeasurements = (components: Component[]): Summary => {
         const fenceLabel = FENCE_TYPES[type]?.label || 'Glass Pool Fence';
         // Use dimensions.width (in pixels) and convert to mm (1 pixel = 10mm)
         const length = (component.dimensions.width || 0) * 10;
-        const gates = component.properties.gates?.length || 0;
         
         // Only add fences with valid lengths (ignore zero-length fences)
         if (length > 0) {
           summary.fencing.push({
             type: fenceLabel,
             length,
-            gates,
           });
         }
         break;

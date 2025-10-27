@@ -9,8 +9,9 @@ import { ComponentType, Component } from '@/types';
  * - Boundaries (reference/guide element)
  * - Walls
  * - Drainage
- * - Fences
+ * - Fences & Gates
  * - Houses
+ * - Decorations (bushes, umbrellas, water features)
  * - Measurement tools (front)
  */
 export const RENDER_ORDER: Record<ComponentType, number> = {
@@ -30,14 +31,18 @@ export const RENDER_ORDER: Record<ComponentType, number> = {
   // Layer 4: Drainage
   drainage: 4,
 
-  // Layer 5: Fences
+  // Layer 5: Fences & Gates
   fence: 5,
+  gate: 5,
 
   // Layer 6: Houses
   house: 6,
 
-  // Layer 7: Measurement tools (highest/front)
-  quick_measure: 7,
+  // Layer 7: Decorations (bushes, umbrellas, water features)
+  decoration: 7,
+
+  // Layer 8: Measurement tools (highest/front)
+  quick_measure: 8,
 };
 
 /**
@@ -51,11 +56,17 @@ export const getComponentRenderOrder = (type: ComponentType): number => {
  * Sort components by render order (lowest to highest).
  * Within the same render order, maintains creation order (array position).
  *
+ * IMPORTANT: If a component is selected, it will be moved to the top layer
+ * (rendered last) to ensure it's always clickable and editable, regardless of
+ * its normal layer order. This allows easy manipulation without being blocked
+ * by higher-layer components.
+ *
  * @param components - Array of components to sort
- * @returns New array sorted by render order
+ * @param selectedComponentId - Optional ID of the selected component to render on top
+ * @returns New array sorted by render order, with selected component moved to top
  */
-export const sortComponentsByRenderOrder = (components: Component[]): Component[] => {
-  return [...components].sort((a, b) => {
+export const sortComponentsByRenderOrder = (components: Component[], selectedComponentId?: string | null): Component[] => {
+  const sorted = [...components].sort((a, b) => {
     const orderA = getComponentRenderOrder(a.type);
     const orderB = getComponentRenderOrder(b.type);
 
@@ -68,4 +79,15 @@ export const sortComponentsByRenderOrder = (components: Component[]): Component[
     // This is automatically preserved by stable sort
     return 0;
   });
+
+  // Move selected component to the end (top layer) for easy editing
+  if (selectedComponentId) {
+    const selectedIndex = sorted.findIndex(c => c.id === selectedComponentId);
+    if (selectedIndex !== -1) {
+      const [selected] = sorted.splice(selectedIndex, 1);
+      sorted.push(selected);
+    }
+  }
+
+  return sorted;
 };

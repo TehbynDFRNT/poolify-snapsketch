@@ -33,14 +33,34 @@ export const DesignCanvas = () => {
   const [isDirty, setIsDirty] = useState(false);
   const initializedRef = useRef(false);
   const [activeTool, setActiveTool] = useState<ToolType>('select');
+  const [selectedDecorationType, setSelectedDecorationType] = useState<'bush' | 'umbrella' | 'waterfeature' | 'deckchairs'>('bush');
+  const [selectedFenceType, setSelectedFenceType] = useState<'glass' | 'metal'>('glass');
+  const [selectedAreaType, setSelectedAreaType] = useState<'pavers' | 'concrete' | 'grass'>('pavers');
 
-  const handleToolChange = (tool: ToolType) => {
+  const handleToolChange = (
+    tool: ToolType,
+    options?: {
+      decorationType?: 'bush' | 'umbrella' | 'waterfeature' | 'deckchairs';
+      fenceType?: 'glass' | 'metal';
+      areaType?: 'pavers' | 'concrete' | 'grass';
+    }
+  ) => {
     console.log('DesignCanvas: Tool changing from', activeTool, 'to', tool);
     setActiveTool(tool);
+    if (options?.decorationType) {
+      setSelectedDecorationType(options.decorationType);
+    }
+    if (options?.fenceType) {
+      setSelectedFenceType(options.fenceType);
+    }
+    if (options?.areaType) {
+      setSelectedAreaType(options.areaType);
+    }
   };
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
-  const [bottomPanelHeight, setBottomPanelHeight] = useState(350);
+  // Start collapsed by default
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(40);
   const [menuOpen, setMenuOpen] = useState(false);
   const [permission, setPermission] = useState<'view' | 'edit' | 'admin' | 'owner'>('owner');
   const [loading, setLoading] = useState(true);
@@ -98,6 +118,7 @@ export const DesignCanvas = () => {
       if (e.key === 'd' || e.key === 'D') setActiveTool('drainage');
       if (e.key === 'f' || e.key === 'F') setActiveTool('fence');
       if (e.key === 'w' || e.key === 'W') setActiveTool('wall');
+      if (e.key === 'c' || e.key === 'C') setActiveTool('decoration');
       if (e.key === 'm' || e.key === 'M') setActiveTool('quick_measure');
     };
 
@@ -390,8 +411,11 @@ export const DesignCanvas = () => {
         className="flex-1 overflow-hidden relative"
         style={{ height: `calc(100vh - 60px - ${bottomPanelHeight}px)` }}
       >
-        <Canvas 
+        <Canvas
           activeTool={activeTool}
+          selectedDecorationType={selectedDecorationType}
+          selectedFenceType={selectedFenceType}
+          selectedAreaType={selectedAreaType}
           onZoomChange={handleZoomChange}
           onDrawingStateChange={handleDrawingStateChange}
           onToolChange={handleToolChange}

@@ -29,8 +29,14 @@ export const useKeyboardShortcuts = () => {
         saveCurrentProject();
       }
 
-      // Delete or Backspace: Delete selected component
+      // Delete or Backspace
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedComponentId) {
+        // If PoolComponent has tile selection active, let it handle per-tile delete
+        const body = document.body as any;
+        if (body && body.dataset && body.dataset.copingTileSelected === '1') {
+          e.preventDefault();
+          return; // PoolComponent will perform tile-level delete if applicable
+        }
         e.preventDefault();
         deleteComponent(selectedComponentId);
       }

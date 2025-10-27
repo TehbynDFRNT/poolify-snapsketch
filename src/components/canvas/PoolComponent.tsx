@@ -2,9 +2,12 @@ import { useRef, useMemo, useState, useEffect } from 'react';
 import { Group, Line, Text, Circle, Rect } from 'react-konva';
 import { Component } from '@/types';
 import { POOL_LIBRARY } from '@/constants/pools';
-import { calculatePoolCoping, GROUT_MM } from '@/utils/copingCalculation';
+import { calculatePoolCoping } from '@/utils/copingCalculation';
+import { getContextMenuItems } from '@/types/contextMenu';
 import { useDesignStore } from '@/store/designStore';
 import { snapPoolToPaverGrid } from '@/utils/snap';
+import { snapRectPx } from '@/utils/canvasSnap';
+import { TILE_COLORS, TILE_GAP } from '@/constants/tileConfig';
 
 interface PoolComponentProps {
   component: Component;
@@ -12,10 +15,10 @@ interface PoolComponentProps {
   activeTool?: string;
   onSelect: () => void;
   onDragEnd: (pos: { x: number; y: number }) => void;
-  onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
+  onTileContextMenu?: (component: Component, tileKey: string, screenPos: { x: number; y: number }) => void;
 }
 
-export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onContextMenu }: PoolComponentProps) => {
+export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onDragEnd, onTileContextMenu }: PoolComponentProps) => {
   const groupRef = useRef<any>(null);
   const { components: allComponents, updateComponent } = useDesignStore();
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
@@ -34,6 +37,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onCo
         rects: Array<{ x: number; y: number; width: number; height: number; isPartial: boolean }>;
       }
   >(null);
+
 
 
   // Prefer embedded pool geometry to avoid library mismatches
@@ -247,6 +251,89 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onCo
     }
   }, [isSelected, selectedTiles.size]);
 
+  // Publish coping tile selection to footer (same format as paver selection)
+  useEffect(() => {
+    const setTileSelection = useDesignStore.getState().setTileSelection;
+    if (!isSelected || selectedTiles.size === 0) {
+      setTileSelection(null);
+      return;
+    }
+    // Build a map of all tiles by key
+    const all: Tile[] = ([] as Tile[])
+      .concat(sideTiles.top, sideTiles.bottom, sideTiles.left, sideTiles.right);
+    const selKeys = new Set(Array.from(selectedTiles));
+    const selTiles = all.filter(t => selKeys.has(t.key));
+    if (selTiles.length === 0) {
+      setTileSelection(null);
+      return;
+    }
+    const tileW = Math.round(selTiles[0].width);
+    const tileH = Math.round(selTiles[0].height);
+    if (selTiles.length === 1) {
+      setTileSelection({
+        scope: 'paver',
+        componentId: component.id,
+        count: 1,
+        widthMm: tileW,
+        heightMm: tileH,
+        tileWidthMm: tileW,
+        tileHeightMm: tileH,
+      });
+      return;
+    }
+    // Multi-tile selection: use selection bounding rectangle (mm)
+    const minX = Math.min(...selTiles.map(t => t.x));
+    const maxX = Math.max(...selTiles.map(t => t.x + t.width));
+    const minY = Math.min(...selTiles.map(t => t.y));
+    const maxY = Math.max(...selTiles.map(t => t.y + t.height));
+    const selW = Math.round(maxX - minX);
+    const selH = Math.round(maxY - minY);
+    setTileSelection({
+      scope: 'paver',
+      componentId: component.id,
+      count: selTiles.length,
+      widthMm: selW,
+      heightMm: selH,
+      tileWidthMm: tileW,
+      tileHeightMm: tileH,
+    });
+  }, [isSelected, selectedTiles, sideTiles, component.id]);
+
+  // Expose a document-wide flag so global Delete key doesn't delete the whole pool when coping tiles are selected
+  useEffect(() => {
+    if (isSelected && selectedTiles.size > 0) {
+      document.body.dataset.copingTileSelected = '1';
+    } else {
+      if (document.body.dataset.copingTileSelected) delete document.body.dataset.copingTileSelected;
+    }
+    return () => {
+      if (document.body.dataset.copingTileSelected) delete document.body.dataset.copingTileSelected;
+    };
+  }, [isSelected, selectedTiles.size]);
+
+  // Delete selected extension tiles on Delete/Backspace
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!isSelected) return;
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      if (selectedTiles.size === 0) return;
+      const keysToDelete = Array.from(selectedTiles).filter(k => /:ext:\d+$/.test(k));
+      if (keysToDelete.length === 0) return; // only delete extensions
+      e.preventDefault();
+      // Compute indices to remove from copingExtensions
+      const idxs = new Set<number>();
+      keysToDelete.forEach(k => { const m = k.match(/:ext:(\d+)$/); if (m) idxs.add(parseInt(m[1], 10)); });
+      const oldExt = (component.properties.copingExtensions || []) as any[];
+      if (idxs.size === 0 || oldExt.length === 0) return;
+      const newExt = oldExt.filter((_, i) => !idxs.has(i));
+      updateComponent(component.id, { properties: { ...component.properties, copingExtensions: newExt } });
+      setSelectedTiles(new Set());
+      setSelectionSide(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isSelected, selectedTiles, component.id, component.properties, updateComponent]);
+
   // Build the list of tiles for rendering (base + extensions) with selection overlays
   const renderCopingTiles = () => {
     const tiles: Tile[] = ([] as Tile[])
@@ -264,14 +351,195 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onCo
       });
     }
 
-    const roundHalf = (px: number) => Math.round(px * 2) / 2;
-    const floorHalf = (px: number) => Math.floor(px * 2) / 2;
-    const groutStrokePx = 2; // unify joins and edges
-    const scissorsColor = '#B8AE94';
+    // Grout gaps from centralized config
+    const gapMm = TILE_GAP.size; // 5mm from config
+    const scissorsColor = TILE_COLORS.cutIndicator;
     const scissorsSize = 11;
     const scissorsMargin = 3;
-    const baseFill = '#E8DBC4'; // slightly darker sandstone for original coping
-    const extFill = '#F3EBD9';  // lighter sandstone for extensions
+    const baseFill = TILE_COLORS.baseTile; // slightly darker sandstone for original coping
+    const extFill = TILE_COLORS.extendedTile;  // lighter sandstone for extensions
+
+    // --- EDGE-ONLY GROUT (uniform band between pool and the adjacent coping row) ---
+    const G = gapMm;
+    const groutRects: JSX.Element[] = [];
+    if (TILE_GAP.renderGap && G > 0) {
+      const seen = new Set<string>();
+
+      const addRectMm = (x: number, y: number, w: number, h: number) => {
+        if (w <= 0 || h <= 0 || !isFinite(w) || !isFinite(h)) return;
+        const key = [x, y, w, h].map(v => Math.round(v * 10) / 10).join(':');
+        if (seen.has(key)) return;
+        seen.add(key);
+        const r = snapRectPx(x, y, w, h, scale);
+        groutRects.push(
+          <Rect
+            key={`grout-${key}`}
+            x={r.x}
+            y={r.y}
+            width={Math.max(1, r.width)}   // clamp so 5mm @ 0.1 scale doesn't disappear
+            height={Math.max(1, r.height)}
+            fill={TILE_COLORS.groutColor}
+            listening={false}
+          />
+        );
+      };
+
+      // Helper: pick tiles that belong to the coping row NEXT TO the pool for a side
+      const firstRowFor = (side: Side): Tile[] => {
+        const list = sideTiles[side];
+        if (list.length === 0) return [];
+
+        // Correct mapping: 'top' = TOP horizontal edge (y near 0),
+        // 'bottom' = BOTTOM horizontal edge (y near pool.width),
+        // 'left' = LEFT vertical edge (x near 0),
+        // 'right' = RIGHT vertical edge (x near pool.length)
+
+        // We compute a metric that increases towards the pool so "max" is the row adjacent to the pool
+        const metric = (t: Tile) => {
+          switch (side) {
+            case 'top':    return t.y + t.height; // bottom edge toward y=0
+            case 'bottom': return -t.y;           // top edge toward y=pool.width
+            case 'left':   return t.x + t.width;  // rightmost edge toward x=0
+            case 'right':  return -t.x;           // leftmost edge toward x=pool.length
+          }
+        };
+        const best = Math.max(...list.map(metric));
+        const EPS = 0.5; // mm tolerance
+        return list.filter(t => Math.abs(metric(t) - best) <= EPS);
+      };
+
+      // Draw the single band along the pool edge for each side, only for tiles in that first row
+      (['top','bottom','left','right'] as Side[]).forEach(side => {
+        const row = firstRowFor(side);
+        row.forEach(t => {
+          switch (side) {
+            case 'top':
+              // top horizontal pool edge → band immediately BELOW tile
+              addRectMm(t.x, t.y + t.height, t.width, G);
+              break;
+            case 'bottom':
+              // bottom horizontal pool edge → band immediately ABOVE tile
+              addRectMm(t.x, t.y - G, t.width, G);
+              break;
+            case 'left':
+              // left vertical pool edge → band immediately to the RIGHT of tile
+              addRectMm(t.x + t.width, t.y, G, t.height);
+              break;
+            case 'right':
+              // right vertical pool edge → band immediately to the LEFT of tile
+              addRectMm(t.x - G, t.y, G, t.height);
+              break;
+          }
+        });
+      });
+
+      // Draw grout between rows AND between tiles within rows
+      (['top','bottom','left','right'] as Side[]).forEach(side => {
+        const allTiles = sideTiles[side];
+        if (allTiles.length === 0) return;
+
+        // For vertical sides (left/right): rows extend in X (away from pool), tiles in rows are in Y (along pool)
+        // For horizontal sides (top/bottom): rows extend in Y (away from pool), tiles in rows are in X (along pool)
+        const isVerticalSide = side === 'left' || side === 'right';
+
+        if (isVerticalSide) {
+          // Group by X position (each X position is a row)
+          const xPositions = new Map<number, Tile[]>();
+          allTiles.forEach(t => {
+            const xKey = Math.round(t.x); // mm, rounded for grouping
+            const group = xPositions.get(xKey) || [];
+            group.push(t);
+            xPositions.set(xKey, group);
+          });
+
+          // 1) Grout BETWEEN ROWS (X direction gaps)
+          const sortedX = Array.from(xPositions.keys()).sort((a, b) => a - b);
+          for (let i = 0; i < sortedX.length - 1; i++) {
+            const x1 = sortedX[i];
+            const x2 = sortedX[i + 1];
+            const gap = x2 - x1;
+
+            const row1 = xPositions.get(x1)!;
+            const row2 = xPositions.get(x2)!;
+            const tileWidth = row1[0]?.width || 0;
+
+            // Expected gap should be close to tile width + grout
+            if (gap > tileWidth && gap <= tileWidth + G + 1) {
+              // Find Y overlap between rows
+              const minY = Math.max(Math.min(...row1.map(t => t.y)), Math.min(...row2.map(t => t.y)));
+              const maxY = Math.min(Math.max(...row1.map(t => t.y + t.height)), Math.max(...row2.map(t => t.y + t.height)));
+
+              if (maxY > minY) {
+                addRectMm(x1 + tileWidth, minY, G, maxY - minY);
+              }
+            }
+          }
+
+          // 2) Grout WITHIN ROWS (Y direction gaps between adjacent tiles)
+          xPositions.forEach((rowTiles) => {
+            const sorted = rowTiles.sort((a, b) => a.y - b.y);
+            for (let i = 0; i < sorted.length - 1; i++) {
+              const t1 = sorted[i];
+              const t2 = sorted[i + 1];
+              const gap = t2.y - (t1.y + t1.height);
+
+              // Check if there's a grout-sized gap
+              if (gap > 0 && gap <= G + 1) {
+                addRectMm(t1.x, t1.y + t1.height, t1.width, gap);
+              }
+            }
+          });
+
+        } else {
+          // Horizontal sides: group by Y position (each Y position is a row)
+          const yPositions = new Map<number, Tile[]>();
+          allTiles.forEach(t => {
+            const yKey = Math.round(t.y); // mm, rounded for grouping
+            const group = yPositions.get(yKey) || [];
+            group.push(t);
+            yPositions.set(yKey, group);
+          });
+
+          // 1) Grout BETWEEN ROWS (Y direction gaps)
+          const sortedY = Array.from(yPositions.keys()).sort((a, b) => a - b);
+          for (let i = 0; i < sortedY.length - 1; i++) {
+            const y1 = sortedY[i];
+            const y2 = sortedY[i + 1];
+            const gap = y2 - y1;
+
+            const row1 = yPositions.get(y1)!;
+            const row2 = yPositions.get(y2)!;
+            const tileHeight = row1[0]?.height || 0;
+
+            // Expected gap should be close to tile height + grout
+            if (gap > tileHeight && gap <= tileHeight + G + 1) {
+              // Find X overlap between rows
+              const minX = Math.max(Math.min(...row1.map(t => t.x)), Math.min(...row2.map(t => t.x)));
+              const maxX = Math.min(Math.max(...row1.map(t => t.x + t.width)), Math.max(...row2.map(t => t.x + t.width)));
+
+              if (maxX > minX) {
+                addRectMm(minX, y1 + tileHeight, maxX - minX, G);
+              }
+            }
+          }
+
+          // 2) Grout WITHIN ROWS (X direction gaps between adjacent tiles)
+          yPositions.forEach((rowTiles) => {
+            const sorted = rowTiles.sort((a, b) => a.x - b.x);
+            for (let i = 0; i < sorted.length - 1; i++) {
+              const t1 = sorted[i];
+              const t2 = sorted[i + 1];
+              const gap = t2.x - (t1.x + t1.width);
+
+              // Check if there's a grout-sized gap
+              if (gap > 0 && gap <= G + 1) {
+                addRectMm(t1.x + t1.width, t1.y, gap, t1.height);
+              }
+            }
+          });
+        }
+      });
+    }
 
     // Build tile fill + overlays
     const fills: JSX.Element[] = [];
@@ -282,32 +550,36 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onCo
         return w > 0 && h > 0 && isFinite(w) && isFinite(h);
       })
       .forEach((t) => {
-        const width = Math.max(1, Math.round(t.width * scale));
-        const height = Math.max(1, Math.round(t.height * scale));
+        // Use snapRectPx to ensure both edges are snapped to 0.5px
+        const r = snapRectPx(t.x, t.y, t.width, t.height, scale);
         const isSel = selectedTiles.has(t.key);
         const isCandidate = candidateKeys.has(t.key) && !isSel;
         const isPartial = t.isPartial;
-        const pxX = floorHalf(t.x * scale);
-        const pxY = floorHalf(t.y * scale);
+
         fills.push(
           <Group key={`coping-${t.key}`}>
             <Rect
-              x={pxX}
-              y={pxY}
-              width={width}
-              height={height}
+              x={r.x}
+              y={r.y}
+              width={Math.max(0, r.width)}
+              height={Math.max(0, r.height)}
               fill={t.source === 'base' ? baseFill : extFill}
               dash={isPartial ? [5,5] : undefined}
               opacity={isPartial ? 0.85 : 1}
               onClick={(e:any) => toggleTileSelection(t, e)}
               onTap={(e:any) => toggleTileSelection(t, e)}
+              onContextMenu={(e:any) => {
+                if (t.source !== 'ext') return;
+                e.cancelBubble = true; e.evt.preventDefault();
+                onTileContextMenu?.(component, t.key, { x: e.evt.clientX, y: e.evt.clientY });
+              }}
             />
             {isCandidate && (
               <Rect
-                x={pxX + groutStrokePx/2}
-                y={pxY + groutStrokePx/2}
-                width={Math.max(0, width - groutStrokePx)}
-                height={Math.max(0, height - groutStrokePx)}
+                x={r.x}
+                y={r.y}
+                width={Math.max(0, r.width)}
+                height={Math.max(0, r.height)}
                 fill="rgba(16,185,129,0.12)"
                 stroke="#10B981"
                 strokeWidth={2}
@@ -317,10 +589,10 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onCo
             )}
             {isSel && (
               <Rect
-                x={pxX + groutStrokePx/2}
-                y={pxY + groutStrokePx/2}
-                width={Math.max(0, width - groutStrokePx)}
-                height={Math.max(0, height - groutStrokePx)}
+                x={r.x}
+                y={r.y}
+                width={Math.max(0, r.width)}
+                height={Math.max(0, r.height)}
                 fill="rgba(59,130,246,0.15)"
                 stroke="#3B82F6"
                 strokeWidth={2}
@@ -331,8 +603,8 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onCo
             {/* Cut indicator at bottom-right for partial tiles */}
             {isPartial && (
               <Text
-                x={pxX + width - scissorsSize - scissorsMargin}
-                y={pxY + height - scissorsSize - scissorsMargin}
+                x={r.x + r.width - scissorsSize - scissorsMargin}
+                y={r.y + r.height - scissorsSize - scissorsMargin}
                 text="✂"
                 fontSize={scissorsSize}
                 fill={scissorsColor}
@@ -343,49 +615,20 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onCo
         );
       });
 
-    // Build unique edge segments for grout lines
-    type Seg = { x1:number; y1:number; x2:number; y2:number; };
-    const edgeMap = new Map<string, Seg & { count: number }>();
-
-    const addEdge = (x1:number,y1:number,x2:number,y2:number) => {
-      // normalize orientation and snap to half-pixel
-      const rx1 = roundHalf(x1), ry1 = roundHalf(y1);
-      const rx2 = roundHalf(x2), ry2 = roundHalf(y2);
-      const key = `${Math.min(rx1,rx2)},${Math.min(ry1,ry2)},${Math.max(rx1,rx2)},${Math.max(ry1,ry2)}`;
-      const cur = edgeMap.get(key);
-      if (cur) cur.count += 1; else edgeMap.set(key, { x1: rx1, y1: ry1, x2: rx2, y2: ry2, count: 1 });
-    };
-
-    tiles.forEach((t) => {
-      const pxX = floorHalf(t.x * scale);
-      const pxY = floorHalf(t.y * scale);
-      const width = Math.max(1, Math.round(t.width * scale));
-      const height = Math.max(1, Math.round(t.height * scale));
-      // edges in px
-      addEdge(pxX, pxY, pxX + width, pxY); // top
-      addEdge(pxX, pxY + height, pxX + width, pxY + height); // bottom
-      addEdge(pxX, pxY, pxX, pxY + height); // left
-      addEdge(pxX + width, pxY, pxX + width, pxY + height); // right
-    });
-
-    const groutLines: JSX.Element[] = [];
-    edgeMap.forEach((seg, key) => {
-      groutLines.push(
-        <Line
-          key={`grout-${key}`}
-          points={[floorHalf(seg.x1), floorHalf(seg.y1), floorHalf(seg.x2), floorHalf(seg.y2)]}
-          stroke="#D4C5A9"
-          strokeWidth={groutStrokePx}
-          listening={false}
-        />
-      );
-    });
-
+    // Return grout layer, then pool, then tiles
     return (
       <>
+        <Group listening={false}>{groutRects}</Group>
+        {/* Pool above grout, under tiles */}
+        <Line
+          points={points}
+          fill="rgba(59, 130, 246, 0.3)"
+          stroke="#3B82F6"
+          strokeWidth={2}
+          closed
+          listening={false}
+        />
         {fills}
-        {/* Draw grout lines once to ensure joins == edges */}
-        {groutLines}
       </>
     );
   };
@@ -393,6 +636,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onCo
   // Extension handles for each side; anchor to selection bounds if present, else object coping bounds
   const renderExtendHandles = () => {
     if (!isSelected) return null;
+    const SNAP_MM = 5; // keep mm snapping granularity for extensions (visual grid stability)
 
     // Selection bounds across selected tiles (mm)
     const getSelectionBounds = () => {
@@ -522,8 +766,8 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onCo
             const posOnAxis = axis === 'y' ? handleY : handleX;
             let sign: 1 | -1 = (posOnAxis - basePos) >= 0 ? 1 : -1;
 
-            // Compute unit distance on axis
-            let unitMm = depthMm; // default for normal (row depth per step)
+            // Determine unit distance on axis
+            let unitMm = depthMm; // default for normal (row step = tile depth only)
             let anchorPx = basePos; // default anchor = object handle base
             if (!isNormal) {
               if (!hasSelection || anyPartial) {
@@ -539,10 +783,13 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onCo
                 ? Math.max(...candidateTiles.map(t => t.x + t.width))
                 : Math.max(...candidateTiles.map(t => t.y + t.height));
               const blockSpanMm = Math.max(0, maxCoord - minCoord);
-              unitMm = blockSpanMm + GROUT_MM;
+              // Add standard grout gap between repeated blocks so blocks don't butt up
+              unitMm = blockSpanMm + TILE_GAP.size;
               anchorPx = (sign >= 0 ? maxCoord : minCoord) * scale;
             } else {
-              // Normal replicate – anchor to selection edge if any
+              // Normal replicate – include grout gap between rows
+              unitMm = depthMm + TILE_GAP.size;
+              // Anchor to selection edge if any
               if (candidateTiles.length > 0) {
                 const minCoord = normalAxis === 'x'
                   ? Math.min(...candidateTiles.map(t => t.x))
@@ -639,9 +886,13 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onCo
                     ? Math.max(...candidateTiles.map(t => t.x + t.width))
                     : Math.max(...candidateTiles.map(t => t.y + t.height));
                   const blockSpanMm = Math.max(0, maxCoord - minCoord);
-                  unitMm = blockSpanMm + GROUT_MM;
+                  // Add standard grout gap between repeated blocks so blocks don't butt up
+                  unitMm = blockSpanMm + TILE_GAP.size;
+                } else {
+                  // Normal replicate – include grout gap between rows
+                  unitMm = depthMm + TILE_GAP.size;
                 }
-                const snapMm = (mm:number) => Math.floor(mm / GROUT_MM) * GROUT_MM; // snap mm to 5mm grid
+                const snapMm = (mm:number) => Math.round(mm / SNAP_MM) * SNAP_MM; // keep stable mm snapping
                 for (let s = 1; s <= steps; s++) {
                   const off = s * unitMm * sign; // mm
                   candidateTiles.forEach((t) => {
@@ -713,14 +964,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onCo
     );
   };
 
-  const handleRightClick = (e: any) => {
-    e.evt.preventDefault();
-    if (onContextMenu) {
-      const stage = e.target.getStage();
-      const pointerPos = stage.getPointerPosition();
-      onContextMenu(component, { x: pointerPos.x, y: pointerPos.y });
-    }
-  };
 
   return (
     <Group
@@ -728,23 +971,24 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onCo
         x={component.position.x}
         y={component.position.y}
         rotation={component.rotation}
-        draggable={!isDraggingHandle}
+        draggable={activeTool !== 'hand' && !isDraggingHandle}
         // Match PaverComponent: clicking the object simply selects it.
         // Tile clearing is handled when the component becomes deselected.
         onClick={onSelect}
         onTap={onSelect}
-        onContextMenu={handleRightClick}
         onDragEnd={handleDragEnd}
       >
-        {/* Pool outline - filled (render FIRST so it's in background) */}
-        <Line
-          points={points}
-          fill="rgba(59, 130, 246, 0.3)"
-          stroke="#3B82F6"
-          strokeWidth={2}
-          closed
-          listening={false}
-        />
+        {/* Pool outline - render here only when coping is disabled; otherwise pool is drawn inside coping render between grout and tiles */}
+        {!showCoping || !copingCalc ? (
+          <Line
+            points={points}
+            fill="rgba(59, 130, 246, 0.3)"
+            stroke="#3B82F6"
+            strokeWidth={2}
+            closed
+            listening={false}
+          />
+        ) : null}
 
         {/* Invisible hit area covering pool + coping */}
         <Rect
@@ -771,7 +1015,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onCo
                     y={r.y}
                     width={Math.max(1, r.width)}
                     height={Math.max(1, r.height)}
-                    fill="#F3EBD9"
+                    fill={TILE_COLORS.extendedTile}
                     stroke="#3B82F6"
                     strokeWidth={2}
                     dash={[5,5]}
@@ -782,6 +1026,7 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onCo
             )}
           </Group>
         )}
+
 
         {/* Deep End label (150mm inset) */}
         <Text
@@ -827,16 +1072,6 @@ export const PoolComponent = ({ component, isSelected, onSelect, onDragEnd, onCo
 
         {/* Extend handles (outward-only) when selected */}
         {renderExtendHandles()}
-
-        {/* Snap anchor indicator - green dot at origin (snap point) */}
-        <Circle
-          x={0}
-          y={0}
-          radius={6}
-          fill="#22c55e"
-          stroke="#166534"
-          strokeWidth={2}
-        />
       </Group>
   );
 };

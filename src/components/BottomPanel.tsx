@@ -62,7 +62,7 @@ export const BottomPanel = ({
   const [notes, setNotes] = useState(project.notes || '');
   const [hasUnsavedNotes, setHasUnsavedNotes] = useState(false);
 
-  const { updateComponent, deleteComponent, duplicateComponent, components, updateCurrentProject } = useDesignStore();
+  const { updateComponent, deleteComponent, duplicateComponent, components, updateCurrentProject, tileSelection } = useDesignStore();
 
   const handleMouseDown = () => setIsResizing(true);
 
@@ -141,11 +141,13 @@ export const BottomPanel = ({
             </div>
           ) : (
             <span className="text-sm text-muted-foreground">
-              {activeTab === 'properties' && selectedComponent
-                ? `${selectedComponent.type} selected`
-                : activeTab === 'materials'
-                ? 'Materials Summary'
-                : 'Project Notes'}
+              {activeTab === 'properties' && selectedComponent ? (
+                tileSelection && tileSelection.scope === 'paver' && tileSelection.componentId === selectedComponent.id && tileSelection.count > 0 ? (
+                  tileSelection.count === 1 ?
+                    `Paver: ${tileSelection.tileWidthMm} × ${tileSelection.tileHeightMm} mm` :
+                    `Selection: ${tileSelection.widthMm} × ${tileSelection.heightMm} mm (${tileSelection.count} tiles)`
+                ) : `${selectedComponent.type} selected`
+              ) : activeTab === 'materials' ? 'Materials Summary' : 'Project Notes'}
             </span>
           )}
           
@@ -329,6 +331,8 @@ export const BottomPanel = ({
                 <ZoomIn className="h-4 w-4" />
               </Button>
             </div>
+
+            
             
             {/* Collapse button */}
             <Button
@@ -589,6 +593,40 @@ const PropertiesContent = ({
                   className="flex-1"
                 >
                   Boundary
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {component.type === 'gate' && (
+            <div>
+              <Label className="text-xs">Gate Type</Label>
+              <div className="flex gap-2 mt-1">
+                <Button
+                  variant={(component.properties as any).gateType !== 'metal' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => onUpdate(component.id, {
+                    properties: {
+                      ...component.properties,
+                      gateType: 'glass'
+                    }
+                  })}
+                  className="flex-1"
+                >
+                  Glass
+                </Button>
+                <Button
+                  variant={(component.properties as any).gateType === 'metal' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => onUpdate(component.id, {
+                    properties: {
+                      ...component.properties,
+                      gateType: 'metal'
+                    }
+                  })}
+                  className="flex-1"
+                >
+                  Flat-top Metal
                 </Button>
               </div>
             </div>
