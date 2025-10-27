@@ -365,7 +365,7 @@ const generatePaverPositions = (
     // Place pavers from LEFT/TOP corner
     for (let i = 0; i < p; i++) {
       const offset = i * U;
-      const rowOffset = row * (paverWidth + GROUT_MM);
+      const rowOffset = row * paverWidth;
       positions.push({
         x: startX + (isHorizontal ? offset : rowOffset),
         y: startY + (isHorizontal ? rowOffset : offset),
@@ -378,7 +378,7 @@ const generatePaverPositions = (
     // Place pavers from RIGHT/BOTTOM corner
     for (let i = 0; i < p; i++) {
       const offset = axisPlan.edgeLength - (i + 1) * U + G;
-      const rowOffset = row * (paverWidth + GROUT_MM);
+      const rowOffset = row * paverWidth;
       positions.push({
         x: startX + (isHorizontal ? offset : rowOffset),
         y: startY + (isHorizontal ? rowOffset : offset),
@@ -394,7 +394,7 @@ const generatePaverPositions = (
     if (axisPlan.centreMode === 'single_cut') {
       const cutSize = axisPlan.cutSizes[0];
       const cutPosition = centreStart + G;
-      const rowOffset = row * (paverWidth + GROUT_MM);
+      const rowOffset = row * paverWidth;
       positions.push({
         x: startX + (isHorizontal ? cutPosition : rowOffset),
         y: startY + (isHorizontal ? rowOffset : cutPosition),
@@ -404,7 +404,7 @@ const generatePaverPositions = (
       });
     } else if (axisPlan.centreMode === 'double_cut') {
       const [cLeft, cRight] = axisPlan.cutSizes;
-      const rowOffset = row * (paverWidth + GROUT_MM);
+      const rowOffset = row * paverWidth;
 
       // First cut (left/top)
       const leftCutPosition = centreStart + G;

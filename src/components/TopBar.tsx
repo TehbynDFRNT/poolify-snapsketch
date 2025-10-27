@@ -287,6 +287,17 @@ export const TopBar = ({
           <button
             className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded"
             onClick={() => {
+              onToolChange('boundary');
+              setToolMenu({ open: false, x: 0, y: 0, tool: null });
+            }}
+            title="Boundary"
+          >
+            <Pentagon className="w-5 h-5" />
+            <span>Boundary</span>
+          </button>
+          <button
+            className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded"
+            onClick={() => {
               onToolChange('gate');
               setToolMenu({ open: false, x: 0, y: 0, tool: null });
             }}
