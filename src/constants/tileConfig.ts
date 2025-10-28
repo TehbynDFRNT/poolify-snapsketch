@@ -11,7 +11,7 @@ export const TILE_COLORS = {
   cutTile: '#D9C7A9',         // Darker sandstone for cut tiles (partial pavers)
 
   // Grout colors
-  groutColor: '#D4C5A9',       // Grout/joint color between tiles
+  groutColor: '#B8A890',       // Grout/joint color between tiles (darker for contrast)
 
   // Special indicators
   cutIndicator: '#B8AE94',     // Scissors/cut indicator color

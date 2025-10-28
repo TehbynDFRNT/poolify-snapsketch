@@ -163,6 +163,7 @@ export const PavingAreaComponent = ({
   onContextMenu,
 }: PavingAreaComponentProps) => {
   const updateComponent = useDesignStore((s) => s.updateComponent);
+  const zoom = useDesignStore((s) => s.zoom);
   const allComponents = useDesignStore((s) => s.components);
 
   // config
@@ -176,9 +177,9 @@ export const PavingAreaComponent = ({
 
   const sizeStr: string = component.properties.paverSize || '400x400';
   const orient: 'horizontal' | 'vertical' = component.properties.paverOrientation || 'vertical';
-  const tilePlacementOrigin: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' =
-    component.properties.tilePlacementOrigin || 'top-left';
-  const snapResolution: 'edge' | 'half' = (component.properties as any).tileSnapResolution || 'half';
+  // Legacy tilePlacementOrigin removed; frame is the single anchor (top-left phase)
+  // Snap division: 1=edge only, 2=half, 4=quarter (default 4)
+  const snapDivision: number = (component.properties as any).tileSnapDivision ?? 4;
 
   const groupRef = useRef<any>(null);
   // Keep the outer group anchored while vertex dragging to avoid visual scatter
@@ -247,27 +248,19 @@ export const PavingAreaComponent = ({
 
   const stepX = useMemo(() => roundHalf(tileW + groutPx), [tileW, groutPx]);
   const stepY = useMemo(() => roundHalf(tileH + groutPx), [tileH, groutPx]);
-  const snapStepX = useMemo(() => (snapResolution === 'half' ? stepX / 2 : stepX), [stepX, snapResolution]);
-  const snapStepY = useMemo(() => (snapResolution === 'half' ? stepY / 2 : stepY), [stepY, snapResolution]);
+  const phaseX = useMemo(() => groutPx / 2, [groutPx]);
+  const phaseY = useMemo(() => groutPx / 2, [groutPx]);
+  const snapStepX = useMemo(() => stepX / Math.max(1, snapDivision), [stepX, snapDivision]);
+  const snapStepY = useMemo(() => stepY / Math.max(1, snapDivision), [stepY, snapDivision]);
 
   // ---------- generate full grid in frame-local coords (covers frame + one extra ring to allow partials) ----------
   const gridLocalAll: PaverRect[] = useMemo(() => {
     if (areaSurface !== 'pavers' || frame.side <= 0) return [];
     const cols: number[] = [];
     const rows: number[] = [];
-
-    // columns anchored to frame + placement origin
-    if (tilePlacementOrigin.includes('right')) {
-      for (let x = frame.side - tileW; x > -tileW - 1; x -= stepX) cols.push(roundHalf(x));
-    } else {
-      for (let x = 0; x < frame.side + tileW + 1; x += stepX) cols.push(roundHalf(x));
-    }
-    // rows anchored to frame + placement origin
-    if (tilePlacementOrigin.includes('bottom')) {
-      for (let y = frame.side - tileH; y > -tileH - 1; y -= stepY) rows.push(roundHalf(y));
-    } else {
-      for (let y = 0; y < frame.side + tileH + 1; y += stepY) rows.push(roundHalf(y));
-    }
+    // top-left anchored with symmetric grout phase (−G/2)
+    for (let x = -phaseX; x < frame.side + tileW + phaseX + 1; x += stepX) cols.push(roundHalf(x));
+    for (let y = -phaseY; y < frame.side + tileH + phaseY + 1; y += stepY) rows.push(roundHalf(y));
 
     const w = Math.max(1, roundHalf(tileW));
     const h = Math.max(1, roundHalf(tileH));
@@ -286,7 +279,7 @@ export const PavingAreaComponent = ({
       }
     }
     return tiles;
-  }, [areaSurface, frame.side, tilePlacementOrigin, tileW, tileH, stepX, stepY]);
+  }, [areaSurface, frame.side, tileW, tileH, stepX, stepY, phaseX, phaseY]);
 
   // ---------- filter grid to only tiles intersecting the polygon (mask), also mark cut tiles ----------
   const paversLocalVisible: PaverRect[] = useMemo(() => {
@@ -372,24 +365,15 @@ export const PavingAreaComponent = ({
 
     let snappedLx = lx;
     let snappedLy = ly;
-    // X snapping based on placement origin
-    if (tilePlacementOrigin.includes('right')) {
-      const fromRight = frame.side - lx;
-      snappedLx = frame.side - Math.round(fromRight / snapStepX) * snapStepX;
-    } else {
-      snappedLx = Math.round(lx / snapStepX) * snapStepX;
-    }
-    // Y snapping based on placement origin
-    if (tilePlacementOrigin.includes('bottom')) {
-      const fromBottom = frame.side - ly;
-      snappedLy = frame.side - Math.round(fromBottom / snapStepY) * snapStepY;
-    } else {
-      snappedLy = Math.round(ly / snapStepY) * snapStepY;
-    }
+    // top-left anchored snap with symmetric grout phase (−G/2)
+    snappedLx = Math.round((lx + phaseX) / snapStepX) * snapStepX - phaseX;
+    snappedLy = Math.round((ly + phaseY) / snapStepY) * snapStepY - phaseY;
 
     // Back to world
     return { x: roundHalf(frame.x + snappedLx), y: roundHalf(frame.y + snappedLy) };
-  }, [frame.x, frame.y, frame.side, tilePlacementOrigin, snapStepX, snapStepY]);
+  }, [frame.x, frame.y, frame.side, snapStepX, snapStepY, phaseX, phaseY]);
+
+  // (reverted) No special grout-center snap helper; use standard phased tile snap
   
   // Compute tiles for a given frame and polygon (all in frame-local coords)
   const computeTilesForFrame = useCallback((polyLocal: Pt[], fr: Frame): PaverRect[] => {
@@ -398,16 +382,9 @@ export const PavingAreaComponent = ({
     // Build grid in local coords for the provided frame
     const cols: number[] = [];
     const rows: number[] = [];
-    if (tilePlacementOrigin.includes('right')) {
-      for (let x = fr.side - tileW; x > -tileW - 1; x -= stepX) cols.push(roundHalf(x));
-    } else {
-      for (let x = 0; x < fr.side + tileW + 1; x += stepX) cols.push(roundHalf(x));
-    }
-    if (tilePlacementOrigin.includes('bottom')) {
-      for (let y = fr.side - tileH; y > -tileH - 1; y -= stepY) rows.push(roundHalf(y));
-    } else {
-      for (let y = 0; y < fr.side + tileH + 1; y += stepY) rows.push(roundHalf(y));
-    }
+    // top-left anchored frame grid
+    for (let x = 0; x < fr.side + tileW + 1; x += stepX) cols.push(roundHalf(x));
+    for (let y = 0; y < fr.side + tileH + 1; y += stepY) rows.push(roundHalf(y));
 
     const w = Math.max(1, roundHalf(tileW));
     const h = Math.max(1, roundHalf(tileH));
@@ -423,7 +400,7 @@ export const PavingAreaComponent = ({
       }
     }
     return out;
-  }, [areaSurface, tilePlacementOrigin, tileW, tileH, stepX, stepY]);
+  }, [areaSurface, tileW, tileH, stepX, stepY]);
 
   // ---------- context menu ----------
   const handleRightClick = (e: any) => {
@@ -544,18 +521,9 @@ export const PavingAreaComponent = ({
     if (areaSurface !== 'pavers') return pt;
     let snappedX = pt.x;
     let snappedY = pt.y;
-    if (tilePlacementOrigin.includes('right')) {
-      const fromRight = frame.side - pt.x;
-      snappedX = frame.side - Math.round(fromRight / snapStepX) * snapStepX;
-    } else {
-      snappedX = Math.round(pt.x / snapStepX) * snapStepX;
-    }
-    if (tilePlacementOrigin.includes('bottom')) {
-      const fromBottom = frame.side - pt.y;
-      snappedY = frame.side - Math.round(fromBottom / snapStepY) * snapStepY;
-    } else {
-      snappedY = Math.round(pt.y / snapStepY) * snapStepY;
-    }
+    // top-left anchored snap with symmetric grout phase (−G/2)
+    snappedX = Math.round((pt.x + phaseX) / snapStepX) * snapStepX - phaseX;
+    snappedY = Math.round((pt.y + phaseY) / snapStepY) * snapStepY - phaseY;
     return { x: snappedX, y: snappedY };
   };
 
@@ -685,11 +653,65 @@ export const PavingAreaComponent = ({
 
     // Persist the updated frame unconditionally so the invisible square
     // matches the polygon after the drag completes.
+    // Classify each snapped vertex as 'edge' or 'inbetween'
+    const classify = (p: Pt): 'edge' | 'inbetween' => {
+      const rx = Math.abs(((p.x + phaseX) % stepX + stepX) % stepX);
+      const ry = Math.abs(((p.y + phaseY) % stepY + stepY) % stepY);
+      const edgeX = rx < 0.01 || Math.abs(stepX - rx) < 0.01;
+      const edgeY = ry < 0.01 || Math.abs(stepY - ry) < 0.01;
+      return edgeX || edgeY ? 'edge' : 'inbetween';
+    };
+    const snapMeta = snappedLocal.map(classify);
+    const classifyAxis = (p: Pt): 'edge-x' | 'edge-y' | 'corner' | 'inbetween' => {
+      const rx = Math.abs(((p.x + phaseX) % stepX + stepX) % stepX);
+      const ry = Math.abs(((p.y + phaseY) % stepY + stepY) % stepY);
+      const onX = rx < 0.01 || Math.abs(stepX - rx) < 0.01; // vertical grout (x-aligned)
+      const onY = ry < 0.01 || Math.abs(stepY - ry) < 0.01; // horizontal grout (y-aligned)
+      if (onX && onY) return 'corner';
+      if (onX) return 'edge-x';
+      if (onY) return 'edge-y';
+      return 'inbetween';
+    };
+    const vertexAxisMeta = snappedLocal.map(classifyAxis);
+
+    // Classify each edge orientation: horizontal | vertical | angled (using small epsilon)
+    const edgeMeta: Array<'horizontal' | 'vertical' | 'angled'> = [];
+    const eps = 1e-2;
+    for (let i = 0; i < stagePts.length; i++) {
+      const a = stagePts[i];
+      const b = stagePts[(i + 1) % stagePts.length];
+      const dx = Math.abs(b.x - a.x);
+      const dy = Math.abs(b.y - a.y);
+      if (dx <= eps && dy > eps) edgeMeta.push('vertical');
+      else if (dy <= eps && dx > eps) edgeMeta.push('horizontal');
+      else edgeMeta.push('angled');
+    }
+
+    // Grout-aligned edge detection per rule:
+    // - If vertical edge (x = c): both endpoints must be on y-edge or corner
+    // - If horizontal edge (y = c): both endpoints must be on x-edge or corner
+    const isYEdge = (m: 'edge-x' | 'edge-y' | 'corner' | 'inbetween') => m === 'edge-y' || m === 'corner';
+    const isXEdge = (m: 'edge-x' | 'edge-y' | 'corner' | 'inbetween') => m === 'edge-x' || m === 'corner';
+    const groutEdge: boolean[] = [];
+    for (let i = 0; i < stagePts.length; i++) {
+      const m1 = vertexAxisMeta[i];
+      const m2 = vertexAxisMeta[(i + 1) % vertexAxisMeta.length];
+      const e = edgeMeta[i];
+      if (e === 'vertical') groutEdge.push(isYEdge(m1) && isYEdge(m2));
+      else if (e === 'horizontal') groutEdge.push(isXEdge(m1) && isXEdge(m2));
+      else groutEdge.push(false);
+    }
+
     updateComponent(component.id, {
       properties: {
         ...component.properties,
         boundary: stagePts,
         tilingFrame: { x: left, y: top, side: nextSide },
+        boundarySnapMeta: snapMeta,
+        boundaryVertexAxisMeta: vertexAxisMeta,
+        boundaryEdgeMeta: edgeMeta,
+        boundaryGroutEdge: groutEdge,
+        tileSnapDivision: snapDivision,
       },
     });
 
@@ -807,20 +829,15 @@ export const PavingAreaComponent = ({
       >
         {/* Content offset so outer group remains stable during vertex drags */}
         <Group x={frame.x - anchorFrame.x} y={frame.y - anchorFrame.y}>
-        {/* hit area for selection/move: the invisible tiling square (with a little bleed) */}
-        {(() => {
-          const BLEED = groutStrokePx / 2;
-          return (
-            <Rect
-              x={-BLEED}
-              y={-BLEED}
-              width={frame.side + BLEED * 2}
-              height={frame.side + BLEED * 2}
-              fill="transparent"
-              listening
-            />
-          );
-        })()}
+        {/* Hit area = actual polygon, not the whole tiling frame */}
+        <Line
+          points={boundaryLocal.flatMap((p) => [p.x, p.y])}
+          closed
+          fill="rgba(0,0,0,0.0001)"  /* nearly transparent fill so hits register only inside */
+          strokeEnabled={false}
+          onClick={onSelect}
+          onTap={onSelect}
+        />
 
         {/* content (hidden during ghost) */}
         {showLive && (
@@ -860,8 +877,8 @@ export const PavingAreaComponent = ({
                           y={y1}
                           width={w}
                           height={h}
-                          fill={TILE_COLORS.extendedTile}
-                          opacity={p.isEdgePaver ? 0.85 : 1}
+                          fill={p.isEdgePaver ? TILE_COLORS.cutTile : TILE_COLORS.baseTile}
+                          opacity={1}
                         />
                         {p.isEdgePaver && (
                           <Text
@@ -939,10 +956,11 @@ export const PavingAreaComponent = ({
                 name={`vertex-${i}`}
                 x={localPreview ? localPreview[i]?.x ?? pt.x : pt.x}
                 y={localPreview ? localPreview[i]?.y ?? pt.y : pt.y}
-                radius={6}
+                radius={Math.max(2, 4.2 / (zoom || 1))}
                 fill={isNodeSelected(i) ? '#3B82F6' : 'white'}
                 stroke="#3B82F6"
                 strokeWidth={2}
+                strokeScaleEnabled={false}
                 onMouseDown={(e) => onVertexMouseDown(i, e)}
                 draggable
                 dragBoundFunc={(pos) => {
@@ -1003,7 +1021,7 @@ export const PavingAreaComponent = ({
               <>
                 <Line
                   points={ghost.boundary.flatMap((p) => [p.x, p.y])}
-                  fill={TILE_COLORS.extendedTile}
+                  fill={TILE_COLORS.baseTile}
                   closed
                   listening={false}
                   opacity={0.75}
@@ -1015,8 +1033,8 @@ export const PavingAreaComponent = ({
                     y={p.position.y}
                     width={Math.max(0, p.width)}
                     height={Math.max(0, p.height)}
-                    fill={TILE_COLORS.extendedTile}
-                    opacity={p.isEdgePaver ? 0.5 : 0.6}
+                    fill={p.isEdgePaver ? TILE_COLORS.cutTile : TILE_COLORS.baseTile}
+                    opacity={0.6}
                   />
                 ))}
               </>

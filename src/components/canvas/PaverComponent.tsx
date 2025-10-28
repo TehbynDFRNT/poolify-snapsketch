@@ -122,7 +122,7 @@ export const PaverComponent = ({
           y={pxY}
           width={Math.max(0, w)}
           height={Math.max(0, h)}
-          fill={TILE_COLORS.extendedTile}
+          fill={TILE_COLORS.baseTile}
           onClick={(e: any) => {
             if (e.evt && e.evt.shiftKey) {
               e.cancelBubble = true;
@@ -174,7 +174,7 @@ export const PaverComponent = ({
             y={pxY}
             width={Math.max(0, w)}
             height={Math.max(0, h)}
-            fill={TILE_COLORS.extendedTile}
+            fill={TILE_COLORS.baseTile}
             onClick={(e: any) => {
               if (e.evt && e.evt.shiftKey) {
                 e.cancelBubble = true;
@@ -452,7 +452,7 @@ export const PaverComponent = ({
                         y={r * stepY}
                         width={tileWpx}
                         height={tileHpx}
-                        fill={TILE_COLORS.extendedTile}
+                        fill={TILE_COLORS.baseTile}
                         stroke="#3B82F6"
                         strokeWidth={2}
                         dash={[5, 5]}
@@ -478,7 +478,7 @@ export const PaverComponent = ({
                         y={r * stepY}
                         width={tileWpx}
                         height={tileHpx}
-                        fill={TILE_COLORS.extendedTile}
+                        fill={TILE_COLORS.baseTile}
                         stroke="#3B82F6"
                         strokeWidth={2}
                         dash={[5, 5]}
@@ -509,7 +509,7 @@ export const PaverComponent = ({
                       y={absR * stepY}
                       width={tileWpx}
                       height={tileHpx}
-                      fill={TILE_COLORS.extendedTile}
+                      fill={TILE_COLORS.baseTile}
                       stroke="#3B82F6"
                       strokeWidth={2}
                       dash={[5, 5]}
