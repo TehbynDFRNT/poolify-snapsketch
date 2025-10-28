@@ -92,7 +92,16 @@ export interface ComponentProperties {
   showCoping?: boolean;
   copingConfig?: any;
   copingCalculation?: CopingCalculation;
-  // Coping extensions: manually extended coping tiles (in pool-local mm coordinates)
+  // User-added coping tiles (in pool-local mm coordinates) - all tiles are atomic
+  copingTiles?: Array<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    isPartial: boolean;
+    side: 'top' | 'bottom' | 'left' | 'right';
+  }>;
+  // Legacy property (deprecated - use copingTiles)
   copingExtensions?: Array<{
     x: number;
     y: number;
@@ -114,6 +123,12 @@ export interface ComponentProperties {
   paverOrientation?: 'vertical' | 'horizontal';
   // When set, align grid origin to the coping grid of this pool component
   alignToPoolId?: string;
+  // Corner to place full tiles from
+  tilePlacementOrigin?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  // Calculated tile origin point (px) based on tilePlacementOrigin
+  tileOrigin?: { x: number; y: number };
+  // Invisible square frame that encloses the paving area for consistent tiling
+  tilingFrame?: { x: number; y: number; side: number };
   pavers?: Array<{
     id: string;
     position: { x: number; y: number };
