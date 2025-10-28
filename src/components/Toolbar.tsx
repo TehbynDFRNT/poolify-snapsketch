@@ -46,7 +46,6 @@ export const Toolbar = ({ activeTool = 'select', onToolChange }: ToolbarProps) =
     { id: 'select' as ToolType, icon: MousePointer2, label: 'Select/Move', shortcut: 'V' },
     { id: 'hand' as ToolType, icon: Hand, label: 'Pan Canvas', shortcut: 'H' },
     { id: 'pool' as ToolType, icon: Waves, label: 'Pool', shortcut: '1' },
-    { id: 'paver' as ToolType, icon: LayoutGrid, label: 'Paving', shortcut: '2' },
     { id: 'drainage' as ToolType, icon: Droplets, label: 'Drainage', shortcut: '3' },
     { id: 'fence' as ToolType, icon: FenceIcon, label: 'Fence', shortcut: '4' },
     { id: 'wall' as ToolType, icon: Construction, label: 'Wall', shortcut: '5' },

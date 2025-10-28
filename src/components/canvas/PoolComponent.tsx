@@ -20,7 +20,7 @@ interface PoolComponentProps {
 
 export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onDragEnd, onTileContextMenu }: PoolComponentProps) => {
   const groupRef = useRef<any>(null);
-  const { components: allComponents, updateComponent } = useDesignStore();
+  const { components: allComponents, updateComponent, zoom } = useDesignStore();
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
   const [patternImage, setPatternImage] = useState<HTMLImageElement | null>(null);
   // Shift-selectable coping tiles (keys encoded as `${side}:${index}` for base and `${side}:user:${index}` for user-added)
@@ -539,7 +539,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
         // Use snapRectPx to ensure both edges are snapped to 0.5px
         const r = snapRectPx(t.x, t.y, t.width, t.height, scale);
         const isSel = selectedTiles.has(t.key);
-        const isCandidate = candidateKeys.has(t.key) && !isSel;
+        const isCandidate = false; // disable non-selected green highlight
         const isPartial = t.isPartial;
 
         fills.push(
@@ -558,19 +558,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
                 onTileContextMenu?.(component, t.key, { x: e.evt.clientX, y: e.evt.clientY });
               }}
             />
-            {isCandidate && (
-              <Rect
-                x={r.x}
-                y={r.y}
-                width={Math.max(0, r.width)}
-                height={Math.max(0, r.height)}
-                fill="rgba(16,185,129,0.12)"
-                stroke="#10B981"
-                strokeWidth={2}
-                dash={[4,2]}
-                listening={false}
-              />
-            )}
+            {/* Removed non-selected candidate highlight to avoid dual outlines */}
             {isSel && (
               <Rect
                 x={r.x}
@@ -580,7 +568,8 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
                 fill="rgba(59,130,246,0.15)"
                 stroke="#3B82F6"
                 strokeWidth={2}
-                dash={[6,3]}
+                strokeScaleEnabled={false}
+                dash={[6, 3]}
                 listening={false}
               />
             )}
@@ -612,6 +601,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
           fillPatternOffset={patternConfig.offset}
           stroke="#3B82F6"
           strokeWidth={2}
+          strokeScaleEnabled={false}
           closed
           listening={false}
         />
@@ -715,10 +705,11 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
           key={`handle-${side}`}
           x={hx}
           y={hy}
-          radius={8}
+          radius={Math.max(2, 4.2 / (zoom || 1))}
           fill={color}
           stroke="white"
           strokeWidth={2}
+          strokeScaleEnabled={false}
           draggable
           dragBoundFunc={(pos) => {
             const group = groupRef.current;
@@ -955,6 +946,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
         height={Math.max(0, (maxY - minY) + 4)}
         stroke="#3B82F6"
         strokeWidth={2}
+        strokeScaleEnabled={false}
         dash={[10, 5]}
         listening={false}
       />
@@ -985,26 +977,26 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
             fillPatternOffset={patternConfig.offset}
             stroke="#3B82F6"
             strokeWidth={2}
+            strokeScaleEnabled={false}
             closed
             listening={false}
           />
         ) : null}
 
         {/* Invisible hit area covering pool + coping */}
-        <Rect
-          x={clickableBounds.x}
-          y={clickableBounds.y}
-          width={clickableBounds.width}
-          height={clickableBounds.height}
-          fill="transparent"
-          listening={false}
-        />
+      <Rect
+        x={clickableBounds.x}
+        y={clickableBounds.y}
+        width={clickableBounds.width}
+        height={clickableBounds.height}
+        fill="transparent"
+        listening={false}
+      />
 
         {/* Render coping pavers (interactive for selection) - AFTER pool outline so they're clickable */}
         {showCoping && copingCalc && (
           <Group>
             {renderCopingTiles()}
-            {renderTileSelectionBounds()}
             {/* Ghost preview layer for extension */}
             {preview && preview.rects.length > 0 && (
               <Group listening={false}>
@@ -1018,7 +1010,8 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
                     fill={TILE_COLORS.extendedTile}
                     stroke="#3B82F6"
                     strokeWidth={2}
-                    dash={[5,5]}
+                    strokeScaleEnabled={false}
+                    dash={[5, 5]}
                     opacity={0.5}
                   />
                 ))}
@@ -1065,7 +1058,8 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
             height={clickableBounds.height}
             stroke="#3B82F6"
             strokeWidth={2}
-            dash={[10, 5]}
+            strokeScaleEnabled={false}
+        dash={[10, 5]}
             listening={false}
           />
         )}

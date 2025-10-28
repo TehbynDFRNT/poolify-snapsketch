@@ -123,12 +123,18 @@ export interface ComponentProperties {
   paverOrientation?: 'vertical' | 'horizontal';
   // When set, align grid origin to the coping grid of this pool component
   alignToPoolId?: string;
-  // Corner to place full tiles from
-  tilePlacementOrigin?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-  // Snapping resolution for vertex edits: 'edge' (tile edges) or 'half' (edge and mid-tile)
-  tileSnapResolution?: 'edge' | 'half';
+  // Snapping division for vertex edits: 1=edge only, 2=half, 4=quarter
+  tileSnapDivision?: 1 | 2 | 4;
   // Invisible square frame that encloses the paving area for consistent tiling
   tilingFrame?: { x: number; y: number; side: number };
+  // Per-vertex snap meta (edge/inbetween) for the current boundary
+  boundarySnapMeta?: Array<'edge' | 'inbetween'>;
+  // Per-vertex axis meta: 'edge-x' (on vertical grout), 'edge-y' (on horizontal grout), 'corner' (on both), or 'inbetween'
+  boundaryVertexAxisMeta?: Array<'edge-x' | 'edge-y' | 'corner' | 'inbetween'>;
+  // Per-edge orientation for the closed boundary (i -> i+1)
+  boundaryEdgeMeta?: Array<'horizontal' | 'vertical' | 'angled'>;
+  // Per-edge grout alignment flag (true if edge follows a grout line per rules)
+  boundaryGroutEdge?: boolean[];
   pavers?: Array<{
     id: string;
     position: { x: number; y: number };

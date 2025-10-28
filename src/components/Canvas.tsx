@@ -17,6 +17,7 @@ import { GateComponent } from './canvas/GateComponent';
 import { DecorationComponent, getDecorationDimensions } from './canvas/DecorationComponent';
 import { PavingAreaDialog, PavingConfig } from './PavingAreaDialog';
 import { fillAreaWithPavers, calculateStatistics, validateBoundary } from '@/utils/pavingFill';
+import { TILE_GAP, getTileDimensions } from '@/constants/tileConfig';
 import { snapToGrid, smartSnap } from '@/utils/snap';
 import { toast } from 'sonner';
 import { PAVER_SIZES } from '@/constants/components';
@@ -428,9 +429,75 @@ export const Canvas = ({
     const bufferOffset = (side - baseSize) / 2;
     const tilingFrame = { x: minX - bufferOffset, y: minY - bufferOffset, side };
 
-    // Fill the area with pavers
+    // Snap the drawn boundary to the frame-anchored tile grid so first render
+    // matches node-edit behavior (default half-tile resolution).
+    const pxPerMm = GRID_CONFIG.spacing / 100;
+    const dims = getTileDimensions(config.paverSize as any, config.paverOrientation);
+    const tileWpx = dims.width * pxPerMm;
+    const tileHpx = dims.height * pxPerMm;
+    const groutPx = TILE_GAP.size * pxPerMm;
+    const stepX = tileWpx + groutPx;
+    const stepY = tileHpx + groutPx;
+    const snapX = stepX / 2;
+    const snapY = stepY / 2;
+    const phase = (TILE_GAP.size * pxPerMm) / 2;
+    const snappedBoundary = pavingBoundary.map((p) => {
+      const lx = p.x - tilingFrame.x;
+      const ly = p.y - tilingFrame.y;
+      const sx = Math.round((lx + phase) / snapX) * snapX - phase;
+      const sy = Math.round((ly + phase) / snapY) * snapY - phase;
+      return { x: tilingFrame.x + sx, y: tilingFrame.y + sy };
+    });
+
+    // Classify initial snap meta (edge vs inbetween)
+    const classify = (x: number, y: number): 'edge' | 'inbetween' => {
+      const rx = Math.abs(((x - tilingFrame.x + phase) % stepX + stepX) % stepX);
+      const ry = Math.abs(((y - tilingFrame.y + phase) % stepY + stepY) % stepY);
+      const edgeX = rx < 0.01 || Math.abs(stepX - rx) < 0.01;
+      const edgeY = ry < 0.01 || Math.abs(stepY - ry) < 0.01;
+      return edgeX || edgeY ? 'edge' : 'inbetween';
+    };
+    const snapMeta = snappedBoundary.map(p => classify(p.x, p.y));
+    const classifyAxis = (p: {x:number;y:number}): 'edge-x' | 'edge-y' | 'corner' | 'inbetween' => {
+      const lx = p.x - tilingFrame.x;
+      const ly = p.y - tilingFrame.y;
+      const rx = Math.abs(((lx + phase) % stepX + stepX) % stepX);
+      const ry = Math.abs(((ly + phase) % stepY + stepY) % stepY);
+      const onX = rx < 0.01 || Math.abs(stepX - rx) < 0.01;
+      const onY = ry < 0.01 || Math.abs(stepY - ry) < 0.01;
+      if (onX && onY) return 'corner';
+      if (onX) return 'edge-x';
+      if (onY) return 'edge-y';
+      return 'inbetween';
+    };
+    const vertexAxisMeta = snappedBoundary.map(p => classifyAxis(p));
+    // Edge orientation meta on initial create
+    const edgeMeta: Array<'horizontal' | 'vertical' | 'angled'> = [];
+    const eps = 1e-2;
+    for (let i = 0; i < snappedBoundary.length; i++) {
+      const a = snappedBoundary[i];
+      const b = snappedBoundary[(i + 1) % snappedBoundary.length];
+      const dx = Math.abs(b.x - a.x);
+      const dy = Math.abs(b.y - a.y);
+      if (dx <= eps && dy > eps) edgeMeta.push('vertical');
+      else if (dy <= eps && dx > eps) edgeMeta.push('horizontal');
+      else edgeMeta.push('angled');
+    }
+    const isYEdge = (m: 'edge-x' | 'edge-y' | 'corner' | 'inbetween') => m === 'edge-y' || m === 'corner';
+    const isXEdge = (m: 'edge-x' | 'edge-y' | 'corner' | 'inbetween') => m === 'edge-x' || m === 'corner';
+    const groutEdge: boolean[] = [];
+    for (let i = 0; i < snappedBoundary.length; i++) {
+      const m1 = vertexAxisMeta[i];
+      const m2 = vertexAxisMeta[(i + 1) % vertexAxisMeta.length];
+      const e = edgeMeta[i];
+      if (e === 'vertical') groutEdge.push(isYEdge(m1) && isYEdge(m2));
+      else if (e === 'horizontal') groutEdge.push(isXEdge(m1) && isXEdge(m2));
+      else groutEdge.push(false);
+    }
+
+    // Fill the area with pavers (for initial stats only)
     const pavers = fillAreaWithPavers(
-      pavingBoundary,
+      snappedBoundary,
       config.paverSize,
       config.paverOrientation,
       config.showEdgePavers
@@ -454,7 +521,7 @@ export const Canvas = ({
       totalPavers: pavers.length,
       edgePavers: edgePavers.length,
       fullPavers: fullPavers.length,
-      boundary: pavingBoundary
+      boundary: snappedBoundary
     });
     
     // Create the paving area component
@@ -465,12 +532,17 @@ export const Canvas = ({
       rotation: 0,
       dimensions: { width: 0, height: 0 },
       properties: {
-        boundary: pavingBoundary,
+        boundary: snappedBoundary,
         paverSize: config.paverSize,
         paverOrientation: config.paverOrientation,
         showEdgePavers: config.showEdgePavers,
         wastagePercentage: config.wastagePercentage,
         tilingFrame,
+        tileSnapDivision: 4,
+        boundarySnapMeta: snapMeta,
+        boundaryVertexAxisMeta: vertexAxisMeta,
+        boundaryEdgeMeta: edgeMeta,
+        boundaryGroutEdge: groutEdge,
         statistics, // Initial statistics, will be updated when pools change
       },
     });

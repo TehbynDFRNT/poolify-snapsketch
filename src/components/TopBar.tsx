@@ -52,7 +52,6 @@ const tools: Array<{ id: ToolType | 'area'; icon: React.ReactNode; name: string;
   { id: 'hand', icon: <Hand className="w-5 h-5" />, name: 'Pan', shortcut: 'H' },
   { id: 'house', icon: <Home className="w-5 h-5" />, name: 'House', shortcut: 'U' },
   { id: 'pool', icon: <Waves className="w-5 h-5" />, name: 'Pool', shortcut: 'O' },
-  { id: 'paver', icon: <Blocks className="w-5 h-5" />, name: 'Paver', shortcut: 'A' },
   { id: 'area', icon: <Square className="w-5 h-5" />, name: 'Area', shortcut: '' },
   { id: 'drainage', icon: <Droplets className="w-5 h-5" />, name: 'Drainage', shortcut: 'D' },
   { id: 'fence', icon: <Fence className="w-5 h-5" />, name: 'Fence', shortcut: 'F' },

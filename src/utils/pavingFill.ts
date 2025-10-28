@@ -108,16 +108,19 @@ export function fillAreaWithPaversFromOrigin(
         { x, y: y + cellH },
       ];
 
-      // Check paver against boundary
-      const cornersInside = corners.filter(corner => isPointInPolygon(corner, boundary));
-
-      // Skip if no corners inside (tiny slivers don't count)
-      if (cornersInside.length === 0) {
-        continue;
+      // Inclusion test: require STRICT interior overlap (no boundary-only tiles)
+      const cornersStrictInside = corners.filter(corner => isPointInPolygon(corner, boundary));
+      if (cornersStrictInside.length === 0) {
+        // As a fallback, consider center strictly inside
+        const centerStrict = isPointInPolygon({ x: x + cellW / 2, y: y + cellH / 2 }, boundary);
+        if (!centerStrict) {
+          continue; // tile has no interior area within polygon
+        }
       }
 
-      // Determine if this is an edge paver
-      const cornersOutside = corners.length - cornersInside.length;
+      // Edge/full classification: treat boundary points as inside for corner counting
+      const cornersInOrOn = corners.filter(corner => isPointInPolygonOrOnEdge(corner, boundary, 0.5));
+      const cornersOutside = corners.length - cornersInOrOn.length;
       const isEdge = cornersOutside > 0;
       const cutPercentage = isEdge ? Math.round((cornersOutside / 4) * 100) : 0;
       
@@ -200,6 +203,27 @@ function isPointInPolygon(point: Point, polygon: Point[]): boolean {
   }
   
   return inside;
+}
+
+// Distance of a point to segment AB
+function pointToSegmentDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  if (dx === 0 && dy === 0) return Math.hypot(px - ax, py - ay);
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
+  const lx = ax + t * dx;
+  const ly = ay + t * dy;
+  return Math.hypot(px - lx, py - ly);
+}
+
+// Consider boundary points (within tol px) as inside
+function isPointInPolygonOrOnEdge(point: Point, polygon: Point[], tol = 0.5): boolean {
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const ax = polygon[j].x, ay = polygon[j].y;
+    const bx = polygon[i].x, by = polygon[i].y;
+    if (pointToSegmentDist(point.x, point.y, ax, ay, bx, by) <= tol) return true;
+  }
+  return isPointInPolygon(point, polygon);
 }
 
 export function validateBoundary(
