@@ -2,7 +2,7 @@ import { Group, Line, Rect, Text, Circle } from 'react-konva';
 import { Component } from '@/types';
 import { useMemo, useEffect, useRef, useState, useCallback } from 'react';
 import { useDesignStore } from '@/store/designStore';
-import { calculateStatistics } from '@/utils/pavingFill';
+import { fillAreaWithPavers, calculateStatistics } from '@/utils/pavingFill';
 import { GRID_CONFIG } from '@/constants/grid';
 import { roundHalf } from '@/utils/canvasSnap';
 import { TILE_COLORS, TILE_GAP } from '@/constants/tileConfig';
@@ -300,11 +300,22 @@ export const PavingAreaComponent = ({
     [paversLocalVisible, frame.x, frame.y]
   );
 
-  // ---------- statistics ----------
-  const statistics = useMemo(
-    () => calculateStatistics(paversStageVisible, component.properties.wastagePercentage || 0),
-    [paversStageVisible, component.properties.wastagePercentage]
-  );
+  // ---------- statistics (using standard fillAreaWithPavers logic) ----------
+  const statistics = useMemo(() => {
+    if (areaSurface !== 'pavers' || boundaryStage.length < 3) {
+      return { fullPavers: 0, edgePavers: 0, totalPavers: 0, totalArea: 0, orderQuantity: 0, wastage: 0 };
+    }
+
+    // Use the standard fillAreaWithPavers function for consistent statistics
+    const pavers = fillAreaWithPavers(
+      boundaryStage,
+      sizeStr as any,
+      orient,
+      component.properties.showEdgePavers ?? true
+    );
+
+    return calculateStatistics(pavers, component.properties.wastagePercentage || 0);
+  }, [areaSurface, boundaryStage, sizeStr, orient, component.properties.showEdgePavers, component.properties.wastagePercentage]);
   useEffect(() => {
     const current = component.properties.statistics;
     if (

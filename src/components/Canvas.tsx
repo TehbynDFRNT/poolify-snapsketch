@@ -425,13 +425,12 @@ export const Canvas = ({
       y: Math.min(...ys),
     };
 
-    // Fill the area with pavers (initial calculation without pool exclusions)
+    // Fill the area with pavers
     const pavers = fillAreaWithPavers(
       pavingBoundary,
       config.paverSize,
       config.paverOrientation,
-      config.showEdgePavers,
-      [] // No pool exclusions at creation time
+      config.showEdgePavers
     );
 
     // Warn if no pavers were generated

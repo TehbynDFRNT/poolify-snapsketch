@@ -7,11 +7,6 @@ interface Point {
   y: number;
 }
 
-export interface PoolExcludeZone {
-  outline: Array<{x: number, y: number}>;
-  componentId: string;
-}
-
 interface Paver {
   id: string;
   position: Point;
@@ -36,7 +31,6 @@ export function fillAreaWithPavers(
   paverSize: TileSize,
   paverOrientation: TileOrientation,
   showEdgePavers: boolean,
-  poolExcludeZones: PoolExcludeZone[] = [],
   groutMmOpt?: number
 ): Paver[] {
   // Standardize grout to match coping (GROUT_MM) unless overridden
@@ -45,7 +39,6 @@ export function fillAreaWithPavers(
     paverSize,
     paverOrientation,
     showEdgePavers,
-    poolExcludeZones,
     undefined,
     groutMmOpt ?? GROUT_MM
   );
@@ -60,7 +53,6 @@ export function fillAreaWithPaversFromOrigin(
   paverSize: TileSize,
   paverOrientation: TileOrientation,
   showEdgePavers: boolean,
-  poolExcludeZones: PoolExcludeZone[] = [],
   origin?: { x?: number; y?: number },
   groutMm: number = 0,
   seamX: number[] = [],
@@ -115,41 +107,19 @@ export function fillAreaWithPaversFromOrigin(
         { x: x + cellW, y: y + cellH },
         { x, y: y + cellH },
       ];
-      
-      // Check center point too
-      const paverCenter = { x: x + cellW / 2, y: y + cellH / 2 };
-      
-      // Check paver against OUTER boundary first
+
+      // Check paver against boundary
       const cornersInside = corners.filter(corner => isPointInPolygon(corner, boundary));
-      const centerInside = isPointInPolygon(paverCenter, boundary);
-      
-      // Skip if completely outside boundary
-      if (!centerInside && cornersInside.length === 0) {
+
+      // Skip if no corners inside (tiny slivers don't count)
+      if (cornersInside.length === 0) {
         continue;
-      }
-
-      // Check paver against POOL exclude zones
-      const poolOverlap = checkPaverPoolOverlap(corners, paverCenter, poolExcludeZones);
-
-      if (poolOverlap.completelyInside) {
-        continue; // Paver entirely inside pool - skip it
       }
 
       // Determine if this is an edge paver
       const cornersOutside = corners.length - cornersInside.length;
-      const boundaryIsEdge = cornersOutside > 0;
-      let isEdge = boundaryIsEdge || poolOverlap.isEdge;
-      let cutPercentage = 0;
-
-      if (isEdge) {
-        if (poolOverlap.isEdge) {
-          // Paver partially overlaps pool - use exposed percentage
-          cutPercentage = Math.round(100 - poolOverlap.exposedPercentage);
-        } else if (boundaryIsEdge) {
-          // Paver on outer boundary edge
-          cutPercentage = Math.round((cornersOutside / 4) * 100);
-        }
-      }
+      const isEdge = cornersOutside > 0;
+      const cutPercentage = isEdge ? Math.round((cornersOutside / 4) * 100) : 0;
       
       // Only add if showing edge pavers OR it's a full paver
       if (showEdgePavers || !isEdge) {
@@ -168,125 +138,6 @@ export function fillAreaWithPaversFromOrigin(
   }
   
   return pavers;
-}
-
-/**
- * Check if paver overlaps with pool exclude zones
- */
-function checkPaverPoolOverlap(
-  corners: Point[],
-  center: Point,
-  poolZones: PoolExcludeZone[]
-): {
-  completelyInside: boolean;
-  isEdge: boolean;
-  exposedPercentage: number;
-} {
-  if (poolZones.length === 0) {
-    return { completelyInside: false, isEdge: false, exposedPercentage: 100 };
-  }
-
-  const BOUNDARY_TOLERANCE = 2; // 2 pixels tolerance for boundary alignment
-
-  // Check against each pool zone
-  for (const zone of poolZones) {
-    const cornersInsidePool = corners.filter(c => 
-      isPointInPolygon(c, zone.outline)
-    ).length;
-
-    const centerInsidePool = isPointInPolygon(center, zone.outline);
-
-    if (cornersInsidePool === 4 && centerInsidePool) {
-      // Paver completely inside pool - should be excluded
-      return { completelyInside: true, isEdge: false, exposedPercentage: 0 };
-    }
-
-    if (cornersInsidePool > 0 || centerInsidePool) {
-      // Check if corners are just touching the boundary (aligned pavers)
-      // These should be treated as full pavers, not edge pavers
-      const cornersNearBoundary = corners.filter(corner => {
-        const distanceToNearestEdge = getDistanceToPolygonEdge(corner, zone.outline);
-        return distanceToNearestEdge <= BOUNDARY_TOLERANCE;
-      }).length;
-
-      // If corners are on/very close to boundary AND paver is mostly outside, treat as full paver
-      if (cornersNearBoundary > 0 && !centerInsidePool && cornersInsidePool <= 2) {
-        // This is a boundary-aligned paver, not an edge paver
-        return { completelyInside: false, isEdge: false, exposedPercentage: 100 };
-      }
-
-      // Paver genuinely crosses into pool - this is an edge paver
-      // Calculate what % is OUTSIDE the pool (exposed)
-      const percentageInsidePool = centerInsidePool 
-        ? Math.min(100, (cornersInsidePool / 4) * 100 + 25) // Center adds weight
-        : (cornersInsidePool / 4) * 100;
-      
-      const exposedPercentage = Math.max(10, 100 - percentageInsidePool); // Minimum 10% to show
-
-      // Skip very small slivers
-      if (exposedPercentage < 10) {
-        return { completelyInside: true, isEdge: false, exposedPercentage: 0 };
-      }
-
-      return { 
-        completelyInside: false, 
-        isEdge: true, 
-        exposedPercentage 
-      };
-    }
-  }
-
-  // No overlap with any pool
-  return { completelyInside: false, isEdge: false, exposedPercentage: 100 };
-}
-
-/**
- * Calculate minimum distance from a point to any edge of a polygon
- */
-function getDistanceToPolygonEdge(point: Point, polygon: Point[]): number {
-  let minDistance = Infinity;
-
-  for (let i = 0; i < polygon.length; i++) {
-    const p1 = polygon[i];
-    const p2 = polygon[(i + 1) % polygon.length];
-    
-    const distance = getDistanceToLineSegment(point, p1, p2);
-    minDistance = Math.min(minDistance, distance);
-  }
-
-  return minDistance;
-}
-
-/**
- * Calculate distance from a point to a line segment
- */
-function getDistanceToLineSegment(point: Point, lineStart: Point, lineEnd: Point): number {
-  const dx = lineEnd.x - lineStart.x;
-  const dy = lineEnd.y - lineStart.y;
-  
-  // Calculate the length squared of the line segment
-  const lengthSquared = dx * dx + dy * dy;
-  
-  if (lengthSquared === 0) {
-    // Line segment is a point
-    const pdx = point.x - lineStart.x;
-    const pdy = point.y - lineStart.y;
-    return Math.sqrt(pdx * pdx + pdy * pdy);
-  }
-  
-  // Calculate projection of point onto line (clamped to segment)
-  const t = Math.max(0, Math.min(1, 
-    ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / lengthSquared
-  ));
-  
-  // Find closest point on line segment
-  const closestX = lineStart.x + t * dx;
-  const closestY = lineStart.y + t * dy;
-  
-  // Calculate distance
-  const pdx = point.x - closestX;
-  const pdy = point.y - closestY;
-  return Math.sqrt(pdx * pdx + pdy * pdy);
 }
 
 export function calculateStatistics(
