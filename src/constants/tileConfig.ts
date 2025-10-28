@@ -8,6 +8,7 @@ export const TILE_COLORS = {
   // Base tile colors
   baseTile: '#E8DBC4',        // Slightly darker sandstone for base/original tiles
   extendedTile: '#F3EBD9',    // Lighter sandstone for extensions and regular pavers
+  cutTile: '#D9C7A9',         // Darker sandstone for cut tiles (partial pavers)
 
   // Grout colors
   groutColor: '#D4C5A9',       // Grout/joint color between tiles
