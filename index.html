@@ -54,18 +54,33 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     
-    <!-- Service Worker Registration -->
-    <script>
+    <!-- Service Worker Registration (prod only); auto-unregister in dev -->
+    <script type="module">
+      // Only register the service worker in production.
+      // In development, actively unregister any existing SW and clear this origin's caches
+      // to avoid stale assets interfering with Vite's HMR.
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(registration => {
-              console.log('✅ Service Worker registered:', registration);
-            })
-            .catch(error => {
-              console.log('❌ Service Worker registration failed:', error);
-            });
-        });
+        const isProd = import.meta.env.PROD || import.meta.env.VITE_ENABLE_SW_DEV === 'true';
+
+        if (isProd) {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+              .then(registration => {
+                console.log('✅ Service Worker registered:', registration);
+              })
+              .catch(error => {
+                console.log('❌ Service Worker registration failed:', error);
+              });
+          });
+        } else {
+          // Dev: ensure no previously installed SW/caches remain for this origin
+          navigator.serviceWorker.getRegistrations()
+            .then(regs => Promise.all(regs.map(r => r.unregister())))
+            .then(() => caches.keys())
+            .then(keys => Promise.all(keys.map(k => caches.delete(k))))
+            .then(() => console.log('🧹 Dev: service workers unregistered and caches cleared.'))
+            .catch(err => console.log('Dev SW cleanup error:', err));
+        }
       }
     </script>
   </body>

@@ -416,14 +416,17 @@ export const Canvas = ({
   const handlePavingConfig = (config: PavingConfig) => {
     if (pavingBoundary.length < 3) return;
 
-    // Stable origin for atomic tile array (mask behavior):
-    // choose the top-left of the initial boundary so moving nodes reveals/hides tiles
+    // Initial tiling frame (square) anchored to the drawn boundary
     const xs = pavingBoundary.map(p => p.x);
     const ys = pavingBoundary.map(p => p.y);
-    const tileOrigin = {
-      x: Math.min(...xs),
-      y: Math.min(...ys),
-    };
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const w = maxX - minX, h = maxY - minY;
+    const baseSize = Math.max(w, h);
+    const bufferMultiplier = 1.5;
+    const side = baseSize * bufferMultiplier;
+    const bufferOffset = (side - baseSize) / 2;
+    const tilingFrame = { x: minX - bufferOffset, y: minY - bufferOffset, side };
 
     // Fill the area with pavers
     const pavers = fillAreaWithPavers(
@@ -467,7 +470,7 @@ export const Canvas = ({
         paverOrientation: config.paverOrientation,
         showEdgePavers: config.showEdgePavers,
         wastagePercentage: config.wastagePercentage,
-        tileOrigin, // << anchor array; boundary acts as a mask over this origin
+        tilingFrame,
         statistics, // Initial statistics, will be updated when pools change
       },
     });

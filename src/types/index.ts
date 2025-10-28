@@ -125,8 +125,8 @@ export interface ComponentProperties {
   alignToPoolId?: string;
   // Corner to place full tiles from
   tilePlacementOrigin?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-  // Calculated tile origin point (px) based on tilePlacementOrigin
-  tileOrigin?: { x: number; y: number };
+  // Snapping resolution for vertex edits: 'edge' (tile edges) or 'half' (edge and mid-tile)
+  tileSnapResolution?: 'edge' | 'half';
   // Invisible square frame that encloses the paving area for consistent tiling
   tilingFrame?: { x: number; y: number; side: number };
   pavers?: Array<{
@@ -145,8 +145,8 @@ export interface ComponentProperties {
     totalArea: number;
     orderQuantity: number;
   };
-  // Generic area (concrete/grass)
-  areaSurface?: 'concrete' | 'grass';
+  // Generic area (concrete/grass/pavers)
+  areaSurface?: 'concrete' | 'grass' | 'pavers';
   
   // Drainage
   drainageType?: 'rock' | 'ultradrain';
@@ -154,7 +154,10 @@ export interface ComponentProperties {
   
   // Fence
   fenceType?: 'glass' | 'metal' | 'boundary';
-  
+
+  // Gate
+  gateType?: 'glass' | 'metal';
+
   // Wall
   wallMaterial?: 'timber' | 'concrete' | 'concrete_sleeper' | 'sandstone';
   wallHeight?: number;

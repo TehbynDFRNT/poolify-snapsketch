@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Component, Project, Summary } from '@/types';
 import { calculateMeasurements } from '@/utils/measurements';
-import { saveProject, loadProject } from '@/utils/storage';
+import { saveProject, loadProject, saveGridVisibility, loadGridVisibility } from '@/utils/storage';
 import { v4 as uuidv4 } from 'uuid';
 
 interface DesignStore {
@@ -67,10 +67,10 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   components: [],
   selectedComponentId: null,
   selectedFenceSegment: null,
-  
+
   zoom: 1,
   pan: { x: 0, y: 0 },
-  gridVisible: true,
+  gridVisible: loadGridVisibility(),
   snapEnabled: true,
   zoomLocked: false,
   
@@ -193,7 +193,11 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   
   setZoom: (zoom) => set({ zoom }),
   setPan: (pan) => set({ pan }),
-  toggleGrid: () => set((state) => ({ gridVisible: !state.gridVisible })),
+  toggleGrid: () => set((state) => {
+    const newGridVisible = !state.gridVisible;
+    saveGridVisibility(newGridVisible);
+    return { gridVisible: newGridVisible };
+  }),
   toggleSnap: () => set((state) => ({ snapEnabled: !state.snapEnabled })),
   toggleZoomLock: () => set((state) => ({ zoomLocked: !state.zoomLocked })),
   

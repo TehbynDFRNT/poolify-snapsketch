@@ -76,3 +76,25 @@ const removeFromProjectsList = (id: string): void => {
     console.error('Failed to remove from projects list:', error);
   }
 };
+
+// Grid visibility preference
+const GRID_VISIBLE_KEY = 'pool-design-grid-visible';
+
+export const saveGridVisibility = (visible: boolean): void => {
+  try {
+    localStorage.setItem(GRID_VISIBLE_KEY, JSON.stringify(visible));
+  } catch (error) {
+    console.error('Failed to save grid visibility:', error);
+  }
+};
+
+export const loadGridVisibility = (): boolean => {
+  try {
+    const data = localStorage.getItem(GRID_VISIBLE_KEY);
+    if (data === null) return true; // Default to visible
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Failed to load grid visibility:', error);
+    return true; // Default to visible on error
+  }
+};
