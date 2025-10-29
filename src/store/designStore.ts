@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Component, Project, Summary } from '@/types';
 import { calculateMeasurements } from '@/utils/measurements';
-import { saveProject, loadProject, saveGridVisibility, loadGridVisibility } from '@/utils/storage';
+import { saveProject, loadProject, saveGridVisibility, loadGridVisibility, saveAnnotationsVisibility, loadAnnotationsVisibility, saveProjectViewState, loadProjectViewState } from '@/utils/storage';
 import { v4 as uuidv4 } from 'uuid';
 
 interface DesignStore {
@@ -18,6 +18,9 @@ interface DesignStore {
   zoom: number;
   pan: { x: number; y: number };
   gridVisible: boolean;
+  satelliteVisible: boolean;
+  satelliteRotation: number; // Rotation in degrees
+  annotationsVisible: boolean;
   snapEnabled: boolean;
   zoomLocked: boolean;
   
@@ -51,6 +54,9 @@ interface DesignStore {
   setZoom: (zoom: number) => void;
   setPan: (pan: { x: number; y: number }) => void;
   toggleGrid: () => void;
+  toggleSatellite: () => void;
+  setSatelliteRotation: (rotation: number) => void;
+  toggleAnnotations: () => void;
   toggleSnap: () => void;
   toggleZoomLock: () => void;
   
@@ -71,6 +77,9 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   zoom: 1,
   pan: { x: 0, y: 0 },
   gridVisible: loadGridVisibility(),
+  satelliteVisible: false,
+  satelliteRotation: 0,
+  annotationsVisible: loadAnnotationsVisibility(),
   snapEnabled: true,
   zoomLocked: false,
   
@@ -80,12 +89,34 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   tileSelection: null,
   
   setCurrentProject: (project) => {
-    set({ 
-      currentProject: project,
-      components: project?.components || [],
-      selectedComponentId: null,
-      history: [project?.components || []],
-      historyIndex: 0,
+    set((state) => {
+      const switchingProject = state.currentProject?.id !== project?.id;
+      // Default view state
+      let nextZoom = state.zoom;
+      let nextPan = state.pan;
+      // If switching to a new/different project, try load session view state
+      if (switchingProject && project?.id) {
+        const view = loadProjectViewState(project.id);
+        if (view) {
+          nextZoom = view.zoom;
+          nextPan = view.pan;
+        } else {
+          // Fallback defaults when no saved state for this project in this session
+          nextZoom = 1;
+          nextPan = { x: 0, y: 0 };
+        }
+      }
+
+      return {
+        currentProject: project,
+        components: project?.components || [],
+        selectedComponentId: null,
+        history: [project?.components || []],
+        historyIndex: 0,
+        // Apply possibly-restored view state
+        zoom: nextZoom,
+        pan: nextPan,
+      };
     });
   },
   
@@ -191,12 +222,31 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     });
   },
   
-  setZoom: (zoom) => set({ zoom }),
-  setPan: (pan) => set({ pan }),
+  setZoom: (zoom) => set((state) => {
+    const projectId = state.currentProject?.id;
+    if (projectId) {
+      saveProjectViewState(projectId, { zoom, pan: state.pan });
+    }
+    return { zoom };
+  }),
+  setPan: (pan) => set((state) => {
+    const projectId = state.currentProject?.id;
+    if (projectId) {
+      saveProjectViewState(projectId, { zoom: state.zoom, pan });
+    }
+    return { pan };
+  }),
   toggleGrid: () => set((state) => {
     const newGridVisible = !state.gridVisible;
     saveGridVisibility(newGridVisible);
     return { gridVisible: newGridVisible };
+  }),
+  toggleSatellite: () => set((state) => ({ satelliteVisible: !state.satelliteVisible })),
+  setSatelliteRotation: (rotation: number) => set({ satelliteRotation: rotation }),
+  toggleAnnotations: () => set((state) => {
+    const newAnnotationsVisible = !state.annotationsVisible;
+    saveAnnotationsVisibility(newAnnotationsVisible);
+    return { annotationsVisible: newAnnotationsVisible };
   }),
   toggleSnap: () => set((state) => ({ snapEnabled: !state.snapEnabled })),
   toggleZoomLock: () => set((state) => ({ zoomLocked: !state.zoomLocked })),

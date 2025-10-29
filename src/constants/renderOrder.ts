@@ -43,6 +43,7 @@ export const RENDER_ORDER: Record<ComponentType, number> = {
 
   // Layer 8: Measurement tools (highest/front)
   quick_measure: 8,
+  height: 8,
 };
 
 /**

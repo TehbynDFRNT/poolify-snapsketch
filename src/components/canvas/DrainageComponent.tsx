@@ -29,20 +29,23 @@ export const DrainageComponent = ({
   const groupRef = useRef<any>(null);
 
   const scale = 0.1;
-  const drainageType = component.properties.drainageType || 'rock';
+  const drainageType = component.properties.drainageType || 'ultradrain';
   const drainageData = DRAINAGE_TYPES[drainageType];
   const length = (component.properties.length || 1000) * scale;
   const width = drainageData.width * scale;
 
-  // Use silver/stainless steel color for modern drainage grate
-  const color = '#C0C0C0'; // Silver/stainless steel
+  // Color scheme based on type
+  const isRockDrain = drainageType === 'rock';
+  const color = isRockDrain ? '#B8AFA3' : '#C0C0C0'; // Light gray/beige for pea gravel, silver for ultradrain
   const slotColor = '#2C2C2C'; // Dark gray for the slots
+  const rockColors = ['#D4CEC6', '#C9C3BB', '#B8AFA3', '#A8A099', '#9B948C']; // Pea gravel tones - light gray/beige
 
   // Polyline mode
   const polyPoints: Array<{ x: number; y: number }> = component.properties.points || [];
   const isPolyline = Array.isArray(polyPoints) && polyPoints.length >= 2;
 
   const updateComponent = useDesignStore((s) => s.updateComponent);
+  const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [ghostLocal, setGhostLocal] = useState<Array<{ x: number; y: number }> | null>(null);
   const [shiftPressed, setShiftPressed] = useState(false);
@@ -131,29 +134,54 @@ export const DrainageComponent = ({
 
           return (
             <Group key={`seg-${i}`} x={a.x} y={a.y} rotation={angle}>
-              {/* Silver drainage grate base */}
+              {/* Drainage base */}
               <Line
                 points={[0, 0, segLen, 0]}
                 stroke={color}
                 strokeWidth={width}
-                lineCap="square"
+                lineCap="butt"
                 hitStrokeWidth={Math.max(16, width)}
                 opacity={ghostLocal ? 0.5 : 0.9}
               />
-              {/* Vertical slats (perpendicular to drain length) */}
-              {Array.from({ length: Math.max(1, numSlots) }).map((_, idx) => (
-                <Line
-                  key={idx}
-                  points={[idx * slotSpacingPx + 4, -slotHeightPx / 2, idx * slotSpacingPx + 4, slotHeightPx / 2]}
-                  stroke={slotColor}
-                  strokeWidth={slotWidthPx}
-                  opacity={0.7}
-                />
-              ))}
+
+              {isRockDrain ? (
+                /* Rock/gravel pattern - random circles to simulate rocks */
+                <>
+                  {Array.from({ length: Math.floor(segLen / 3) }).map((_, idx) => {
+                    const seed = i * 1000 + idx;
+                    const xPos = (idx * 3 + (seed % 3));
+                    const yOffset = ((seed * 7) % 5) - 2.5;
+                    const rockSize = 1 + ((seed * 13) % 3) * 0.5;
+                    const colorIdx = (seed * 17) % rockColors.length;
+                    return (
+                      <Circle
+                        key={`rock-seg${i}-${idx}`}
+                        x={xPos}
+                        y={yOffset}
+                        radius={rockSize}
+                        fill={rockColors[colorIdx]}
+                        opacity={0.8}
+                      />
+                    );
+                  })}
+                </>
+              ) : (
+                /* Ultra drain - vertical slats (perpendicular to drain length) */
+                Array.from({ length: Math.max(1, numSlots) }).map((_, idx) => (
+                  <Line
+                    key={idx}
+                    points={[idx * slotSpacingPx + 4, -slotHeightPx / 2, idx * slotSpacingPx + 4, slotHeightPx / 2]}
+                    stroke={slotColor}
+                    strokeWidth={slotWidthPx}
+                    opacity={0.7}
+                  />
+                ))
+              )}
             </Group>
           );
         })}
 
+        {/* Ghost overlay + measurements on affected segments while dragging */}
         {dragIndex != null && ghostLocal && (
           <>
             {(() => {
@@ -163,12 +191,33 @@ export const DrainageComponent = ({
                 if (k <= 0 || k >= localPts.length) return;
                 const a = localPts[k - 1];
                 const b = localPts[k];
-                const len = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
-                const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+                const dx = b.x - a.x;
+                const dy = b.y - a.y;
+                const len = Math.sqrt(dx * dx + dy * dy);
+
+                // Calculate perpendicular offset to match permanent measurements
+                const lineLength = len;
+                const perpX = -dy / lineLength;
+                const perpY = dx / lineLength;
+                const offset = 20;
+
+                const midX = (a.x + b.x) / 2;
+                const midY = (a.y + b.y) / 2;
+
                 overlay.push(
                   <>
-                    <Line key={`dg-${k}`} points={[a.x, a.y, b.x, b.y]} stroke={color} strokeWidth={2} dash={[8, 6]} />
-                    <Text key={`dl-${k}`} x={mid.x} y={mid.y - 16} text={`${(len / 100).toFixed(1)}m`} fontSize={12} fill={color} offsetX={12} listening={false} />
+                    <Line key={`dg-${k}`} points={[a.x, a.y, b.x, b.y]} stroke={color} strokeWidth={3} dash={[8, 6]} opacity={0.8} />
+                    <Text
+                      key={`dl-${k}`}
+                      x={midX + perpX * offset}
+                      y={midY + perpY * offset}
+                      text={`${Math.round(len * 10)}`}
+                      fontSize={11}
+                      fill="#6B7280"
+                      align="center"
+                      offsetX={20}
+                      listening={false}
+                    />
                   </>
                 );
               });
@@ -176,6 +225,42 @@ export const DrainageComponent = ({
             })()}
           </>
         )}
+
+        {/* Segment measurements (only when selected) */}
+        {annotationsVisible && isSelected && localPts.map((pt, idx) => {
+          if (idx === 0) return null;
+          const a = localPts[idx - 1];
+          const b = localPts[idx];
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const lengthInMM = Math.round(Math.sqrt(dx * dx + dy * dy) * 10); // 1px = 10mm
+
+          // Calculate perpendicular offset to position text away from the line
+          const lineLength = Math.sqrt(dx * dx + dy * dy);
+          const perpX = -dy / lineLength;
+          const perpY = dx / lineLength;
+          const offset = 20;
+
+          const midX = (a.x + b.x) / 2;
+          const midY = (a.y + b.y) / 2;
+
+          // Skip measurement if this segment is being dragged
+          if (dragIndex === idx - 1 || dragIndex === idx) return null;
+
+          return (
+            <Text
+              key={`measurement-${idx}`}
+              x={midX + perpX * offset}
+              y={midY + perpY * offset}
+              text={`${lengthInMM}`}
+              fontSize={11}
+              fill="#6B7280"
+              align="center"
+              offsetX={20}
+              listening={false}
+            />
+          );
+        })}
 
         {isSelected && (
           <Rect
@@ -269,33 +354,56 @@ export const DrainageComponent = ({
     >
       {/* No broad hit area; rely on thick stroke and hitStrokeWidth */}
 
-      {/* Silver drainage grate base */}
+      {/* Drainage base */}
       <Line
         points={[0, 0, length, 0]}
         stroke={color}
         strokeWidth={width}
-        lineCap="square"
+        lineCap="butt"
         hitStrokeWidth={Math.max(16, width)}
         opacity={0.9}
       />
 
-      {/* Vertical slats (perpendicular to drain length) - 2mm wide, 50mm long */}
-      {(() => {
-        const slotWidthPx = 0.2 * scale * 10; // 2mm in pixels
-        const slotHeightPx = 5 * scale * 10; // 50mm in pixels
-        const slotSpacingPx = 8; // Space between slots (~80mm in real units)
-        const numSlots = Math.floor(length / slotSpacingPx);
+      {isRockDrain ? (
+        /* Rock/gravel pattern - random circles to simulate rocks */
+        <>
+          {Array.from({ length: Math.floor(length / 3) }).map((_, i) => {
+            const seed = i * 31;
+            const xPos = (i * 3 + (seed % 3));
+            const yOffset = ((seed * 7) % 5) - 2.5;
+            const rockSize = 1 + ((seed * 13) % 3) * 0.5;
+            const colorIdx = (seed * 17) % rockColors.length;
+            return (
+              <Circle
+                key={`rock-${i}`}
+                x={xPos}
+                y={yOffset}
+                radius={rockSize}
+                fill={rockColors[colorIdx]}
+                opacity={0.8}
+              />
+            );
+          })}
+        </>
+      ) : (
+        /* Ultra drain - vertical slats (perpendicular to drain length) - 2mm wide, 50mm long */
+        (() => {
+          const slotWidthPx = 0.2 * scale * 10; // 2mm in pixels
+          const slotHeightPx = 5 * scale * 10; // 50mm in pixels
+          const slotSpacingPx = 8; // Space between slots (~80mm in real units)
+          const numSlots = Math.floor(length / slotSpacingPx);
 
-        return Array.from({ length: Math.max(1, numSlots) }).map((_, i) => (
-          <Line
-            key={i}
-            points={[i * slotSpacingPx + 4, -slotHeightPx / 2, i * slotSpacingPx + 4, slotHeightPx / 2]}
-            stroke={slotColor}
-            strokeWidth={slotWidthPx}
-            opacity={0.7}
-          />
-        ));
-      })()}
+          return Array.from({ length: Math.max(1, numSlots) }).map((_, i) => (
+            <Line
+              key={i}
+              points={[i * slotSpacingPx + 4, -slotHeightPx / 2, i * slotSpacingPx + 4, slotHeightPx / 2]}
+              stroke={slotColor}
+              strokeWidth={slotWidthPx}
+              opacity={0.7}
+            />
+          ));
+        })()
+      )}
 
       {/* Selection border and handle */}
       {isSelected && (

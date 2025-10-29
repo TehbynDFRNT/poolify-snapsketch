@@ -15,6 +15,8 @@ import { ReferenceLineComponent } from './canvas/ReferenceLineComponent';
 import { PavingAreaComponent } from './canvas/PavingAreaComponent';
 import { GateComponent } from './canvas/GateComponent';
 import { DecorationComponent, getDecorationDimensions } from './canvas/DecorationComponent';
+import { HeightComponent } from './canvas/HeightComponent';
+import { SatelliteLayer } from './canvas/SatelliteLayer';
 import { PavingAreaDialog, PavingConfig } from './PavingAreaDialog';
 import { fillAreaWithPavers, calculateStatistics, validateBoundary } from '@/utils/pavingFill';
 import { TILE_GAP, getTileDimensions } from '@/constants/tileConfig';
@@ -30,6 +32,7 @@ import { sortComponentsByRenderOrder } from '@/constants/renderOrder';
 import { ComponentContextMenu } from './ComponentContextMenu';
 import type { ContextMenuAction } from '@/types/contextMenu';
 import { useDesignStore as useStoreRef } from '@/store/designStore';
+import { CompassRotator } from './CompassRotator';
 
 export const Canvas = ({
   activeTool = 'select',
@@ -103,6 +106,9 @@ export const Canvas = ({
     pan,
     setPan,
     gridVisible,
+    satelliteVisible,
+    satelliteRotation,
+    setSatelliteRotation,
     zoomLocked,
     toggleZoomLock,
     components,
@@ -111,6 +117,7 @@ export const Canvas = ({
     addComponent,
     updateComponent,
     deleteComponent,
+    currentProject,
   } = useDesignStore();
 
   // Zoom handlers - memoized to prevent infinite loops
@@ -120,7 +127,7 @@ export const Canvas = ({
   }, [zoom, setZoom]);
 
   const handleZoomOut = useCallback(() => {
-    const newZoom = Math.max(zoom / 1.2, 0.25);
+    const newZoom = Math.max(zoom / 1.2, 0.1);
     setZoom(newZoom);
   }, [zoom, setZoom]);
 
@@ -334,10 +341,10 @@ export const Canvas = ({
         return;
       }
 
-      // Place component for one-click tools (paver, gate, decoration)
-      if (activeTool !== 'hand' && (activeTool === 'paver' || activeTool === 'gate' || activeTool === 'decoration')) {
+      // Place component for one-click tools (paver, gate, decoration, height)
+      if (activeTool !== 'hand' && (activeTool === 'paver' || activeTool === 'gate' || activeTool === 'decoration' || activeTool === 'height')) {
         selectComponent(null);
-        if (activeTool === 'paver' || activeTool === 'decoration') {
+        if (activeTool === 'paver' || activeTool === 'decoration' || activeTool === 'height') {
           handleToolPlace({ x: snapToGrid(x), y: snapToGrid(y) });
         } else if (activeTool === 'gate') {
           addComponent({
@@ -577,6 +584,12 @@ export const Canvas = ({
         },
       });
     } else if (activeTool === 'boundary' || activeTool === 'house') {
+      // Both boundary and house must be closed
+      if (!closed) {
+        toast.error(`${activeTool === 'house' ? 'House' : 'Boundary'} must be closed - click near the starting point to finish`);
+        return;
+      }
+
       // Calculate area for house
       let area = 0;
       if (closed && activeTool === 'house' && drawingPoints.length >= 3) {
@@ -653,17 +666,48 @@ export const Canvas = ({
   // Keyboard shortcuts for drawing
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if typing in an input
+      if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') {
+        return;
+      }
+
       // Track Shift key
       if (e.key === 'Shift') {
         setShiftPressed(true);
       }
-      
+
+      // Arrow key movement for simple positioned objects only
+      if (selectedComponentId && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        const selectedComponent = components.find(c => c.id === selectedComponentId);
+        if (!selectedComponent) return;
+        const hasPoints = selectedComponent.properties?.points && Array.isArray(selectedComponent.properties.points);
+        const hasBoundary = selectedComponent.properties?.boundary && Array.isArray(selectedComponent.properties.boundary);
+        if (hasPoints || hasBoundary) {
+          // Let global keyboard hook handle polyline/paving movement
+          return;
+        }
+        e.preventDefault();
+        const moveAmount = e.shiftKey ? 10 : 1; // mm
+        let dx = 0;
+        let dy = 0;
+        switch (e.key) {
+          case 'ArrowUp': dy = -moveAmount; break;
+          case 'ArrowDown': dy = moveAmount; break;
+          case 'ArrowLeft': dx = -moveAmount; break;
+          case 'ArrowRight': dx = moveAmount; break;
+        }
+        updateComponent(selectedComponentId, {
+          position: { x: selectedComponent.position.x + dx, y: selectedComponent.position.y + dy },
+        });
+        return;
+      }
+
       // Zoom lock toggle (L key)
       if (e.key === 'l' && !e.ctrlKey && !e.metaKey && !isDrawing && !isMeasuring) {
         e.preventDefault();
         toggleZoomLock();
       }
-      
+
       // Drawing shortcuts
       if (isDrawing) {
         if (e.key === 'Enter') {
@@ -718,7 +762,7 @@ export const Canvas = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [isDrawing, drawingPoints, isMeasuring, toggleZoomLock]);
+  }, [isDrawing, drawingPoints, isMeasuring, toggleZoomLock, selectedComponentId, components, updateComponent]);
 
   // Reset drawing when tool changes
   useEffect(() => {
@@ -892,6 +936,20 @@ export const Canvas = ({
         });
         onToolChange?.('select');
         break;
+
+      case 'height':
+        addComponent({
+          type: 'height',
+          position: pos,
+          rotation: 0,
+          dimensions: { width: 0, height: 0 },
+          properties: {
+            heightValue: 1200, // Default 1200mm (1.2m)
+            heightAnnotation: '',
+          },
+        });
+        onToolChange?.('select');
+        break;
     }
   };
 
@@ -912,7 +970,7 @@ export const Canvas = ({
     };
 
     const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
-    const clampedScale = Math.max(0.25, Math.min(4, newScale));
+    const clampedScale = Math.max(0.1, Math.min(4, newScale));
 
     setZoom(clampedScale);
 
@@ -934,11 +992,27 @@ export const Canvas = ({
     const offsetX = -pan.x / zoom; // visible content-space left
     const offsetY = -pan.y / zoom; // visible content-space top
 
-    // Compute grid-aligned start positions
-    const startX = Math.floor(offsetX / gridSize) * gridSize;
-    const endX = offsetX + viewW;
-    const startY = Math.floor(offsetY / gridSize) * gridSize;
-    const endY = offsetY + viewH;
+    // Maximum grid extent (300m x 300m = 30000 x 30000 canvas units)
+    // This ensures grid doesn't render infinitely at low zoom levels
+    const MAX_GRID_EXTENT = 15000; // 150 meters from center in each direction
+
+    // Compute grid-aligned start positions with maximum bounds
+    const startX = Math.max(
+      Math.floor(offsetX / gridSize) * gridSize,
+      -MAX_GRID_EXTENT
+    );
+    const endX = Math.min(
+      offsetX + viewW,
+      MAX_GRID_EXTENT
+    );
+    const startY = Math.max(
+      Math.floor(offsetY / gridSize) * gridSize,
+      -MAX_GRID_EXTENT
+    );
+    const endY = Math.min(
+      offsetY + viewH,
+      MAX_GRID_EXTENT
+    );
 
     const majorEvery = GRID_CONFIG.majorGridEvery;
 
@@ -1076,24 +1150,24 @@ export const Canvas = ({
   const renderDrawingPoints = () => {
     if (!isDrawing || drawingPoints.length === 0) return null;
 
-    const items: JSX.Element[] = [];
-    for (let i = 1; i < drawingPoints.length; i++) {
-      items.push(
-        renderSegmentGhost(drawingPoints[i - 1], drawingPoints[i], activeTool, `sg-${i}`) as any
-      );
-    }
+    return (
+      <>
+        {/* Render segment ghosts */}
+        {drawingPoints.slice(1).map((point, i) =>
+          renderSegmentGhost(drawingPoints[i], point, activeTool, `sg-${i}`)
+        )}
 
-    // Points
-    const pointColor = activeTool === 'boundary' ? 'hsl(220, 80%, 30%)' : '#92400E';
-    items.push(
-      <Group key="drawing-points" listening={false}>
-        {drawingPoints.map((point, index) => (
-          <Circle key={`drawing-point-${index}`} x={point.x} y={point.y} radius={5} fill={pointColor} stroke="#fff" strokeWidth={2} listening={false} />
-        ))}
-      </Group>
+        {/* Points */}
+        <Group key="drawing-points" listening={false}>
+          {drawingPoints.map((point, index) => {
+            const pointColor = activeTool === 'boundary' ? 'hsl(220, 80%, 30%)' : '#92400E';
+            return (
+              <Circle key={`drawing-point-${index}`} x={point.x} y={point.y} radius={5} fill={pointColor} stroke="#fff" strokeWidth={2} listening={false} />
+            );
+          })}
+        </Group>
+      </>
     );
-
-    return <>{items}</>;
   };
 
   
@@ -1151,12 +1225,18 @@ export const Canvas = ({
     );
   };
 
+  // Determine if stage should be draggable (hand tool OR select tool with shift AND no object selected)
+  const isDraggable = activeTool === 'hand' || (activeTool === 'select' && shiftPressed && !selectedComponentId);
+
   // Disable selection/listening on components while drawing/placing/measuring for polyline tools
+  // Also block selection when shift-panning
   const blockSelection = (() => {
     const polylineTools = new Set([
       'boundary', 'house', 'paving_area', 'area', 'wall', 'fence', 'drainage', 'quick_measure'
     ]);
-    return isDrawing || isMeasuring || polylineTools.has(activeTool);
+    // Block selection when in shift-pan mode (select tool + shift + no selection)
+    const isShiftPanning = activeTool === 'select' && shiftPressed && !selectedComponentId;
+    return isDrawing || isMeasuring || polylineTools.has(activeTool) || isShiftPanning;
   })();
 
   return (
@@ -1172,21 +1252,25 @@ export const Canvas = ({
         onWheel={handleWheel}
         onClick={handleStageClick}
         onMouseMove={handleMouseMove}
-        draggable={activeTool === 'hand'}
+        draggable={isDraggable}
+        style={{ cursor: isDraggable ? 'grab' : 'default' }}
         onDragEnd={(e) => {
-          if (activeTool === 'hand') {
+          if (isDraggable) {
             setPan({ x: e.target.x(), y: e.target.y() });
           }
         }}
       >
         <Layer listening={!blockSelection}>
+          {/* Satellite layer - under everything */}
+          <SatelliteLayer
+            components={components}
+            coordinates={currentProject?.coordinates}
+            visible={satelliteVisible}
+            rotation={satelliteRotation}
+          />
+
           {renderGrid()}
-          
-          {/* Drawing preview */}
-          {renderDrawingPoints()}
-          {renderDrawingPreview()}
-          
-          
+
           {/* Render all components in fixed type-based order */}
           {(() => {
             // Sort components by render order (pavers -> pools -> walls -> ... -> measurements)
@@ -1491,11 +1575,30 @@ export const Canvas = ({
                     />
                   );
 
+                case 'height':
+                  return (
+                    <HeightComponent
+                      key={component.id}
+                      component={component}
+                      isSelected={isSelected}
+                      activeTool={activeTool}
+                      onSelect={() => selectComponent(component.id)}
+                      onDragEnd={(pos) => {
+                        const snapped = snapToGrid(pos.x, pos.y);
+                        updateComponent(component.id, { position: snapped });
+                      }}
+                    />
+                  );
+
                 default:
                   return null;
               }
             });
           })()}
+
+          {/* Drawing preview - rendered AFTER all components so it's always on top */}
+          {renderDrawingPoints()}
+          {renderDrawingPreview()}
         </Layer>
         <Layer listening={false}>
           {renderMeasurementPreview()}
@@ -1560,6 +1663,13 @@ export const Canvas = ({
           onConfirm={handlePavingConfig}
         />
       )}
+
+      {/* Compass Rotator - bottom left */}
+      <CompassRotator
+        rotation={satelliteRotation}
+        onChange={setSatelliteRotation}
+        visible={satelliteVisible}
+      />
     </div>
   );
 };

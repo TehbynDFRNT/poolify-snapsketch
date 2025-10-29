@@ -11,16 +11,23 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 
 interface NewProjectModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: { customerName: string; address: string; notes?: string }) => void;
+  onSubmit: (data: {
+    customerName: string;
+    address: string;
+    coordinates?: { lat: number; lng: number };
+    notes?: string;
+  }) => void;
 }
 
 export const NewProjectModal = ({ open, onOpenChange, onSubmit }: NewProjectModalProps) => {
   const [customerName, setCustomerName] = useState('');
   const [address, setAddress] = useState('');
+  const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | undefined>();
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<{ customerName?: string; address?: string }>({});
   const [touched, setTouched] = useState<{ customerName?: boolean; address?: boolean }>({});
@@ -33,7 +40,10 @@ export const NewProjectModal = ({ open, onOpenChange, onSubmit }: NewProjectModa
     }
     if (field === 'address') {
       if (value.trim().length < 5) {
-        return 'Address must be at least 5 characters';
+        return 'Please select an address from the suggestions';
+      }
+      if (!coordinates) {
+        return 'Please select an address from the dropdown suggestions';
       }
     }
     return undefined;
@@ -74,12 +84,14 @@ export const NewProjectModal = ({ open, onOpenChange, onSubmit }: NewProjectModa
     onSubmit({
       customerName: customerName.trim(),
       address: address.trim(),
+      coordinates,
       notes: notes.trim() || undefined,
     });
-    
+
     // Reset form
     setCustomerName('');
     setAddress('');
+    setCoordinates(undefined);
     setNotes('');
     setErrors({});
     setTouched({});
@@ -88,15 +100,44 @@ export const NewProjectModal = ({ open, onOpenChange, onSubmit }: NewProjectModa
   const handleCancel = () => {
     setCustomerName('');
     setAddress('');
+    setCoordinates(undefined);
     setNotes('');
     setErrors({});
     setTouched({});
     onOpenChange(false);
   };
 
+  const handleAddressChange = (newAddress: string, coords?: { lat: number; lng: number }) => {
+    setAddress(newAddress);
+    setCoordinates(coords);
+
+    // Clear error if valid address with coordinates is selected
+    if (coords && newAddress.trim().length >= 5) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors.address;
+        return newErrors;
+      });
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent
+        className="sm:max-w-[500px]"
+        onInteractOutside={(e) => {
+          const originalTarget = (e as any)?.detail?.originalEvent?.target as HTMLElement | undefined;
+          if (originalTarget && (originalTarget.closest('.pac-container') || originalTarget.classList.contains('pac-item'))) {
+            e.preventDefault();
+          }
+        }}
+        onPointerDownOutside={(e) => {
+          const originalTarget = (e as any)?.detail?.originalEvent?.target as HTMLElement | undefined;
+          if (originalTarget && (originalTarget.closest('.pac-container') || originalTarget.classList.contains('pac-item'))) {
+            e.preventDefault();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Create New Project</DialogTitle>
           <DialogDescription>
@@ -127,16 +168,21 @@ export const NewProjectModal = ({ open, onOpenChange, onSubmit }: NewProjectModa
               <Label htmlFor="address">
                 Property Address <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="address"
+              <AddressAutocomplete
                 value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                onChange={handleAddressChange}
                 onBlur={() => handleBlur('address')}
-                placeholder="123 Main St, Brisbane QLD 4000"
+                placeholder="Start typing to search Australian addresses..."
                 className={touched.address && errors.address ? 'border-destructive' : ''}
+                error={touched.address && !!errors.address}
               />
               {touched.address && errors.address && (
                 <p className="text-sm text-destructive">{errors.address}</p>
+              )}
+              {coordinates && (
+                <p className="text-xs text-muted-foreground">
+                  ✓ Valid address selected
+                </p>
               )}
             </div>
 

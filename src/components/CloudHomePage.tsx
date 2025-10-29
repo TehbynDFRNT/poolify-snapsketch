@@ -151,7 +151,12 @@ export function CloudHomePage() {
     }
   };
 
-  const handleCreateProject = async (data: { customerName: string; address: string; notes?: string }) => {
+  const handleCreateProject = async (data: {
+    customerName: string;
+    address: string;
+    coordinates?: { lat: number; lng: number };
+    notes?: string;
+  }) => {
     if (!user) return;
 
     try {

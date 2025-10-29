@@ -39,6 +39,7 @@ export const WallComponent = ({
   const isPolyline = Array.isArray(polyPoints) && polyPoints.length >= 2;
 
   const updateComponent = useDesignStore((s) => s.updateComponent);
+  const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [ghostLocal, setGhostLocal] = useState<Array<{ x: number; y: number }> | null>(null);
   const [shiftPressed, setShiftPressed] = useState(false);
@@ -137,7 +138,7 @@ export const WallComponent = ({
                 points={[0, 0, length, 0]}
                 stroke={color}
                 strokeWidth={height}
-                lineCap="square"
+                lineCap="butt"
                 hitStrokeWidth={20}
                 opacity={ghostLocal ? 0.6 : 0.9}
               />
@@ -159,11 +160,30 @@ export const WallComponent = ({
                 const dy = b.y - a.y;
                 const len = Math.sqrt(dx * dx + dy * dy);
                 if (len < 1) return;
-                const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+
+                // Calculate perpendicular offset to match permanent measurements
+                const lineLength = len;
+                const perpX = -dy / lineLength;
+                const perpY = dx / lineLength;
+                const offset = 20;
+
+                const midX = (a.x + b.x) / 2;
+                const midY = (a.y + b.y) / 2;
+
                 overlay.push(
                   <>
                     <Line key={`ghost-${k}`} points={[a.x, a.y, b.x, b.y]} stroke={color} strokeWidth={3} dash={[8, 6]} opacity={0.8} />
-                    <Text key={`glbl-${k}`} x={mid.x} y={mid.y - 16} text={`${(len / 100).toFixed(1)}m`} fontSize={12} fill={color} offsetX={12} listening={false} />
+                    <Text
+                      key={`glbl-${k}`}
+                      x={midX + perpX * offset}
+                      y={midY + perpY * offset}
+                      text={`${Math.round(len * 10)}`}
+                      fontSize={11}
+                      fill="#6B7280"
+                      align="center"
+                      offsetX={20}
+                      listening={false}
+                    />
                   </>
                 );
               });
@@ -236,6 +256,66 @@ export const WallComponent = ({
             }}
           />
         ))}
+
+        {/* Segment measurements (only when selected) */}
+        {annotationsVisible && isSelected && localPts.map((pt, idx) => {
+          if (idx === 0) return null;
+          const a = localPts[idx - 1];
+          const b = localPts[idx];
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const lengthInMM = Math.round(Math.sqrt(dx * dx + dy * dy) * 10); // 1px = 10mm
+
+          // Calculate perpendicular offset to position text away from the line
+          const lineLength = Math.sqrt(dx * dx + dy * dy);
+          const perpX = -dy / lineLength;
+          const perpY = dx / lineLength;
+          const offset = 20;
+
+          const midX = (a.x + b.x) / 2;
+          const midY = (a.y + b.y) / 2;
+
+          // Skip measurement if this segment is being dragged
+          if (dragIndex === idx - 1 || dragIndex === idx) return null;
+
+          return (
+            <Text
+              key={`measurement-${idx}`}
+              x={midX + perpX * offset}
+              y={midY + perpY * offset}
+              text={`${lengthInMM}`}
+              fontSize={11}
+              fill="#6B7280"
+              align="center"
+              offsetX={20}
+              listening={false}
+            />
+          );
+        })}
+
+        {/* Height annotations at each node (only when selected) */}
+        {annotationsVisible && isSelected && localPts.map((pt, idx) => {
+          const nodeHeights = component.properties.nodeHeights || {};
+          const height = nodeHeights[idx];
+          if (height == null) return null;
+
+          // Convert index to letter (A, B, C, ...)
+          const label = String.fromCharCode(65 + idx);
+
+          return (
+            <Text
+              key={`height-${idx}`}
+              x={pt.x}
+              y={pt.y - 30}
+              text={`${label}: ${height}`}
+              fontSize={11}
+              fill="#6B7280"
+              align="center"
+              offsetX={20}
+              listening={false}
+            />
+          );
+        })}
       </Group>
     );
   }

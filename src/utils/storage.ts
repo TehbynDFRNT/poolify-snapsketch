@@ -2,6 +2,7 @@ import { Project } from '@/types';
 
 const PROJECTS_KEY = 'pool-design-projects';
 const PROJECTS_LIST_KEY = 'pool-design-projects-list';
+const VIEW_STATE_PREFIX = 'pool-design-view-';
 
 export const saveProject = (project: Project): void => {
   try {
@@ -96,5 +97,63 @@ export const loadGridVisibility = (): boolean => {
   } catch (error) {
     console.error('Failed to load grid visibility:', error);
     return true; // Default to visible on error
+  }
+};
+
+// Annotations visibility preference
+const ANNOTATIONS_VISIBLE_KEY = 'pool-design-annotations-visible';
+
+export const saveAnnotationsVisibility = (visible: boolean): void => {
+  try {
+    localStorage.setItem(ANNOTATIONS_VISIBLE_KEY, JSON.stringify(visible));
+  } catch (error) {
+    console.error('Failed to save annotations visibility:', error);
+  }
+};
+
+export const loadAnnotationsVisibility = (): boolean => {
+  try {
+    const data = localStorage.getItem(ANNOTATIONS_VISIBLE_KEY);
+    if (data === null) return true; // Default to visible
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Failed to load annotations visibility:', error);
+    return true; // Default to visible on error
+  }
+};
+
+// Per-project view state (session-only): zoom + pan
+export interface ProjectViewState {
+  zoom: number;
+  pan: { x: number; y: number };
+}
+
+const viewStateKey = (projectId: string) => `${VIEW_STATE_PREFIX}${projectId}`;
+
+export const saveProjectViewState = (projectId: string, view: ProjectViewState): void => {
+  try {
+    // sessionStorage so it resets per-tab session, not persisted permanently
+    sessionStorage.setItem(viewStateKey(projectId), JSON.stringify(view));
+  } catch (error) {
+    console.error('Failed to save project view state:', error);
+  }
+};
+
+export const loadProjectViewState = (projectId: string): ProjectViewState | null => {
+  try {
+    const data = sessionStorage.getItem(viewStateKey(projectId));
+    if (!data) return null;
+    const parsed = JSON.parse(data);
+    // Validate shape minimally
+    if (
+      typeof parsed?.zoom === 'number' &&
+      parsed?.pan && typeof parsed.pan.x === 'number' && typeof parsed.pan.y === 'number'
+    ) {
+      return parsed as ProjectViewState;
+    }
+    return null;
+  } catch (error) {
+    console.error('Failed to load project view state:', error);
+    return null;
   }
 };

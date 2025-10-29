@@ -60,7 +60,12 @@ export const HomePage = () => {
     toast.success('Project duplicated');
   };
 
-  const handleCreateProject = (data: { customerName: string; address: string; notes?: string }) => {
+  const handleCreateProject = (data: {
+    customerName: string;
+    address: string;
+    coordinates?: { lat: number; lng: number };
+    notes?: string;
+  }) => {
     const newProject: Project = {
       id: uuidv4(),
       ...data,

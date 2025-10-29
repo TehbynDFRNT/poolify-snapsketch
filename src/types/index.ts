@@ -2,6 +2,7 @@ export interface Project {
   id: string;
   customerName: string;
   address: string;
+  coordinates?: { lat: number; lng: number };
   notes?: string;
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -21,6 +22,7 @@ export type ToolType =
   | 'boundary'
   | 'house'
   | 'quick_measure'
+  | 'height'
   | 'decoration';
 
 export type ComponentType =
@@ -34,6 +36,7 @@ export type ComponentType =
   | 'boundary'
   | 'house'
   | 'quick_measure'
+  | 'height'
   | 'decoration';
 
 export interface Component {
@@ -178,7 +181,8 @@ export interface ComponentProperties {
     length: number;
     angle: number;
   }>;
-  
+  centerOfMass?: { x: number; y: number }; // Grid-snapped center point of closed boundary
+
   // House
   area?: number;
   notes?: string;
@@ -197,6 +201,10 @@ export interface ComponentProperties {
   temporary?: boolean;
   createdAt?: number;
   measurement?: number;
+
+  // Height Marker
+  heightValue?: number; // Height in millimeters
+  heightAnnotation?: string; // Optional text annotation
 
   // Decoration
   decorationType?: 'bush' | 'umbrella' | 'waterfeature' | 'deckchairs';

@@ -163,6 +163,7 @@ export const PavingAreaComponent = ({
   onContextMenu,
 }: PavingAreaComponentProps) => {
   const updateComponent = useDesignStore((s) => s.updateComponent);
+  const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
   const zoom = useDesignStore((s) => s.zoom);
   const allComponents = useDesignStore((s) => s.components);
 
@@ -411,6 +412,51 @@ export const PavingAreaComponent = ({
     onContextMenu(component, { x: pt.x, y: pt.y });
   };
 
+  // ---------- segment measurements ----------
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
+  const renderMeasurements = () => {
+    if (!annotationsVisible || !isSelected) return null;
+    const measurements: JSX.Element[] = [];
+    const pts = localPreview || boundaryLocal;
+    const n = pts.length;
+
+    for (let i = 0; i < n; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % n];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const lengthInMM = Math.round(Math.sqrt(dx * dx + dy * dy) * 10); // 1px = 10mm
+
+      // Calculate perpendicular offset to position text away from the line
+      const lineLength = Math.sqrt(dx * dx + dy * dy);
+      const perpX = -dy / lineLength;
+      const perpY = dx / lineLength;
+      const offset = 20;
+
+      const midX = (a.x + b.x) / 2;
+      const midY = (a.y + b.y) / 2;
+
+      // Skip measurement if this segment is being dragged
+      if (dragIndex != null && (dragIndex === i || dragIndex === (i + 1) % n)) continue;
+
+      measurements.push(
+        <Text
+          key={`measurement-${i}`}
+          x={midX + perpX * offset}
+          y={midY + perpY * offset}
+          text={`${lengthInMM}`}
+          fontSize={11}
+          fill="#6B7280"
+          align="center"
+          offsetX={20}
+          listening={false}
+        />
+      );
+    }
+    return measurements;
+  };
+
   // ---------- drag whole object (moves the frame + boundary together) ----------
   const handleDragEnd = () => {
     const node = groupRef.current;
@@ -538,6 +584,7 @@ export const PavingAreaComponent = ({
     // Capture originals in stage space
     vertexOriginalStageRef.current = boundaryStage.map((p) => ({ ...p }));
     vertexDragAnchorRef.current = i;
+    setDragIndex(i);
     // Freeze outer group position during this edit
     dragAnchorFrameRef.current = { x: frame.x, y: frame.y, side: frame.side };
     // Record pointer at drag start in canvas coords (accounts for pan/zoom)
@@ -728,6 +775,7 @@ export const PavingAreaComponent = ({
     evt.cancelBubble = true;
     const local = localPreview || boundaryLocal;
     commitLocal(local);
+    setDragIndex(null);
   };
 
   // ---------- subtle textures for concrete/grass (unchanged) ----------
@@ -752,14 +800,14 @@ export const PavingAreaComponent = ({
     const c = document.createElement('canvas');
     c.width = 12; c.height = 12;
     const ctx = c.getContext('2d')!;
-    ctx.fillStyle = '#bbf7d0';
+    ctx.fillStyle = '#15803d';
     ctx.fillRect(0, 0, c.width, c.height);
-    ctx.strokeStyle = 'rgba(22, 163, 74, 0.18)';
+    ctx.strokeStyle = 'rgba(20, 83, 45, 0.35)';
     for (let i = 0; i < 3; i++) {
       const x = (i * 4 + 2) % c.width;
       ctx.beginPath(); ctx.moveTo(x, c.height); ctx.lineTo(x + 1, c.height - 3); ctx.stroke();
     }
-    ctx.strokeStyle = 'rgba(16, 185, 129, 0.14)';
+    ctx.strokeStyle = 'rgba(21, 128, 61, 0.3)';
     ctx.beginPath(); ctx.moveTo(0, c.height - 4); ctx.lineTo(3, c.height - 1); ctx.stroke();
     return c;
   }, []);
@@ -922,14 +970,18 @@ export const PavingAreaComponent = ({
 
             {/* boundary (show only when selected) */}
             {isSelected && (
-              <Line
-                points={boundaryLocal.flatMap((p) => [p.x, p.y])}
-                stroke="#3B82F6"
-                strokeWidth={3}
-                strokeScaleEnabled={false}
-                dash={[10, 5]}
-                closed
-              />
+              <>
+                <Line
+                  points={boundaryLocal.flatMap((p) => [p.x, p.y])}
+                  stroke="#3B82F6"
+                  strokeWidth={3}
+                  strokeScaleEnabled={false}
+                  dash={[10, 5]}
+                  closed
+                />
+                {/* Segment measurements */}
+                {renderMeasurements()}
+              </>
             )}
           </>
         )}
@@ -1041,7 +1093,7 @@ export const PavingAreaComponent = ({
             ) : (
               <Line
                 points={ghost.boundary.flatMap((p) => [p.x, p.y])}
-                fill={areaSurface === 'concrete' ? '#d1d5db' : '#86efac'}
+                fill={areaSurface === 'concrete' ? '#d1d5db' : '#15803d'}
                 closed
                 listening={false}
                 opacity={0.6}

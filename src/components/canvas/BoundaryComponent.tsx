@@ -26,8 +26,56 @@ export const BoundaryComponent = ({
 
   const groupRef = useRef<any>(null);
   const updateComponent = useDesignStore((s) => s.updateComponent);
+  const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [ghostLocal, setGhostLocal] = useState<Array<{ x: number; y: number }> | null>(null);
+
+  // Calculate and persist the center of mass (centroid) of the boundary
+  useEffect(() => {
+    if (!closed || points.length < 3) {
+      // Only calculate for closed boundaries
+      if (component.properties.centerOfMass) {
+        updateComponent(component.id, {
+          properties: { ...component.properties, centerOfMass: undefined }
+        });
+      }
+      return;
+    }
+
+    // Calculate centroid using the shoelace formula
+    let cx = 0;
+    let cy = 0;
+    let area = 0;
+    const n = points.length;
+
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const cross = points[i].x * points[j].y - points[j].x * points[i].y;
+      area += cross;
+      cx += (points[i].x + points[j].x) * cross;
+      cy += (points[i].y + points[j].y) * cross;
+    }
+
+    area /= 2;
+    cx /= (6 * area);
+    cy /= (6 * area);
+
+    // Snap to grid
+    const spacing = GRID_CONFIG.spacing;
+    const snappedCx = Math.round(cx / spacing) * spacing;
+    const snappedCy = Math.round(cy / spacing) * spacing;
+
+    // Only update if changed
+    const current = component.properties.centerOfMass;
+    if (!current || current.x !== snappedCx || current.y !== snappedCy) {
+      updateComponent(component.id, {
+        properties: {
+          ...component.properties,
+          centerOfMass: { x: snappedCx, y: snappedCy }
+        }
+      });
+    }
+  }, [points, closed, component.id, component.properties, updateComponent]);
   const [shiftPressed, setShiftPressed] = useState(false);
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
 
@@ -86,8 +134,9 @@ export const BoundaryComponent = ({
     return tr.point(local);
   };
 
-  // Calculate segment measurements using local coordinates
+  // Calculate segment measurements using local coordinates (only when selected)
   const renderMeasurements = () => {
+    if (!annotationsVisible || !isSelected) return null;
     const measurements: JSX.Element[] = [];
     const n = localPts.length;
 
@@ -96,16 +145,22 @@ export const BoundaryComponent = ({
       const midY = (a.y + b.y) / 2;
       const dx = b.x - a.x;
       const dy = b.y - a.y;
-      const lengthInMM = Math.sqrt(dx * dx + dy * dy) * 10; // 1px = 10mm
-      const lengthInMeters = (lengthInMM / 1000).toFixed(1);
+      const lengthInMM = Math.round(Math.sqrt(dx * dx + dy * dy) * 10); // 1px = 10mm
+
+      // Calculate perpendicular offset to position text away from the line
+      const lineLength = Math.sqrt(dx * dx + dy * dy);
+      const perpX = -dy / lineLength; // Perpendicular direction
+      const perpY = dx / lineLength;
+      const offset = 20; // Distance from line
+
       measurements.push(
         <Text
           key={`measurement-${key}`}
-          x={midX}
-          y={midY - 15}
-          text={`${lengthInMeters}m`}
-          fontSize={14}
-          fill="#1F2937"
+          x={midX + perpX * offset}
+          y={midY + perpY * offset}
+          text={`${lengthInMM}`}
+          fontSize={11}
+          fill="#6B7280"
           align="center"
           offsetX={20}
           listening={false}
@@ -113,11 +168,23 @@ export const BoundaryComponent = ({
       );
     };
 
+    // Helper to check if a segment is affected by the currently dragged node
+    const isSegmentBeingDragged = (startIdx: number, endIdx: number): boolean => {
+      if (dragIndex == null) return false;
+      return startIdx === dragIndex || endIdx === dragIndex;
+    };
+
     for (let i = 0; i < n - 1; i++) {
-      addMeasure(localPts[i], localPts[i + 1], `${i}`);
+      // Skip measurements for segments adjacent to the dragged node
+      if (!isSegmentBeingDragged(i, i + 1)) {
+        addMeasure(localPts[i], localPts[i + 1], `${i}`);
+      }
     }
     if (closed && n > 2) {
-      addMeasure(localPts[n - 1], localPts[0], 'close');
+      // Skip the closing segment if it's affected by the dragged node
+      if (!isSegmentBeingDragged(n - 1, 0)) {
+        addMeasure(localPts[n - 1], localPts[0], 'close');
+      }
     }
     return measurements;
   };
@@ -145,12 +212,27 @@ export const BoundaryComponent = ({
           const dy = b.y - a.y;
           const midX = (a.x + b.x) / 2;
           const midY = (a.y + b.y) / 2;
-          const mm = Math.sqrt(dx * dx + dy * dy) * 10;
-          const meters = (mm / 1000).toFixed(1);
+          const mm = Math.round(Math.sqrt(dx * dx + dy * dy) * 10);
+
+          // Calculate perpendicular offset for dynamic measurements
+          const lineLength = Math.sqrt(dx * dx + dy * dy);
+          const perpX = -dy / lineLength;
+          const perpY = dx / lineLength;
+          const offset = 20;
+
           return (
             <Group key={`ghost-${k}`}>
               <Line points={[a.x, a.y, b.x, b.y]} stroke={color} strokeWidth={3} dash={[8, 6]} opacity={0.8} />
-              <Text x={midX} y={midY - 18} text={`${meters}m`} fontSize={13} fill="#1F2937" align="center" offsetX={20} listening={false} />
+              <Text
+                x={midX + perpX * offset}
+                y={midY + perpY * offset}
+                text={`${mm}`}
+                fontSize={11}
+                fill="#6B7280"
+                align="center"
+                offsetX={20}
+                listening={false}
+              />
             </Group>
           );
         })}
@@ -165,8 +247,6 @@ export const BoundaryComponent = ({
       y={component.position.y}
       rotation={component.rotation}
       draggable={activeTool !== 'hand' && isSelected && !shiftPressed}
-      onClick={onSelect}
-      onTap={onSelect}
       onContextMenu={handleRightClick}
       onDragStart={() => {
         dragStartPos.current = { x: component.position.x, y: component.position.y };
@@ -183,7 +263,7 @@ export const BoundaryComponent = ({
         dragStartPos.current = null;
       }}
     >
-      {/* Main boundary line (local coords) */}
+      {/* Main boundary line (local coords) - click detection only on the line, not interior */}
       <Line
         points={flatLocalPoints}
         stroke="#1e3a8a"
@@ -192,6 +272,8 @@ export const BoundaryComponent = ({
         lineCap="round"
         lineJoin="round"
         hitStrokeWidth={10}
+        onClick={onSelect}
+        onTap={onSelect}
       />
 
       {/* Ghost dashed overlay + length label while dragging a node */}
@@ -207,8 +289,9 @@ export const BoundaryComponent = ({
           fill="#1e3a8a"
           stroke="#3b82f6"
           strokeWidth={2}
-          draggable={shiftPressed}
-          onMouseDown={() => {
+          draggable={shiftPressed || dragIndex === index}
+          onDragStart={(e) => {
+            e.cancelBubble = true;
             setDragIndex(index);
             setGhostLocal(localPts);
           }}

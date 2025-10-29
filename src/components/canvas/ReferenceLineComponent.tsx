@@ -21,6 +21,7 @@ export const ReferenceLineComponent: React.FC<Props> = ({
 }) => {
   const updateComponent = useDesignStore((s) => s.updateComponent);
   const components = useDesignStore((s) => s.components);
+  const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const points = component.properties.points || [];
   if (points.length < 2) return null;
@@ -35,7 +36,7 @@ export const ReferenceLineComponent: React.FC<Props> = ({
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const distance = Math.sqrt(dx * dx + dy * dy);
-  const measurementMeters = (distance / 100).toFixed(1); // Convert to meters
+  const measurementMm = Math.round(distance * 10); // Convert to mm (1px = 10mm)
 
   const style = component.properties.style || {
     color: component.type === 'quick_measure' ? '#eab308' : '#dc2626',
@@ -100,27 +101,18 @@ export const ReferenceLineComponent: React.FC<Props> = ({
         </>
       )}
 
-      {/* Measurement label */}
-      {showMeasurement && (
-        <Label x={midPoint.x} y={midPoint.y - 20}>
-          <Tag
-            fill="white"
-            stroke={style.color}
-            strokeWidth={1}
-            cornerRadius={3}
-            pointerDirection="down"
-            pointerWidth={6}
-            pointerHeight={6}
-          />
-          <Text
-            text={`${measurementMeters}m`}
-            fontSize={14}
-            fontStyle="bold"
-            fill={style.color}
-            padding={4}
-            align="center"
-          />
-        </Label>
+      {/* Measurement with annotation */}
+      {annotationsVisible && showMeasurement && (
+        <Text
+          x={midPoint.x}
+          y={midPoint.y - 20}
+          text={annotation ? `${annotation}: ${measurementMm}` : `${measurementMm}`}
+          fontSize={11}
+          fill={component.type === 'quick_measure' ? '#dc2626' : '#6B7280'}
+          align="center"
+          offsetX={annotation ? (annotation.length * 3 + 15) : 15}
+          listening={false}
+        />
       )}
 
       {/* User label (if exists) */}
@@ -135,21 +127,6 @@ export const ReferenceLineComponent: React.FC<Props> = ({
             align="center"
           />
         </Label>
-      )}
-
-      {/* Annotation along the line */}
-      {annotation && (
-        <Text
-          x={annotationX}
-          y={annotationY}
-          text={annotation}
-          fontSize={12}
-          fill={style.color}
-          fontStyle="italic"
-          rotation={angle}
-          offsetX={0}
-          offsetY={6}
-        />
       )}
 
       {/* Draggable endpoint handles (only when selected) */}

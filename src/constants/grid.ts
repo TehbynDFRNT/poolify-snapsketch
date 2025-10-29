@@ -14,5 +14,5 @@ export const SNAP_CONFIG = {
   showSnapIndicator: true,
 };
 
-export const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.5, 2, 4];
+export const ZOOM_LEVELS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 4];
 export const DEFAULT_ZOOM = 1;

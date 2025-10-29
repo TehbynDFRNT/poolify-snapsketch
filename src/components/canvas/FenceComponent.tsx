@@ -82,6 +82,7 @@ export const FenceComponent = ({
   const isPolyline = Array.isArray(polyPoints) && polyPoints.length >= 2;
 
   const updateComponent = useDesignStore((s) => s.updateComponent);
+  const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [ghostLocal, setGhostLocal] = useState<Array<{ x: number; y: number }> | null>(null);
   const [shiftPressed, setShiftPressed] = useState(false);
@@ -363,9 +364,6 @@ export const FenceComponent = ({
                     rails.push(
                       <Line key={`ghl-${i}-${k}`} points={[a.x, a.y, b.x, b.y]} stroke={selectedSeg ? '#2563EB' : '#60A5FA'} strokeWidth={glassPaneStrokeWidth + 6} opacity={selectedSeg ? 0.5 : 0.35} lineCap="round" />
                     );
-                    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-                    const meters = (Math.hypot(b.x - a.x, b.y - a.y) / 100).toFixed(1);
-                    rails.push(<Text key={`glen-${i}-${k}`} x={mid.x} y={mid.y - glassPaneStrokeWidth - 10} text={`${meters}m`} fontSize={12} fill="#2563EB" align="center" offsetX={14} />);
                   }
 
                   s = s1 + cfg.gap;
@@ -439,9 +437,6 @@ export const FenceComponent = ({
                           lineCap="round"
                         />
                       );
-                      const meters = (Math.hypot(bPt.x - aPt.x, bPt.y - aPt.y) / 100).toFixed(1);
-                      const mid = { x: (aPt.x + bPt.x) / 2, y: (aPt.y + bPt.y) / 2 };
-                      elems.push(<Text key={`mlen-${i}-${k}`} x={mid.x} y={mid.y - metalBandStrokeWidth - 10} text={`${meters}m`} fontSize={12} fill="#2563EB" align="center" offsetX={14} />);
                     }
                     // If a gate exists, skip drawing band across gate later (band uses continuous line already above). For preview here we keep only selection cues.
                     // Internal post at panel end (shared due to dedupe)
@@ -458,7 +453,7 @@ export const FenceComponent = ({
           </>
         )}
 
-        {/* Ghost overlay and label on affected segments while dragging */}
+        {/* Ghost overlay + measurements on affected segments while dragging */}
         {dragIndex != null && ghostLocal && (
           <>
             {(() => {
@@ -468,12 +463,33 @@ export const FenceComponent = ({
                 if (k <= 0 || k >= localPts.length) return;
                 const a = localPts[k - 1];
                 const b = localPts[k];
-                const len = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
-                const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+                const dx = b.x - a.x;
+                const dy = b.y - a.y;
+                const len = Math.sqrt(dx * dx + dy * dy);
+
+                // Calculate perpendicular offset to match permanent measurements
+                const lineLength = len;
+                const perpX = -dy / lineLength;
+                const perpY = dx / lineLength;
+                const offset = 20;
+
+                const midX = (a.x + b.x) / 2;
+                const midY = (a.y + b.y) / 2;
+
                 overlay.push(
                   <>
-                    <Line key={`fg-${k}`} points={[a.x, a.y, b.x, b.y]} stroke={color} strokeWidth={2} dash={[8, 6]} />
-                    <Text key={`fl-${k}`} x={mid.x} y={mid.y - 16} text={`${(len / 100).toFixed(1)}m`} fontSize={12} fill={color} offsetX={12} listening={false} />
+                    <Line key={`fg-${k}`} points={[a.x, a.y, b.x, b.y]} stroke={color} strokeWidth={3} dash={[8, 6]} opacity={0.8} />
+                    <Text
+                      key={`fl-${k}`}
+                      x={midX + perpX * offset}
+                      y={midY + perpY * offset}
+                      text={`${Math.round(len * 10)}`}
+                      fontSize={11}
+                      fill="#6B7280"
+                      align="center"
+                      offsetX={20}
+                      listening={false}
+                    />
                   </>
                 );
               });
@@ -481,6 +497,42 @@ export const FenceComponent = ({
             })()}
           </>
         )}
+
+        {/* Segment measurements (only when selected) */}
+        {annotationsVisible && isSelected && localPts.map((pt, idx) => {
+          if (idx === 0) return null;
+          const a = localPts[idx - 1];
+          const b = localPts[idx];
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const lengthInMM = Math.round(Math.sqrt(dx * dx + dy * dy) * 10); // 1px = 10mm
+
+          // Calculate perpendicular offset to position text away from the line
+          const lineLength = Math.sqrt(dx * dx + dy * dy);
+          const perpX = -dy / lineLength;
+          const perpY = dx / lineLength;
+          const offset = 20;
+
+          const midX = (a.x + b.x) / 2;
+          const midY = (a.y + b.y) / 2;
+
+          // Skip measurement if this segment is being dragged
+          if (dragIndex === idx - 1 || dragIndex === idx) return null;
+
+          return (
+            <Text
+              key={`measurement-${idx}`}
+              x={midX + perpX * offset}
+              y={midY + perpY * offset}
+              text={`${lengthInMM}`}
+              fontSize={11}
+              fill="#6B7280"
+              align="center"
+              offsetX={20}
+              listening={false}
+            />
+          );
+        })}
 
         {isSelected && (
           <Rect
@@ -631,7 +683,6 @@ export const FenceComponent = ({
             const isActive = isGlobal || (selectedSeg && selectedSeg.run === 0 && selectedSeg.seg === k) || (hoverSeg && hoverSeg.run === 0 && hoverSeg.seg === k);
             if (isActive) {
               rails.push(<Line key={`ghl-s-${k}`} points={[s0, 0, s1, 0]} stroke={selectedSeg ? '#2563EB' : '#60A5FA'} strokeWidth={glassPaneStrokeWidth + 6} opacity={selectedSeg ? 0.5 : 0.35} lineCap="round" />);
-              rails.push(<Text key={`glen-s-${k}`} x={(s0 + s1) / 2} y={-glassPaneStrokeWidth - 10} text={`${((s1 - s0) / 100).toFixed(1)}m`} fontSize={12} fill="#2563EB" align="center" offsetX={14} />);
             }
             const f1 = s0 + Lpanel * 0.25;
             const f2 = s0 + Lpanel * 0.75;

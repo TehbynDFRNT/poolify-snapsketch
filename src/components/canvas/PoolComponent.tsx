@@ -20,7 +20,7 @@ interface PoolComponentProps {
 
 export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onDragEnd, onTileContextMenu }: PoolComponentProps) => {
   const groupRef = useRef<any>(null);
-  const { components: allComponents, updateComponent, zoom } = useDesignStore();
+  const { components: allComponents, updateComponent, zoom, annotationsVisible } = useDesignStore();
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
   const [patternImage, setPatternImage] = useState<HTMLImageElement | null>(null);
   // Shift-selectable coping tiles (keys encoded as `${side}:${index}` for base and `${side}:user:${index}` for user-added)
@@ -953,6 +953,99 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     );
   };
 
+  // Render measurements around the exterior edge of the coping
+  const renderCopingMeasurements = () => {
+    if (!annotationsVisible || !isSelected || !showCoping || !copingCalc) return null;
+
+    const allTiles: Tile[] = ([] as Tile[])
+      .concat(sideTiles.top, sideTiles.bottom, sideTiles.left, sideTiles.right);
+
+    if (allTiles.length === 0) return null;
+
+    // Calculate bounding box of all tiles (in mm)
+    const minX = Math.min(...allTiles.map(t => t.x));
+    const maxX = Math.max(...allTiles.map(t => t.x + t.width));
+    const minY = Math.min(...allTiles.map(t => t.y));
+    const maxY = Math.max(...allTiles.map(t => t.y + t.height));
+
+    const measurements: JSX.Element[] = [];
+    const offset = 30; // px offset from edge for measurement text
+
+    // Top edge measurement
+    const topWidthMm = Math.round(maxX - minX);
+    const topMidX = ((minX + maxX) / 2) * scale;
+    const topY = minY * scale;
+    measurements.push(
+      <Text
+        key="measure-top"
+        x={topMidX}
+        y={topY - offset}
+        text={`${topWidthMm}`}
+        fontSize={11}
+        fill="#6B7280"
+        align="center"
+        offsetX={20}
+        listening={false}
+      />
+    );
+
+    // Bottom edge measurement
+    const bottomWidthMm = Math.round(maxX - minX);
+    const bottomMidX = ((minX + maxX) / 2) * scale;
+    const bottomY = maxY * scale;
+    measurements.push(
+      <Text
+        key="measure-bottom"
+        x={bottomMidX}
+        y={bottomY + offset}
+        text={`${bottomWidthMm}`}
+        fontSize={11}
+        fill="#6B7280"
+        align="center"
+        offsetX={20}
+        listening={false}
+      />
+    );
+
+    // Left edge measurement
+    const leftHeightMm = Math.round(maxY - minY);
+    const leftX = minX * scale;
+    const leftMidY = ((minY + maxY) / 2) * scale;
+    measurements.push(
+      <Text
+        key="measure-left"
+        x={leftX - offset}
+        y={leftMidY}
+        text={`${leftHeightMm}`}
+        fontSize={11}
+        fill="#6B7280"
+        align="center"
+        offsetX={20}
+        listening={false}
+      />
+    );
+
+    // Right edge measurement
+    const rightHeightMm = Math.round(maxY - minY);
+    const rightX = maxX * scale;
+    const rightMidY = ((minY + maxY) / 2) * scale;
+    measurements.push(
+      <Text
+        key="measure-right"
+        x={rightX + offset}
+        y={rightMidY}
+        text={`${rightHeightMm}`}
+        fontSize={11}
+        fill="#6B7280"
+        align="center"
+        offsetX={20}
+        listening={false}
+      />
+    );
+
+    return <>{measurements}</>;
+  };
+
 
   return (
     <Group
@@ -983,14 +1076,13 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
           />
         ) : null}
 
-        {/* Invisible hit area covering pool + coping */}
+        {/* Invisible hit area covering pool + coping - enables clicking pool water */}
       <Rect
         x={clickableBounds.x}
         y={clickableBounds.y}
         width={clickableBounds.width}
         height={clickableBounds.height}
         fill="transparent"
-        listening={false}
       />
 
         {/* Render coping pavers (interactive for selection) - AFTER pool outline so they're clickable */}
@@ -1066,6 +1158,12 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
 
         {/* Extend handles (outward-only) when selected */}
         {renderExtendHandles()}
+
+        {/* Coping measurements when selected */}
+        {renderCopingMeasurements()}
+
+        {/* Tile selection bounds */}
+        {renderTileSelectionBounds()}
       </Group>
   );
 };

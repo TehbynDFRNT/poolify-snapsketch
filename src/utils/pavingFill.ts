@@ -150,16 +150,16 @@ export function calculateStatistics(
   const fullPavers = pavers.filter(p => !p.isEdgePaver).length;
   const edgePavers = pavers.filter(p => p.isEdgePaver).length;
   const totalPavers = fullPavers + edgePavers;
-  
-  // Calculate area (area should be in square meters)
-  let paverAreaM2 = 0;
-  if (pavers.length > 0) {
-    const pxPerMm = GRID_CONFIG.spacing / 100; // 0.1 px/mm
-    const mmW = pavers[0].mmWidth ?? (pavers[0].width / pxPerMm);
-    const mmH = pavers[0].mmHeight ?? (pavers[0].height / pxPerMm);
-    paverAreaM2 = (mmW * mmH) / 1000000; // mm² to m²
+
+  // Calculate exact area by summing each paver's actual rectangular area
+  const pxPerMm = GRID_CONFIG.spacing / 100; // px per mm (0.1 by default)
+  const mmPerPx = 1 / pxPerMm;
+  let totalArea = 0; // m²
+  for (const p of pavers) {
+    const wMm = (p.width) * mmPerPx;
+    const hMm = (p.height) * mmPerPx;
+    totalArea += (wMm * hMm) / 1_000_000; // mm² -> m²
   }
-  const totalArea = paverAreaM2 * totalPavers;
   
   // Calculate order quantity with wastage
   const wastageAmount = Math.ceil(totalPavers * (wastagePercentage / 100));

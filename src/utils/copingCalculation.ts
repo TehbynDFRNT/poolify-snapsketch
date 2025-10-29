@@ -219,9 +219,10 @@ export function planPoolCopingGlobal(pool: Pool, config: CopingConfig): CopingPl
   const sideRowDepth = tile.height;  // horizontal edges extend in Y
   const endRowDepth = tile.width;     // vertical edges extend in X
 
-  // Edge lengths match pool dimensions (no extension)
-  const widthEdgeLength = pool.width;
-  const lengthEdgeLength = pool.length;
+  // Corner extension: side tiles extend outward, so ends must span wider to cover corners
+  const cornerExtension = rows.sides * (sideRowDepth + GROUT_MM);
+  const widthEdgeLength = pool.width + 2 * cornerExtension;  // ends extend to cover side tiles
+  const lengthEdgeLength = pool.length;  // sides don't need extension
 
   // Axis plans for different edge orientations
   const lengthAxis = planAxis(lengthEdgeLength, /*along*/ tile.width); // horizontal edges
@@ -491,6 +492,9 @@ export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | Co
   const sideRowDepth = globalConfig.tile.height;  // horizontal edges extend in Y
   const endRowDepth  = globalConfig.tile.width;     // vertical edges extend in X
 
+  // Corner extension for end tile positioning
+  const cornerExtension = globalConfig.rows.sides * (sideRowDepth + GROUT_MM);
+
   // Generate positions for each side with fixed world orientation
   const deepEnd: CopingSide = {
     rows: globalConfig.rows.deep,
@@ -501,7 +505,7 @@ export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | Co
     partialPaver: plan.widthAxis.cutSizes.length > 0 ? plan.widthAxis.gapBeforeCentre : null,
     paverPositions: generatePaverPositions(
       pool.length + GROUT_MM, // offset from pool edge
-      0,  // start at corner
+      -cornerExtension,  // start earlier to cover corner
       plan.widthAxis,
       globalConfig.tile.width,
       globalConfig.tile.height,
@@ -519,7 +523,7 @@ export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | Co
     partialPaver: plan.widthAxis.cutSizes.length > 0 ? plan.widthAxis.gapBeforeCentre : null,
     paverPositions: generatePaverPositions(
       -(endRowDepth + GROUT_MM) * globalConfig.rows.shallow, // offset from pool edge
-      0,  // start at corner
+      -cornerExtension,  // start earlier to cover corner
       plan.widthAxis,
       globalConfig.tile.width,
       globalConfig.tile.height,
@@ -580,5 +584,7 @@ export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | Co
     totalPartialPavers: plan.totalPartialPavers,
     totalPavers: plan.totalPavers,
     totalArea,
+    lengthAxis: plan.lengthAxis,
+    widthAxis: plan.widthAxis,
   };
 };
