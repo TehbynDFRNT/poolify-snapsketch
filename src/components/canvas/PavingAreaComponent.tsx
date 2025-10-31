@@ -6,6 +6,7 @@ import { GRID_CONFIG, SNAP_CONFIG } from '@/constants/grid';
 import { fillAreaWithPavers, calculateStatistics } from '@/utils/pavingFill';
 import { roundHalf } from '@/utils/canvasSnap';
 import { TILE_COLORS, TILE_GAP } from '@/constants/tileConfig';
+import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
 
 interface PavingAreaComponentProps {
   component: Component;
@@ -416,8 +417,8 @@ export const PavingAreaComponent = ({
   const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   const renderMeasurements = () => {
-    if (!annotationsVisible || !isSelected) return null;
-    const measurements: JSX.Element[] = [];
+    if (!(annotationsVisible || isSelected)) return null;
+      const measurements: JSX.Element[] = [];
     const pts = localPreview || boundaryLocal;
     const n = pts.length;
 
@@ -432,7 +433,7 @@ export const PavingAreaComponent = ({
       const lineLength = Math.sqrt(dx * dx + dy * dy);
       const perpX = -dy / lineLength;
       const perpY = dx / lineLength;
-      const offset = 20;
+      const offset = getAnnotationOffsetPx(component.id, component.position);
 
       const midX = (a.x + b.x) / 2;
       const midY = (a.y + b.y) / 2;
@@ -440,15 +441,17 @@ export const PavingAreaComponent = ({
       // Skip measurement if this segment is being dragged
       if (dragIndex != null && (dragIndex === i || dragIndex === (i + 1) % n)) continue;
 
+      const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
       measurements.push(
         <Text
           key={`measurement-${i}`}
           x={midX + perpX * offset}
           y={midY + perpY * offset}
-          text={`${lengthInMM}`}
+          text={`Paving Area: ${lengthInMM}mm`}
           fontSize={11}
-          fill="#6B7280"
+          fill={TILE_COLORS.groutColor}
           align="center"
+          rotation={normalizeLabelAngle(angleDeg)}
           offsetX={20}
           listening={false}
         />

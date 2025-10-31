@@ -18,6 +18,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { ToolType, Component } from '@/types';
+import { DRAINAGE_TYPES, WALL_MATERIALS } from '@/constants/components';
 
 interface LeftToolbarProps {
   activeTool: ToolType;
@@ -28,6 +29,8 @@ interface LeftToolbarProps {
       decorationType?: 'bush' | 'umbrella' | 'waterfeature' | 'deckchairs';
       fenceType?: 'glass' | 'metal';
       areaType?: 'pavers' | 'concrete' | 'grass';
+      drainageType?: 'rock' | 'ultradrain';
+      wallMaterial?: 'timber' | 'concrete' | 'concrete_sleeper' | 'sandstone';
     }
   ) => void;
 }
@@ -41,6 +44,8 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
   const [selectedFenceType, setSelectedFenceType] = useState<'glass' | 'metal' | 'gate'>('glass');
   const [selectedDecorationType, setSelectedDecorationType] = useState<'bush' | 'umbrella' | 'waterfeature' | 'deckchairs'>('bush');
   const [selectedSelectType, setSelectedSelectType] = useState<'select' | 'hand'>('select');
+  const [selectedDrainageType, setSelectedDrainageType] = useState<'rock' | 'ultradrain'>('rock');
+  const [selectedWallMaterial, setSelectedWallMaterial] = useState<'timber' | 'concrete' | 'concrete_sleeper' | 'sandstone'>('timber');
 
   // Check if boundary already exists
   const hasBoundary = components.some(c => c.type === 'boundary');
@@ -53,20 +58,41 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
     return () => document.removeEventListener('click', onDoc);
   }, [toolMenu.open]);
 
+  // Helper to render a colored square with the original icon inside
+  const coloredIcon = (bg: string, icon: JSX.Element, iconClassName?: string) => (
+    <span className="relative inline-flex w-5 h-5 items-center justify-center rounded-sm" style={{ backgroundColor: bg }}>
+      <span className="absolute inset-0 rounded-sm" style={{ backgroundColor: bg }} />
+      <span className={cn('relative', iconClassName)}>{icon}</span>
+    </span>
+  );
+
   // Get the appropriate icon based on selected sub-options
   const getToolIcon = (toolId: ToolType | 'area' | 'select') => {
     if (toolId === 'select') {
       return selectedSelectType === 'hand' ? <Hand className="w-5 h-5" /> : <MousePointer2 className="w-5 h-5" />;
     }
     if (toolId === 'area') {
-      if (selectedAreaType === 'pavers') return <LayoutGrid className="w-5 h-5" />;
-      if (selectedAreaType === 'concrete') return <span className="inline-block w-5 h-5 rounded-sm bg-gray-400" />;
-      if (selectedAreaType === 'grass') return <span className="inline-block w-5 h-5 rounded-sm bg-green-400" />;
+      // Show the Area icon (rounded square color) with the Area glyph (Square), not the paver grid
+      const color = selectedAreaType === 'pavers'
+        ? '#d2b48c' // sandy
+        : selectedAreaType === 'concrete'
+          ? '#9ca3af' // gray-400
+          : '#4ade80'; // green-400
+      return coloredIcon(color, <Square className="w-3 h-3" />, 'text-black');
     }
     if (toolId === 'fence') {
-      if (selectedFenceType === 'glass') return <span className="inline-block w-5 h-5 rounded-sm bg-[#5DA5DA]" />;
-      if (selectedFenceType === 'metal') return <span className="inline-block w-5 h-5 rounded-sm bg-[#595959]" />;
+      if (selectedFenceType === 'glass') return coloredIcon('#5DA5DA', <Fence className="w-3 h-3" />, 'text-white');
+      if (selectedFenceType === 'metal') return coloredIcon('#595959', <Fence className="w-3 h-3" />, 'text-white');
       if (selectedFenceType === 'gate') return <DoorOpen className="w-5 h-5" />;
+    }
+    if (toolId === 'drainage') {
+      const color = DRAINAGE_TYPES[selectedDrainageType]?.color || '#888';
+      const isDark = selectedDrainageType === 'ultradrain';
+      return coloredIcon(color, <Droplets className="w-3 h-3" />, isDark ? 'text-white' : 'text-black');
+    }
+    if (toolId === 'wall') {
+      const color = WALL_MATERIALS[selectedWallMaterial]?.color || '#888';
+      return coloredIcon(color, <Construction className="w-3 h-3" />, 'text-black');
     }
     if (toolId === 'boundary') {
       return <Pentagon className="w-5 h-5" />;
@@ -80,7 +106,9 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
       case 'pool': return <Waves className="w-5 h-5" />;
       case 'drainage': return <Droplets className="w-5 h-5" />;
       case 'wall': return <Construction className="w-5 h-5" />;
-      case 'quick_measure': return <ScanLine className="w-5 h-5" />;
+      case 'quick_measure':
+        // Show active measure variant: Ruler when height tool is active
+        return activeTool === 'height' ? <Ruler className="w-5 h-5" /> : <ScanLine className="w-5 h-5" />;
       case 'height': return <Ruler className="w-5 h-5" />;
       default: return <Square className="w-5 h-5" />;
     }
@@ -88,15 +116,18 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
 
   const tools: Array<{ id: ToolType | 'area' | 'select'; name: string; shortcut: string; hasMenu?: boolean; disabled?: boolean }> = [
     { id: 'select', name: 'Select/Pan', shortcut: 'V', hasMenu: true },
-    { id: 'boundary', name: 'Boundary', shortcut: 'B', hasMenu: false, disabled: hasBoundary },
+    // Group 1
+    { id: 'boundary', name: 'Boundary', shortcut: 'B', hasMenu: false },
     { id: 'house', name: 'House', shortcut: 'U', hasMenu: true },
-    { id: 'fence', name: 'Fence', shortcut: 'F', hasMenu: true },
     { id: 'pool', name: 'Pool', shortcut: 'O', hasMenu: true },
-    { id: 'area', name: 'Area', shortcut: '', hasMenu: true },
+    // Group 2
+    { id: 'area', name: 'Paver', shortcut: '', hasMenu: true },
+    { id: 'fence', name: 'Fence', shortcut: 'F', hasMenu: true },
     { id: 'drainage', name: 'Drainage', shortcut: 'D', hasMenu: true },
     { id: 'wall', name: 'Wall', shortcut: 'W', hasMenu: true },
-    { id: 'decoration', name: 'Decoration', shortcut: 'C', hasMenu: true },
+    // Group 3
     { id: 'quick_measure', name: 'Measure', shortcut: 'M', hasMenu: true },
+    { id: 'decoration', name: 'Decoration', shortcut: 'C', hasMenu: true },
   ];
 
   const handleToolClick = (toolId: ToolType | 'area' | 'select') => {
@@ -108,6 +139,12 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
       }
     } else if (toolId === 'area') {
       onToolChange('paving_area', { areaType: selectedAreaType });
+    } else if (toolId === 'area') {
+      onToolChange('paving_area', { areaType: selectedAreaType });
+    } else if (toolId === 'drainage') {
+      onToolChange('drainage', { drainageType: selectedDrainageType });
+    } else if (toolId === 'wall') {
+      onToolChange('wall', { wallMaterial: selectedWallMaterial });
     } else {
       onToolChange(toolId as ToolType);
     }
@@ -120,31 +157,37 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
           ? (activeTool === 'select' || activeTool === 'hand')
           : tool.id === 'area'
             ? (activeTool === 'paving_area' || activeTool === 'area')
-            : activeTool === tool.id;
+            : tool.id === 'quick_measure'
+              ? (activeTool === 'quick_measure' || activeTool === 'height')
+              : activeTool === tool.id;
 
         return (
-          <Button
-            key={tool.id}
-            variant={isActive ? 'default' : 'ghost'}
-            size="icon"
-            onClick={() => !tool.disabled && handleToolClick(tool.id)}
-            onContextMenu={(e) => {
-              if (tool.hasMenu && !tool.disabled) {
-                e.preventDefault();
-                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                setToolMenu({ open: true, x: rect.right + 4, y: rect.top, tool: tool.id });
-              }
-            }}
-            className={cn(
-              "w-14 h-14 flex-shrink-0",
-              isActive && 'bg-primary text-primary-foreground',
-              tool.disabled && 'opacity-40 cursor-not-allowed'
+          <div key={tool.id} className="flex flex-col items-center">
+            <Button
+              variant={isActive ? 'default' : 'ghost'}
+              size="icon"
+              onClick={() => !tool.disabled && handleToolClick(tool.id)}
+              onContextMenu={(e) => {
+                if (tool.hasMenu && !tool.disabled) {
+                  e.preventDefault();
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  setToolMenu({ open: true, x: rect.right + 4, y: rect.top, tool: tool.id });
+                }
+              }}
+              className={cn(
+                "w-14 h-14 flex-shrink-0",
+                isActive && 'bg-primary text-primary-foreground',
+                tool.disabled && 'opacity-40 cursor-not-allowed'
+              )}
+              title={tool.disabled ? `${tool.name} (Already exists)` : `${tool.name}${tool.shortcut ? ` (${tool.shortcut})` : ''}`}
+              disabled={tool.disabled}
+            >
+              {getToolIcon(tool.id)}
+            </Button>
+            {(tool.id === 'pool' || tool.id === 'wall') && (
+              <div className="h-px w-10 bg-border my-1" role="separator" aria-orientation="horizontal" />
             )}
-            title={tool.disabled ? `${tool.name} (Already exists)` : `${tool.name}${tool.shortcut ? ` (${tool.shortcut})` : ''}`}
-            disabled={tool.disabled}
-          >
-            {getToolIcon(tool.id)}
-          </Button>
+          </div>
         );
       })}
 
@@ -189,17 +232,17 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
           style={{ position: 'fixed', left: toolMenu.x, top: toolMenu.y, zIndex: 70 }}
           className="bg-popover border rounded-md shadow-md p-2 text-sm"
         >
-          <div className="text-xs font-semibold text-muted-foreground mb-2 px-1">Area Options</div>
-          <button
-            className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded w-full"
-            onClick={() => {
-              setSelectedAreaType('pavers');
-              onToolChange('paving_area', { areaType: 'pavers' });
-              setToolMenu({ open: false, x: 0, y: 0, tool: null });
-            }}
-            title="Pavers Area"
-          >
-            <LayoutGrid className="w-5 h-5" />
+      <div className="text-xs font-semibold text-muted-foreground mb-2 px-1">Area Options</div>
+      <button
+        className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded w-full"
+        onClick={() => {
+          setSelectedAreaType('pavers');
+          onToolChange('paving_area', { areaType: 'pavers' });
+          setToolMenu({ open: false, x: 0, y: 0, tool: null });
+        }}
+        title="Pavers Area"
+      >
+            {coloredIcon('#d2b48c', <Square className="w-3 h-3" />, 'text-black')}
             <span>Pavers</span>
           </button>
           <button
@@ -211,7 +254,7 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
             }}
             title="Concrete Area"
           >
-            <span className="inline-block w-5 h-5 rounded-sm bg-gray-300" />
+            {coloredIcon('#9ca3af', <Square className="w-3 h-3" />, 'text-black')}
             <span>Concrete</span>
           </button>
           <button
@@ -223,7 +266,7 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
             }}
             title="Grass Area"
           >
-            <span className="inline-block w-5 h-5 rounded-sm bg-green-300" />
+            {coloredIcon('#4ade80', <Square className="w-3 h-3" />, 'text-black')}
             <span>Grass</span>
           </button>
         </div>
@@ -235,31 +278,31 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
           style={{ position: 'fixed', left: toolMenu.x, top: toolMenu.y, zIndex: 70 }}
           className="bg-popover border rounded-md shadow-md p-2 text-sm"
         >
-          <div className="text-xs font-semibold text-muted-foreground mb-2 px-1">Fence Options</div>
-          <button
-            className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded w-full"
-            onClick={() => {
-              setSelectedFenceType('glass');
-              onToolChange('fence', { fenceType: 'glass' });
-              setToolMenu({ open: false, x: 0, y: 0, tool: null });
-            }}
-            title="Glass"
-          >
-            <span className="inline-block w-5 h-5 rounded-sm bg-[#5DA5DA]" />
-            <span>Glass</span>
-          </button>
-          <button
-            className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded w-full"
-            onClick={() => {
-              setSelectedFenceType('metal');
-              onToolChange('fence', { fenceType: 'metal' });
-              setToolMenu({ open: false, x: 0, y: 0, tool: null });
-            }}
-            title="Metal"
-          >
-            <span className="inline-block w-5 h-5 rounded-sm bg-[#595959]" />
-            <span>Metal</span>
-          </button>
+      <div className="text-xs font-semibold text-muted-foreground mb-2 px-1">Fence Options</div>
+      <button
+        className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded w-full"
+        onClick={() => {
+          setSelectedFenceType('glass');
+          onToolChange('fence', { fenceType: 'glass' });
+          setToolMenu({ open: false, x: 0, y: 0, tool: null });
+        }}
+        title="Glass"
+      >
+          {coloredIcon('#5DA5DA', <Fence className="w-3 h-3" />, 'text-white')}
+          <span>Glass</span>
+      </button>
+      <button
+        className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded w-full"
+        onClick={() => {
+          setSelectedFenceType('metal');
+          onToolChange('fence', { fenceType: 'metal' });
+          setToolMenu({ open: false, x: 0, y: 0, tool: null });
+        }}
+        title="Metal"
+      >
+          {coloredIcon('#595959', <Fence className="w-3 h-3" />, 'text-white')}
+          <span>Metal</span>
+      </button>
           <button
             className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded w-full"
             onClick={() => {
@@ -383,18 +426,31 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
           style={{ position: 'fixed', left: toolMenu.x, top: toolMenu.y, zIndex: 70 }}
           className="bg-popover border rounded-md shadow-md p-2 text-sm"
         >
-          <div className="text-xs font-semibold text-muted-foreground mb-2 px-1">Drainage Options</div>
-          <button
-            className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded w-full"
-            onClick={() => {
-              onToolChange('drainage');
-              setToolMenu({ open: false, x: 0, y: 0, tool: null });
-            }}
-            title="Drainage"
-          >
-            <Droplets className="w-5 h-5" />
-            <span>Drainage</span>
-          </button>
+      <div className="text-xs font-semibold text-muted-foreground mb-2 px-1">Drainage Options</div>
+      <button
+        className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded w-full"
+        onClick={() => {
+          setSelectedDrainageType('rock');
+          onToolChange('drainage', { drainageType: 'rock' });
+          setToolMenu({ open: false, x: 0, y: 0, tool: null });
+        }}
+        title="Rock Drainage"
+      >
+          {coloredIcon(DRAINAGE_TYPES.rock.color, <Droplets className="w-3 h-3" />, 'text-black')}
+          <span>Rock</span>
+      </button>
+      <button
+        className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded w-full"
+        onClick={() => {
+          setSelectedDrainageType('ultradrain');
+          onToolChange('drainage', { drainageType: 'ultradrain' });
+          setToolMenu({ open: false, x: 0, y: 0, tool: null });
+        }}
+        title="Ultradrain"
+      >
+          {coloredIcon(DRAINAGE_TYPES.ultradrain.color, <Droplets className="w-3 h-3" />, 'text-white')}
+          <span>Ultradrain</span>
+      </button>
         </div>
       )}
 
@@ -405,18 +461,55 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
           style={{ position: 'fixed', left: toolMenu.x, top: toolMenu.y, zIndex: 70 }}
           className="bg-popover border rounded-md shadow-md p-2 text-sm"
         >
-          <div className="text-xs font-semibold text-muted-foreground mb-2 px-1">Wall Options</div>
-          <button
-            className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded w-full"
-            onClick={() => {
-              onToolChange('wall');
-              setToolMenu({ open: false, x: 0, y: 0, tool: null });
-            }}
-            title="Wall"
-          >
-            <Construction className="w-5 h-5" />
-            <span>Wall</span>
-          </button>
+      <div className="text-xs font-semibold text-muted-foreground mb-2 px-1">Wall Options</div>
+      <button
+        className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded w-full"
+        onClick={() => {
+          setSelectedWallMaterial('timber');
+          onToolChange('wall', { wallMaterial: 'timber' });
+          setToolMenu({ open: false, x: 0, y: 0, tool: null });
+        }}
+        title="Timber Wall"
+      >
+          {coloredIcon(WALL_MATERIALS.timber.color, <Construction className="w-3 h-3" />, 'text-black')}
+          <span>Timber</span>
+      </button>
+      <button
+        className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded w-full"
+        onClick={() => {
+          setSelectedWallMaterial('concrete');
+          onToolChange('wall', { wallMaterial: 'concrete' });
+          setToolMenu({ open: false, x: 0, y: 0, tool: null });
+        }}
+        title="Concrete Wall"
+      >
+          {coloredIcon(WALL_MATERIALS.concrete.color, <Construction className="w-3 h-3" />, 'text-black')}
+          <span>Concrete</span>
+      </button>
+      <button
+        className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded w-full"
+        onClick={() => {
+          setSelectedWallMaterial('concrete_sleeper');
+          onToolChange('wall', { wallMaterial: 'concrete_sleeper' });
+          setToolMenu({ open: false, x: 0, y: 0, tool: null });
+        }}
+        title="Concrete Sleeper Wall"
+      >
+          {coloredIcon(WALL_MATERIALS.concrete_sleeper.color, <Construction className="w-3 h-3" />, 'text-black')}
+          <span>Concrete Sleeper</span>
+      </button>
+      <button
+        className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded w-full"
+        onClick={() => {
+          setSelectedWallMaterial('sandstone');
+          onToolChange('wall', { wallMaterial: 'sandstone' });
+          setToolMenu({ open: false, x: 0, y: 0, tool: null });
+        }}
+        title="Sandstone Wall"
+      >
+          {coloredIcon(WALL_MATERIALS.sandstone.color, <Construction className="w-3 h-3" />, 'text-black')}
+          <span>Sandstone</span>
+      </button>
         </div>
       )}
 

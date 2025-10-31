@@ -10,6 +10,8 @@ interface CompassRotatorProps {
 export const CompassRotator = ({ rotation, onChange, visible }: CompassRotatorProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const compassRef = useRef<HTMLDivElement>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftValue, setDraftValue] = useState<string>('');
 
   useEffect(() => {
     if (!isDragging) return;
@@ -30,10 +32,9 @@ export const CompassRotator = ({ rotation, onChange, visible }: CompassRotatorPr
       // Normalize to 0-360
       if (angle < 0) angle += 360;
 
-      // Round to nearest 1 degree
-      angle = Math.round(angle);
-
-      onChange(angle);
+      // Keep drag snapping at whole degrees for simplicity
+      const snapped = Math.round(angle);
+      onChange(snapped);
     };
 
     const handleMouseUp = () => {
@@ -51,6 +52,26 @@ export const CompassRotator = ({ rotation, onChange, visible }: CompassRotatorPr
 
   const handleReset = () => {
     onChange(0);
+  };
+
+  const beginEdit = () => {
+    setDraftValue(Number.isFinite(rotation) ? String(rotation) : '0');
+    setIsEditing(true);
+  };
+
+  const commitEdit = () => {
+    const parsed = parseFloat(draftValue);
+    if (!isNaN(parsed)) {
+      // Normalize into [0, 360)
+      let normalized = parsed % 360;
+      if (normalized < 0) normalized += 360;
+      onChange(normalized);
+    }
+    setIsEditing(false);
+  };
+
+  const cancelEdit = () => {
+    setIsEditing(false);
   };
 
   if (!visible) return null;
@@ -88,9 +109,31 @@ export const CompassRotator = ({ rotation, onChange, visible }: CompassRotatorPr
 
       {/* Rotation Display and Reset */}
       <div className="flex items-center gap-2 bg-background border border-border rounded-md px-2 py-1 shadow-sm">
-        <span className="text-xs font-medium text-foreground">
-          {rotation}°
-        </span>
+        {isEditing ? (
+          <input
+            type="number"
+            step="0.1"
+            min={0}
+            max={360}
+            autoFocus
+            value={draftValue}
+            onChange={(e) => setDraftValue(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitEdit();
+              if (e.key === 'Escape') cancelEdit();
+            }}
+            className="w-16 text-xs font-medium bg-transparent outline-none focus:ring-0"
+          />
+        ) : (
+          <button
+            onClick={beginEdit}
+            className="text-xs font-medium text-foreground hover:text-primary"
+            title="Click to edit degrees"
+          >
+            {Number(rotation).toFixed(1)}°
+          </button>
+        )}
         <button
           onClick={handleReset}
           className="p-1 hover:bg-accent rounded transition-colors"

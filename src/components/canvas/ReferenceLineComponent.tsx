@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Group, Line, Circle, Label, Tag, Text } from 'react-konva';
 import { Component } from '@/types';
 import { useDesignStore } from '@/store/designStore';
-import { smartSnap } from '@/utils/snap';
+import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
 
 interface Props {
   component: Component;
@@ -23,6 +23,7 @@ export const ReferenceLineComponent: React.FC<Props> = ({
   const components = useDesignStore((s) => s.components);
   const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [isDraggingNode, setIsDraggingNode] = useState(false);
   const points = component.properties.points || [];
   if (points.length < 2) return null;
 
@@ -52,9 +53,9 @@ export const ReferenceLineComponent: React.FC<Props> = ({
   // Calculate line angle for annotation rotation
   const angle = Math.atan2(dy, dx) * (180 / Math.PI);
 
-  // Calculate perpendicular offset (15px above the line)
+  // Calculate perpendicular offset for annotation (varies per object)
   const perpAngle = Math.atan2(dy, dx) + Math.PI / 2; // 90 degrees perpendicular
-  const annotationOffset = 15;
+  const annotationOffset = getAnnotationOffsetPx(component.id, component.position);
   const annotationX = midPoint.x + Math.cos(perpAngle) * annotationOffset;
   const annotationY = midPoint.y + Math.sin(perpAngle) * annotationOffset;
 
@@ -68,8 +69,41 @@ export const ReferenceLineComponent: React.FC<Props> = ({
     }
   };
 
+  // Handle dragging the entire reference line node
+  const handleNodeDragEnd = (e: any) => {
+    setIsDraggingNode(false);
+    const pos = e.target.position();
+
+    // Calculate the offset from the drag (no snapping - free movement)
+    const dx = pos.x;
+    const dy = pos.y;
+
+    // Translate all points by the exact drag offset
+    const newPoints = points.map(p => ({
+      x: p.x + dx,
+      y: p.y + dy
+    }));
+
+    updateComponent(component.id, {
+      properties: {
+        ...component.properties,
+        points: newPoints,
+      }
+    });
+
+    // Reset Group position to 0,0
+    e.target.position({ x: 0, y: 0 });
+  };
+
   return (
-    <Group onClick={onSelect} onTap={onSelect} onContextMenu={handleRightClick}>
+    <Group
+      draggable={!dragIndex}
+      onClick={onSelect}
+      onTap={onSelect}
+      onContextMenu={handleRightClick}
+      onDragStart={() => setIsDraggingNode(true)}
+      onDragEnd={handleNodeDragEnd}
+    >
       {/* Main line */}
       <Line
         points={[start.x, start.y, end.x, end.y]}
@@ -102,14 +136,15 @@ export const ReferenceLineComponent: React.FC<Props> = ({
       )}
 
       {/* Measurement with annotation */}
-      {annotationsVisible && showMeasurement && (
+      {showMeasurement && (
         <Text
-          x={midPoint.x}
-          y={midPoint.y - 20}
-          text={annotation ? `${annotation}: ${measurementMm}` : `${measurementMm}`}
+          x={annotationX}
+          y={annotationY}
+          text={annotation ? `${annotation}: ${measurementMm}mm` : `Measure: ${measurementMm}mm`}
           fontSize={11}
-          fill={component.type === 'quick_measure' ? '#dc2626' : '#6B7280'}
+          fill={style.color}
           align="center"
+          rotation={normalizeLabelAngle(angle)}
           offsetX={annotation ? (annotation.length * 3 + 15) : 15}
           listening={false}
         />
@@ -148,11 +183,11 @@ export const ReferenceLineComponent: React.FC<Props> = ({
             onDragMove={(e) => {
               e.cancelBubble = true;
               const pos = e.target.position();
-              const snapped = smartSnap({ x: pos.x, y: pos.y }, components);
+              // Free movement - no snapping
 
               // Update the start point
               const newPoints = [...points];
-              newPoints[0] = { x: snapped.x, y: snapped.y };
+              newPoints[0] = { x: pos.x, y: pos.y };
 
               updateComponent(component.id, {
                 properties: {
@@ -183,11 +218,11 @@ export const ReferenceLineComponent: React.FC<Props> = ({
             onDragMove={(e) => {
               e.cancelBubble = true;
               const pos = e.target.position();
-              const snapped = smartSnap({ x: pos.x, y: pos.y }, components);
+              // Free movement - no snapping
 
               // Update the end point
               const newPoints = [...points];
-              newPoints[1] = { x: snapped.x, y: snapped.y };
+              newPoints[1] = { x: pos.x, y: pos.y };
 
               updateComponent(component.id, {
                 properties: {

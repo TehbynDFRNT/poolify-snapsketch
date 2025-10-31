@@ -45,6 +45,8 @@ export const DesignCanvas = () => {
   const [selectedDecorationType, setSelectedDecorationType] = useState<'bush' | 'umbrella' | 'waterfeature' | 'deckchairs'>('bush');
   const [selectedFenceType, setSelectedFenceType] = useState<'glass' | 'metal'>('glass');
   const [selectedAreaType, setSelectedAreaType] = useState<'pavers' | 'concrete' | 'grass'>('pavers');
+  const [selectedDrainageType, setSelectedDrainageType] = useState<'rock' | 'ultradrain'>('rock');
+  const [selectedWallMaterial, setSelectedWallMaterial] = useState<'timber' | 'concrete' | 'concrete_sleeper' | 'sandstone'>('timber');
 
   const handleToolChange = (
     tool: ToolType,
@@ -52,6 +54,8 @@ export const DesignCanvas = () => {
       decorationType?: 'bush' | 'umbrella' | 'waterfeature' | 'deckchairs';
       fenceType?: 'glass' | 'metal';
       areaType?: 'pavers' | 'concrete' | 'grass';
+      drainageType?: 'rock' | 'ultradrain';
+      wallMaterial?: 'timber' | 'concrete' | 'concrete_sleeper' | 'sandstone';
     }
   ) => {
     console.log('DesignCanvas: Tool changing from', activeTool, 'to', tool);
@@ -64,6 +68,12 @@ export const DesignCanvas = () => {
     }
     if (options?.areaType) {
       setSelectedAreaType(options.areaType);
+    }
+    if (options?.drainageType) {
+      setSelectedDrainageType(options.drainageType);
+    }
+    if (options?.wallMaterial) {
+      setSelectedWallMaterial(options.wallMaterial);
     }
   };
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -130,13 +140,10 @@ export const DesignCanvas = () => {
         return;
       }
 
-      // Check if boundary already exists
-      const hasBoundary = components.some(c => c.type === 'boundary');
-
       // Tool shortcuts
       if (e.key === 'v' || e.key === 'V') setActiveTool('select');
       if (e.key === 'h' || e.key === 'H') setActiveTool('hand');
-      if ((e.key === 'b' || e.key === 'B') && !hasBoundary) setActiveTool('boundary');
+      if (e.key === 'b' || e.key === 'B') setActiveTool('boundary');
       if (e.key === 'p' || e.key === 'P') setActiveTool('pool');
       if (e.key === 'a' || e.key === 'A') setActiveTool('paver');
       if (e.key === 'd' || e.key === 'D') setActiveTool('drainage');
@@ -551,6 +558,8 @@ export const DesignCanvas = () => {
               selectedDecorationType={selectedDecorationType}
               selectedFenceType={selectedFenceType}
               selectedAreaType={selectedAreaType}
+              selectedDrainageType={selectedDrainageType}
+              selectedWallMaterial={selectedWallMaterial}
               onZoomChange={handleZoomChange}
               onDrawingStateChange={handleDrawingStateChange}
               onToolChange={handleToolChange}

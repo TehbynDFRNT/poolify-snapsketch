@@ -7,6 +7,12 @@ export const snapToGrid = (value: number): number => {
   return Math.round(value / SNAP_CONFIG.gridSnap) * SNAP_CONFIG.gridSnap;
 };
 
+export const snapToStep = (value: number, step: number): number => {
+  if (!SNAP_CONFIG.enabled) return value;
+  const s = Math.max(0.0001, step); // allow sub-unit steps (e.g., 0.5)
+  return Math.round(value / s) * s;
+};
+
 export const snapPoint = (point: { x: number; y: number }): { x: number; y: number } => {
   return {
     x: snapToGrid(point.x),
@@ -206,4 +212,84 @@ export const smartSnap = (
     y: snapToGrid(point.y),
     snappedTo: null,
   };
+};
+
+// Measurement-specific smart snap: same nearby-point behavior, but a finer
+// fallback grid step for higher precision measuring.
+export const smartSnapMeasure = (
+  point: { x: number; y: number },
+  components: Component[],
+  options?: { tolerance?: number; gridStep?: number }
+): { x: number; y: number; snappedTo: string | null } => {
+  const tolerance = options?.tolerance ?? 15;
+
+  let closestPoint: { x: number; y: number } | null = null;
+  let minDistance = tolerance;
+  let snappedTo: string | null = null;
+
+  components.forEach(component => {
+    const pointsToCheck: Array<{ x: number; y: number }> = [];
+
+    if (component.properties.points) {
+      pointsToCheck.push(...component.properties.points);
+    }
+    if (component.properties.boundary) {
+      pointsToCheck.push(...component.properties.boundary);
+    }
+
+    if (component.type === 'pool' && component.properties.pool) {
+      const pool = component.properties.pool as any;
+      const scale = 0.1;
+      const outline = pool.outline || [];
+      outline.forEach((p: { x: number; y: number }) => {
+        const scaledX = p.x * scale;
+        const scaledY = p.y * scale;
+        const rotation = component.rotation || 0;
+        const cos = Math.cos((rotation * Math.PI) / 180);
+        const sin = Math.sin((rotation * Math.PI) / 180);
+        const rotatedX = scaledX * cos - scaledY * sin;
+        const rotatedY = scaledX * sin + scaledY * cos;
+        pointsToCheck.push({
+          x: component.position.x + rotatedX,
+          y: component.position.y + rotatedY,
+        });
+      });
+    }
+
+    if (component.type !== 'pool' && !component.properties.points && !component.properties.boundary && component.dimensions) {
+      const { width, height } = component.dimensions;
+      const rotation = component.rotation || 0;
+      const cos = Math.cos((rotation * Math.PI) / 180);
+      const sin = Math.sin((rotation * Math.PI) / 180);
+      const corners = [
+        { x: 0, y: 0 },
+        { x: width, y: 0 },
+        { x: width, y: height },
+        { x: 0, y: height },
+      ];
+      corners.forEach(corner => {
+        const rotatedX = corner.x * cos - corner.y * sin;
+        const rotatedY = corner.x * sin + corner.y * cos;
+        pointsToCheck.push({
+          x: component.position.x + rotatedX,
+          y: component.position.y + rotatedY,
+        });
+      });
+    }
+
+    pointsToCheck.forEach(p => {
+      const distance = Math.hypot(point.x - p.x, point.y - p.y);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestPoint = p;
+        snappedTo = component.type;
+      }
+    });
+  });
+
+  if (closestPoint) {
+    return { ...closestPoint, snappedTo };
+  }
+  // No fallback grid snap — return free point
+  return { x: point.x, y: point.y, snappedTo: null };
 };

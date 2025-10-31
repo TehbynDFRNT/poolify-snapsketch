@@ -8,6 +8,7 @@ import { useDesignStore } from '@/store/designStore';
 import { snapPoolToPaverGrid } from '@/utils/snap';
 import { snapRectPx } from '@/utils/canvasSnap';
 import { TILE_COLORS, TILE_GAP } from '@/constants/tileConfig';
+import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
 
 interface PoolComponentProps {
   component: Component;
@@ -955,7 +956,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
 
   // Render measurements around the exterior edge of the coping
   const renderCopingMeasurements = () => {
-    if (!annotationsVisible || !isSelected || !showCoping || !copingCalc) return null;
+    if (!(annotationsVisible || isSelected) || !showCoping || !copingCalc) return null;
 
     const allTiles: Tile[] = ([] as Tile[])
       .concat(sideTiles.top, sideTiles.bottom, sideTiles.left, sideTiles.right);
@@ -969,79 +970,101 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     const maxY = Math.max(...allTiles.map(t => t.y + t.height));
 
     const measurements: JSX.Element[] = [];
-    const offset = 30; // px offset from edge for measurement text
+    // Increase offset for coping labels to sit further from edge
+    const extra = 12;
+    const offset = getAnnotationOffsetPx(component.id, component.position) + extra;
 
-    // Top edge measurement
-    const topWidthMm = Math.round(maxX - minX);
-    const topMidX = ((minX + maxX) / 2) * scale;
-    const topY = minY * scale;
-    measurements.push(
-      <Text
-        key="measure-top"
-        x={topMidX}
-        y={topY - offset}
-        text={`${topWidthMm}`}
-        fontSize={11}
-        fill="#6B7280"
-        align="center"
-        offsetX={20}
-        listening={false}
-      />
-    );
+    // Top edge (direction -> +X, perp -> -Y)
+    {
+      const topWidthMm = Math.round(maxX - minX);
+      const midX = ((minX + maxX) / 2) * scale;
+      const y = minY * scale;
+      const angle = 0;
+      const perpX = 0, perpY = -1;
+      measurements.push(
+        <Text
+          key="measure-top"
+          x={midX + perpX * offset}
+          y={y + perpY * offset}
+          text={`Coping: ${topWidthMm}mm`}
+          fontSize={11}
+          fill="#3B82F6"
+          align="center"
+          rotation={normalizeLabelAngle(angle)}
+          offsetX={20}
+          listening={false}
+        />
+      );
+    }
 
-    // Bottom edge measurement
-    const bottomWidthMm = Math.round(maxX - minX);
-    const bottomMidX = ((minX + maxX) / 2) * scale;
-    const bottomY = maxY * scale;
-    measurements.push(
-      <Text
-        key="measure-bottom"
-        x={bottomMidX}
-        y={bottomY + offset}
-        text={`${bottomWidthMm}`}
-        fontSize={11}
-        fill="#6B7280"
-        align="center"
-        offsetX={20}
-        listening={false}
-      />
-    );
+    // Bottom edge (direction -> +X, perp -> +Y)
+    {
+      const bottomWidthMm = Math.round(maxX - minX);
+      const midX = ((minX + maxX) / 2) * scale;
+      const y = maxY * scale;
+      const angle = 0;
+      const perpX = 0, perpY = 1;
+      measurements.push(
+        <Text
+          key="measure-bottom"
+          x={midX + perpX * offset}
+          y={y + perpY * offset}
+          text={`Coping: ${bottomWidthMm}mm`}
+          fontSize={11}
+          fill="#3B82F6"
+          align="center"
+          rotation={normalizeLabelAngle(angle)}
+          offsetX={20}
+          listening={false}
+        />
+      );
+    }
 
-    // Left edge measurement
-    const leftHeightMm = Math.round(maxY - minY);
-    const leftX = minX * scale;
-    const leftMidY = ((minY + maxY) / 2) * scale;
-    measurements.push(
-      <Text
-        key="measure-left"
-        x={leftX - offset}
-        y={leftMidY}
-        text={`${leftHeightMm}`}
-        fontSize={11}
-        fill="#6B7280"
-        align="center"
-        offsetX={20}
-        listening={false}
-      />
-    );
+    // Left edge (direction -> +Y, perp -> -X)
+    {
+      const leftHeightMm = Math.round(maxY - minY);
+      const x = minX * scale;
+      const midY = ((minY + maxY) / 2) * scale;
+      const angle = 90;
+      const perpX = -1, perpY = 0;
+      measurements.push(
+        <Text
+          key="measure-left"
+          x={x + perpX * offset}
+          y={midY + perpY * offset}
+          text={`Coping: ${leftHeightMm}mm`}
+          fontSize={11}
+          fill="#3B82F6"
+          align="center"
+          rotation={normalizeLabelAngle(angle)}
+          offsetX={20}
+          listening={false}
+        />
+      );
+    }
 
-    // Right edge measurement
-    const rightHeightMm = Math.round(maxY - minY);
-    const rightX = maxX * scale;
-    const rightMidY = ((minY + maxY) / 2) * scale;
-    measurements.push(
-      <Text
-        key="measure-right"
-        x={rightX + offset}
-        y={rightMidY}
-        text={`${rightHeightMm}`}
-        fontSize={11}
-        fill="#6B7280"
-        align="center"
-        offsetX={20}
-        listening={false}
-      />
-    );
+    // Right edge (direction -> +Y, perp -> +X)
+    {
+      const rightHeightMm = Math.round(maxY - minY);
+      const x = maxX * scale;
+      const midY = ((minY + maxY) / 2) * scale;
+      const angle = 90;
+      const perpX = 1, perpY = 0;
+      measurements.push(
+        <Text
+          key="measure-right"
+          x={x + perpX * offset}
+          y={midY + perpY * offset}
+          text={`Coping: ${rightHeightMm}mm`}
+          fontSize={11}
+          fill="#3B82F6"
+          align="center"
+          rotation={normalizeLabelAngle(angle)}
+          offsetX={20}
+          listening={false}
+        />
+      );
+    }
 
     return <>{measurements}</>;
   };

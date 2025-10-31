@@ -39,6 +39,8 @@ export const Canvas = ({
   selectedDecorationType = 'bush',
   selectedFenceType = 'glass',
   selectedAreaType = 'pavers',
+  selectedDrainageType = 'rock',
+  selectedWallMaterial = 'timber',
   onZoomChange,
   onZoomLockedChange,
   onDrawingStateChange,
@@ -48,6 +50,8 @@ export const Canvas = ({
   selectedDecorationType?: 'bush' | 'umbrella' | 'waterfeature' | 'deckchairs';
   selectedFenceType?: 'glass' | 'metal';
   selectedAreaType?: 'pavers' | 'concrete' | 'grass';
+  selectedDrainageType?: 'rock' | 'ultradrain';
+  selectedWallMaterial?: 'timber' | 'concrete' | 'concrete_sleeper' | 'sandstone';
   onZoomChange?: (zoom: number, locked: boolean, handlers: {
     zoomIn: () => void;
     zoomOut: () => void;
@@ -225,15 +229,14 @@ export const Canvas = ({
       }
     }
     
-    // Update measurement end point for measuring tools
+    // Update measurement end point for measuring tools (no snapping)
     if (activeTool === 'quick_measure' && measureStart) {
       const pos = e.target.getStage().getPointerPosition();
       const canvasX = (pos.x - pan.x) / zoom;
       const canvasY = (pos.y - pan.y) / zoom;
       
-      // Smart snap to nearby vertices, then allow axis lock with Shift
-      let snappedPoint = smartSnap({ x: canvasX, y: canvasY }, components);
-      let endPoint = { x: snappedPoint.x, y: snappedPoint.y };
+      // Free measurement end point; only apply axis lock with Shift
+      let endPoint = { x: canvasX, y: canvasY };
       
       // Apply shift key axis locking
       if (shiftPressed) {
@@ -363,10 +366,9 @@ export const Canvas = ({
     // Always handle measurement tools regardless of click target (allow over shapes)
     if (activeTool === 'quick_measure') {
       if (!isMeasuring) {
-        // Start measuring (smart snap start point)
-        const startSmart = smartSnap({ x: canvasX, y: canvasY }, components);
-        setMeasureStart({ x: startSmart.x, y: startSmart.y });
-        setMeasureEnd({ x: startSmart.x, y: startSmart.y });
+        // Start measuring (no snap)
+        setMeasureStart({ x: canvasX, y: canvasY });
+        setMeasureEnd({ x: canvasX, y: canvasY });
         setIsMeasuring(true);
       } else {
         // Finish measuring
@@ -584,9 +586,9 @@ export const Canvas = ({
         },
       });
     } else if (activeTool === 'boundary' || activeTool === 'house') {
-      // Both boundary and house must be closed
-      if (!closed) {
-        toast.error(`${activeTool === 'house' ? 'House' : 'Boundary'} must be closed - click near the starting point to finish`);
+      // House must be closed; boundary can be open polyline or closed
+      if (activeTool === 'house' && !closed) {
+        toast.error('House must be closed - click near the starting point to finish');
         return;
       }
 
@@ -626,7 +628,7 @@ export const Canvas = ({
           rotation: 0,
           dimensions: { width: 0, height: 0 },
           properties: {
-            wallMaterial: 'timber',
+            wallMaterial: selectedWallMaterial,
             ...baseProps,
           },
         });
@@ -649,7 +651,7 @@ export const Canvas = ({
           rotation: 0,
           dimensions: { width: 0, height: 0 },
           properties: {
-            drainageType: 'rock',
+            drainageType: selectedDrainageType,
             length: 0,
             ...baseProps,
           },
@@ -885,7 +887,7 @@ export const Canvas = ({
           rotation: 0,
           dimensions: { width: 1000, height: 100 },
           properties: {
-            drainageType: 'rock',
+            drainageType: selectedDrainageType,
             length: 1000,
           },
         });
@@ -913,7 +915,7 @@ export const Canvas = ({
           rotation: 0,
           dimensions: { width: 100, height: 15 },
           properties: {
-            wallMaterial: 'timber',
+            wallMaterial: selectedWallMaterial,
           },
         });
         onToolChange?.('select');
@@ -944,7 +946,7 @@ export const Canvas = ({
           rotation: 0,
           dimensions: { width: 0, height: 0 },
           properties: {
-            heightValue: 1200, // Default 1200mm (1.2m)
+            heightValue: 100, // Default 100mm
             heightAnnotation: '',
           },
         });
@@ -1195,11 +1197,12 @@ export const Canvas = ({
           const dx = measureEnd.x - measureStart.x;
           const dy = measureEnd.y - measureStart.y;
           const distance = Math.sqrt(dx * dx + dy * dy);
-          const measurementMeters = (distance / 100).toFixed(1);
+          // Show millimeters for finer feedback (1 unit = 10mm)
+          const measurementMm = Math.round(distance * 10);
           return (
             <Label x={mx} y={my - 20} listening={false}>
               <Tag fill="white" stroke={color} strokeWidth={1} cornerRadius={3} pointerDirection="down" pointerWidth={6} pointerHeight={6} />
-              <Text text={`${measurementMeters}m`} fontSize={14} fontStyle="bold" fill={color} padding={4} align="center" />
+              <Text text={`${measurementMm}mm`} fontSize={14} fontStyle="bold" fill={color} padding={4} align="center" />
             </Label>
           );
         })()}
@@ -1267,6 +1270,8 @@ export const Canvas = ({
             coordinates={currentProject?.coordinates}
             visible={satelliteVisible}
             rotation={satelliteRotation}
+            stageZoom={zoom}
+            viewportWidthPx={dimensions.width}
           />
 
           {renderGrid()}
@@ -1584,7 +1589,7 @@ export const Canvas = ({
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDragEnd={(pos) => {
-                        const snapped = snapToGrid(pos.x, pos.y);
+                        const snapped = { x: snapToGrid(pos.x), y: snapToGrid(pos.y) };
                         updateComponent(component.id, { position: snapped });
                       }}
                     />

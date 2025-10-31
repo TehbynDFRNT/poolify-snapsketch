@@ -3,6 +3,7 @@ import { Component } from '@/types';
 import { useEffect, useRef, useState } from 'react';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
+import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
 
 interface BoundaryComponentProps {
   component: Component;
@@ -136,7 +137,7 @@ export const BoundaryComponent = ({
 
   // Calculate segment measurements using local coordinates (only when selected)
   const renderMeasurements = () => {
-    if (!annotationsVisible || !isSelected) return null;
+    if (!(annotationsVisible || isSelected)) return null;
     const measurements: JSX.Element[] = [];
     const n = localPts.length;
 
@@ -151,17 +152,20 @@ export const BoundaryComponent = ({
       const lineLength = Math.sqrt(dx * dx + dy * dy);
       const perpX = -dy / lineLength; // Perpendicular direction
       const perpY = dx / lineLength;
-      const offset = 20; // Distance from line
+      const offset = getAnnotationOffsetPx(component.id, component.position);
 
+      const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+      const rot = getAnnotationOffsetPx ? undefined : undefined
       measurements.push(
         <Text
           key={`measurement-${key}`}
           x={midX + perpX * offset}
           y={midY + perpY * offset}
-          text={`${lengthInMM}`}
+          text={`Boundary: ${lengthInMM}mm`}
           fontSize={11}
-          fill="#6B7280"
+          fill="#1e3a8a"
           align="center"
+          rotation={normalizeLabelAngle(angleDeg)}
           offsetX={20}
           listening={false}
         />
@@ -218,18 +222,20 @@ export const BoundaryComponent = ({
           const lineLength = Math.sqrt(dx * dx + dy * dy);
           const perpX = -dy / lineLength;
           const perpY = dx / lineLength;
-          const offset = 20;
+          const offset = getAnnotationOffsetPx(component.id, component.position);
 
+          const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
           return (
             <Group key={`ghost-${k}`}>
               <Line points={[a.x, a.y, b.x, b.y]} stroke={color} strokeWidth={3} dash={[8, 6]} opacity={0.8} />
               <Text
                 x={midX + perpX * offset}
                 y={midY + perpY * offset}
-                text={`${mm}`}
+                text={`Boundary: ${mm}mm`}
                 fontSize={11}
-                fill="#6B7280"
+                fill="#1e3a8a"
                 align="center"
+                rotation={normalizeLabelAngle(angleDeg)}
                 offsetX={20}
                 listening={false}
               />

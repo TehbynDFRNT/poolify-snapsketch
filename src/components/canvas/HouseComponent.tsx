@@ -3,6 +3,7 @@ import { Component } from '@/types';
 import { useEffect, useRef, useState } from 'react';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
+import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
 
 interface HouseComponentProps {
   component: Component;
@@ -76,7 +77,7 @@ export const HouseComponent = ({
 
   // Measurements (local, only when selected)
   const renderMeasurements = () => {
-    if (!annotationsVisible || !isSelected) return null;
+    if (!(annotationsVisible || isSelected)) return null;
     const measurements: JSX.Element[] = [];
     const n = localPts.length;
     const add = (a: {x:number;y:number}, b:{x:number;y:number}, key:string) => {
@@ -88,7 +89,7 @@ export const HouseComponent = ({
       const lineLength = Math.sqrt(dx * dx + dy * dy);
       const perpX = -dy / lineLength;
       const perpY = dx / lineLength;
-      const offset = 20;
+      const offset = getAnnotationOffsetPx(component.id, component.position);
 
       // Skip measurement if this segment is being dragged
       const isBeingDragged = dragIndex != null && (
@@ -97,15 +98,17 @@ export const HouseComponent = ({
       );
       if (isBeingDragged) return;
 
+      const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
       measurements.push(
         <Text
           key={`m-${key}`}
           x={midX + perpX * offset}
           y={midY + perpY * offset}
-          text={`${mm}`}
+          text={`House: ${mm}mm`}
           fontSize={11}
-          fill="#6B7280"
+          fill="#000000"
           align="center"
+          rotation={normalizeLabelAngle(angleDeg)}
           offsetX={20}
           listening={false}
         />
@@ -145,18 +148,20 @@ export const HouseComponent = ({
           const lineLength = Math.sqrt(dx * dx + dy * dy);
           const perpX = -dy / lineLength;
           const perpY = dx / lineLength;
-          const offset = 20;
+          const offset = getAnnotationOffsetPx(component.id, component.position);
 
+          const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
           return (
             <Group key={`ghost-${k}`}>
               <Line points={[a.x, a.y, b.x, b.y]} stroke={color} strokeWidth={3} dash={[8, 6]} opacity={0.8} />
               <Text
                 x={midX + perpX * offset}
                 y={midY + perpY * offset}
-                text={`${mm}`}
+                text={`House: ${mm}mm`}
                 fontSize={11}
-                fill="#6B7280"
+                fill="#000000"
                 align="center"
+                rotation={normalizeLabelAngle(angleDeg)}
                 offsetX={20}
                 listening={false}
               />

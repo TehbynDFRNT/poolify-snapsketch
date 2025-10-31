@@ -435,14 +435,16 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
                 <Input
                   id="heightValue"
                   type="number"
-                  placeholder="1200"
-                  value={component.properties.heightValue || 1200}
+                  placeholder="100"
+                  value={component.properties.heightValue ?? ''}
                   onChange={(e) => {
-                    const value = parseInt(e.target.value) || 1200;
+                    const txt = e.target.value;
+                    const value = txt === '' ? undefined : Number(txt);
+                    if (txt !== '' && Number.isNaN(value)) return; // ignore invalid
                     updateComponent(component.id, {
                       properties: {
                         ...component.properties,
-                        heightValue: value
+                        heightValue: value as any,
                       }
                     });
                   }}

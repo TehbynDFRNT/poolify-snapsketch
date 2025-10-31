@@ -4,6 +4,7 @@ import { WALL_MATERIALS } from '@/constants/components';
 import { useState, useRef, useEffect } from 'react';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
+import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
 
 interface WallComponentProps {
   component: Component;
@@ -165,7 +166,7 @@ export const WallComponent = ({
                 const lineLength = len;
                 const perpX = -dy / lineLength;
                 const perpY = dx / lineLength;
-                const offset = 20;
+                const offset = getAnnotationOffsetPx(component.id, component.position);
 
                 const midX = (a.x + b.x) / 2;
                 const midY = (a.y + b.y) / 2;
@@ -177,10 +178,11 @@ export const WallComponent = ({
                       key={`glbl-${k}`}
                       x={midX + perpX * offset}
                       y={midY + perpY * offset}
-                      text={`${Math.round(len * 10)}`}
+                      text={`Wall: ${Math.round(len * 10)}mm`}
                       fontSize={11}
-                      fill="#6B7280"
+                      fill={color}
                       align="center"
+                      rotation={normalizeLabelAngle((Math.atan2(dy, dx) * 180) / Math.PI)}
                       offsetX={20}
                       listening={false}
                     />
@@ -257,8 +259,8 @@ export const WallComponent = ({
           />
         ))}
 
-        {/* Segment measurements (only when selected) */}
-        {annotationsVisible && isSelected && localPts.map((pt, idx) => {
+        {/* Segment measurements */}
+        {(annotationsVisible || isSelected) && localPts.map((pt, idx) => {
           if (idx === 0) return null;
           const a = localPts[idx - 1];
           const b = localPts[idx];
@@ -270,7 +272,7 @@ export const WallComponent = ({
           const lineLength = Math.sqrt(dx * dx + dy * dy);
           const perpX = -dy / lineLength;
           const perpY = dx / lineLength;
-          const offset = 20;
+          const offset = getAnnotationOffsetPx(component.id, component.position);
 
           const midX = (a.x + b.x) / 2;
           const midY = (a.y + b.y) / 2;
@@ -278,23 +280,25 @@ export const WallComponent = ({
           // Skip measurement if this segment is being dragged
           if (dragIndex === idx - 1 || dragIndex === idx) return null;
 
+          const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
           return (
             <Text
               key={`measurement-${idx}`}
               x={midX + perpX * offset}
               y={midY + perpY * offset}
-              text={`${lengthInMM}`}
+              text={`Wall: ${lengthInMM}mm`}
               fontSize={11}
-              fill="#6B7280"
+              fill={color}
               align="center"
+              rotation={normalizeLabelAngle(angleDeg)}
               offsetX={20}
               listening={false}
             />
           );
         })}
 
-        {/* Height annotations at each node (only when selected) */}
-        {annotationsVisible && isSelected && localPts.map((pt, idx) => {
+        {/* Height annotations at each node */}
+        {(annotationsVisible || isSelected) && localPts.map((pt, idx) => {
           const nodeHeights = component.properties.nodeHeights || {};
           const height = nodeHeights[idx];
           if (height == null) return null;

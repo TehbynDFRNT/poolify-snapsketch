@@ -18,7 +18,9 @@ export const HeightComponent = ({
   onDragEnd,
 }: HeightComponentProps) => {
   const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
-  const heightValue = component.properties.heightValue || 1000; // Default 1000mm (1m)
+  // Use stored value if present; otherwise render default 100mm
+  const rawValue = component.properties.heightValue;
+  const heightValue = typeof rawValue === 'number' && !isNaN(rawValue) ? rawValue : 100; // Default 100mm
   const annotation = component.properties.heightAnnotation || '';
 
   // Convert height from mm to canvas pixels (1 unit = 10mm, same as grid normalization)
@@ -31,7 +33,7 @@ export const HeightComponent = ({
   const lineWidth = 2;
 
   // Display height in millimeters (mm implied)
-  const heightDisplay = `${heightValue}`;
+  const heightDisplay = `${heightValue}mm`;
 
   // Calculate text width for clickbox (approximate) - "annotation:heightmm" or just "heightmm" format
   const fullText = annotation ? `${annotation}:${heightDisplay}` : heightDisplay;
@@ -82,8 +84,8 @@ export const HeightComponent = ({
         lineCap="round"
       />
 
-      {/* Height measurement text above top cap - left aligned */}
-      {annotationsVisible && (
+      {/* Height measurement text - always visible (measure tool) */}
+      {true && (
         <Text
           x={0}
           y={-heightPx - 18}
