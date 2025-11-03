@@ -402,6 +402,13 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     };
 
     const produced: MMTile[] = [];
+    // Pool interior (non-tilable) in stage units
+    const poolStageRect: StageRect = {
+      x: 0,
+      y: 0,
+      w: poolData.length * scale,
+      h: poolData.width * scale,
+    };
 
     (['top','bottom','left','right'] as Side[]).forEach(side => {
       const seeds = getOutermostRowTiles(side);
@@ -434,6 +441,8 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
 
           // Outside the polygon? stop for this column
           if (!rectIntersectsPolygon(stageRect, outer)) break;
+          // Never place tiles inside pool interior
+          if (stageOverlaps(stageRect, poolStageRect)) { s++; continue; }
 
           // Skip overlaps with base/user or already-added
           if (!overlapsExistingOrAdded(stageRect)) {
@@ -453,6 +462,98 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
         }
       });
     });
+
+    // Corner infill: scan aligned grids in both orientations to catch triangular gaps near corners
+    const bx = outer.map(p => p.x), by = outer.map(p => p.y);
+    const minXpx = Math.min(...bx), maxXpx = Math.max(...bx);
+    const minYpx = Math.min(...by), maxYpx = Math.max(...by);
+    const minXmm = minXpx / scale, maxXmm = maxXpx / scale;
+    const minYmm = minYpx / scale, maxYmm = maxYpx / scale;
+
+    const sampleH = baseTilesMM.top[0] || baseTilesMM.bottom[0] || userTilesMM.find(t => t.side === 'top' || t.side === 'bottom');
+    const sampleV = baseTilesMM.left[0] || baseTilesMM.right[0] || userTilesMM.find(t => t.side === 'left' || t.side === 'right');
+    const hW = sampleH?.width || 600; // fallback reasonable length
+    const hH = sampleH?.height || depthMm.horizontal;
+    const vW = sampleV?.width || depthMm.vertical;
+    const vH = sampleV?.height || 600; // fallback reasonable length
+    const hRefX = sampleH?.x || 0;
+    const hRefY = sampleH?.y || 0;
+    const vRefX = sampleV?.x || 0;
+    const vRefY = sampleV?.y || 0;
+
+    const alignStart = (min: number, ref: number, step: number) => {
+      if (step <= 0) return min;
+      const k = Math.floor((min - ref) / step) - 1;
+      return ref + k * step;
+    };
+
+    const tryAdd = (xmm: number, ymm: number, w: number, h: number, side: Side) => {
+      const sr: StageRect = {
+        x: roundHalf(xmm * scale),
+        y: roundHalf(ymm * scale),
+        w: Math.max(1, roundHalf(w * scale)),
+        h: Math.max(1, roundHalf(h * scale)),
+      };
+      if (!rectIntersectsPolygon(sr, outer)) return;
+      // Exclude pool interior
+      if (stageOverlaps(sr, poolStageRect)) return;
+      if (overlapsExistingOrAdded(sr)) return;
+      addedStage.push(sr);
+      produced.push({
+        x: xmm,
+        y: ymm,
+        width: w,
+        height: h,
+        isPartial: !rectFullyInsidePolygon(sr, outer),
+        side,
+      });
+    };
+
+    // Corner-anchored infill using rectangular step (tileWidth x tileHeight) to align grout
+    const grout = TILE_GAP.size || 0;
+    const tileW = (sampleH?.width || sampleV?.width || hW || vW || 400);
+    const tileH = (sampleH?.height || sampleV?.height || hH || vH || 400);
+    const stepX = tileW + grout;       // spacing along X
+    const stepY = tileH + grout;       // spacing along Y
+
+    const firstAtLeast = (th: number, ref: number, step: number) => ref + Math.ceil((th - ref) / step) * step;
+    const lastAtMost   = (th: number, ref: number, step: number) => ref + Math.floor((th - ref) / step) * step;
+
+    if (stepX > 0 && stepY > 0) {
+      // Anchor to pool edges + grout so the first outboard gridline touches the grout band
+      const rightAnchorX = poolData.length + grout;  // first gridline to the right of pool
+      const leftAnchorX  = -stepX;                   // first gridline to the left of pool
+      const topAnchorY   = -stepY;                   // first gridline above pool
+      const botAnchorY   = poolData.width + grout;   // first gridline below pool
+
+      // Top-Right corner: x → +, y → -
+      for (let y = topAnchorY; y >= minYmm - stepY; y -= stepY) {
+        for (let x = rightAnchorX; x <= maxXmm + stepX; x += stepX) {
+          tryAdd(x, y, tileW, tileH, 'top');
+        }
+      }
+
+      // Top-Left corner: x → -, y → -
+      for (let y = topAnchorY; y >= minYmm - stepY; y -= stepY) {
+        for (let x = leftAnchorX; x >= minXmm - stepX; x -= stepX) {
+          tryAdd(x, y, tileW, tileH, 'top');
+        }
+      }
+
+      // Bottom-Right corner: x → +, y → +
+      for (let y = botAnchorY; y <= maxYmm + stepY; y += stepY) {
+        for (let x = rightAnchorX; x <= maxXmm + stepX; x += stepX) {
+          tryAdd(x, y, tileW, tileH, 'top');
+        }
+      }
+
+      // Bottom-Left corner: x → -, y → +
+      for (let y = botAnchorY; y <= maxYmm + stepY; y += stepY) {
+        for (let x = leftAnchorX; x >= minXmm - stepX; x -= stepX) {
+          tryAdd(x, y, tileW, tileH, 'top');
+        }
+      }
+    }
 
     return produced;
     // eslint-disable-next-line react-hooks/exhaustive-deps
