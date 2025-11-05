@@ -1137,7 +1137,6 @@ export const Canvas = ({
       // boundary/house/paving_area default line
       content = (
         <Line
-          key={key}
           points={[start.x, start.y, end.x, end.y]}
           stroke={color}
           strokeWidth={tool === 'boundary' ? 4 : 2}
@@ -1148,8 +1147,9 @@ export const Canvas = ({
       );
     }
 
+    const wrapperKey = key || `seg-${start.x}-${start.y}-${end.x}-${end.y}-${tool}`;
     return (
-      <>
+      <Group key={wrapperKey} listening={false}>
         {content}
         {length > 10 && (
           <Label x={mid.x} y={mid.y - 20} listening={false}>
@@ -1157,7 +1157,7 @@ export const Canvas = ({
             <Text text={label} fontSize={14} fontStyle="bold" fill={labelColor} padding={4} align="center" />
           </Label>
         )}
-      </>
+      </Group>
     );
   };
 

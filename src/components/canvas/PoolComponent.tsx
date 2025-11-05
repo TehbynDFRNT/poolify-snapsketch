@@ -279,6 +279,77 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     });
   };
 
+  // --- Polygon clipping (Sutherland–Hodgman) to fit coping boundary within project boundary ---
+  const polygonArea2 = (poly: Pt[]) => poly.reduce((a, p, i) => {
+    const q = poly[(i + 1) % poly.length];
+    return a + (p.x * q.y - q.x * p.y);
+  }, 0);
+
+  const intersectionPoint = (s: Pt, e: Pt, a: Pt, b: Pt): Pt => {
+    const A1 = e.y - s.y;
+    const B1 = s.x - e.x;
+    const C1 = A1 * s.x + B1 * s.y;
+    const A2 = b.y - a.y;
+    const B2 = a.x - b.x;
+    const C2 = A2 * a.x + B2 * a.y;
+    const det = A1 * B2 - A2 * B1 || 1e-12;
+    return { x: (B2 * C1 - B1 * C2) / det, y: (A1 * C2 - A2 * C1) / det };
+  };
+
+  const clipPolygon = (subject: Pt[], clip: Pt[]): Pt[] => {
+    if (!clip || clip.length < 3 || !subject || subject.length < 3) return subject;
+    // Determine clip orientation; inside is to the left if CCW, to the right if CW
+    const clipCCW = polygonArea2(clip) > 0; // positive area => CCW
+    let output = subject.slice();
+    for (let i = 0; i < clip.length; i++) {
+      const A = clip[i];
+      const B = clip[(i + 1) % clip.length];
+      const edge = (p: Pt) => (B.x - A.x) * (p.y - A.y) - (B.y - A.y) * (p.x - A.x);
+      const inside = (p: Pt) => clipCCW ? edge(p) >= 0 : edge(p) <= 0;
+      const input = output.slice();
+      output = [];
+      if (input.length === 0) break;
+      for (let j = 0; j < input.length; j++) {
+        const S = input[j];
+        const E = input[(j + 1) % input.length];
+        const Ein = inside(E);
+        const Sin = inside(S);
+        if (Ein) {
+          if (!Sin) output.push(intersectionPoint(S, E, A, B));
+          output.push(E);
+        } else if (Sin) {
+          output.push(intersectionPoint(S, E, A, B));
+        }
+      }
+    }
+    // Remove near-duplicate points
+    const dedup: Pt[] = [];
+    const eps = 1e-6;
+    for (const p of output) {
+      const last = dedup[dedup.length - 1];
+      if (!last || Math.hypot(p.x - last.x, p.y - last.y) > eps) dedup.push(p);
+    }
+    return dedup;
+  };
+
+  const setBoundaryClipped = (localPts: Pt[]) => {
+    if (projectClipLocal && projectClipLocal.length >= 3) {
+      const clipped = clipPolygon(localPts, projectClipLocal);
+      if (clipped && clipped.length >= 3) {
+        setBoundary(clipped);
+        return;
+      }
+      // fallback: clamp last vertex to boundary if clip fully eliminates polygon
+      const last = localPts[localPts.length - 1];
+      const clamped = clampPointToPolygon(last, projectClipLocal);
+      const copy = localPts.slice();
+      copy[copy.length - 1] = clamped;
+      setBoundary(copy);
+      return;
+    }
+    setBoundary(localPts);
+  };
+
   // When the store boundary matches our ghost, drop the ghost to avoid stale overlays
   useEffect(() => {
     if (!ghostLocal) return;
@@ -729,7 +800,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
       const s = gridSize;
       const snapped = { x: Math.round(localP.x / s) * s, y: Math.round(localP.y / s) * s };
       const next = [...pts.slice(0, bestIdx + 1), snapped, ...pts.slice(bestIdx + 1)];
-      setBoundary(next);
+      setBoundaryClipped(next);
     }
   };
 
@@ -1038,9 +1109,18 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
       ctx.closePath();
     };
 
-    return (
+    // Optional outer clip for project boundary to visually cut tiles when pool moves beyond it
+    const projectClip = (ctx: CanvasRenderingContext2D) => {
+      if (!projectClipLocal || projectClipLocal.length === 0) return;
+      ctx.beginPath();
+      ctx.moveTo(projectClipLocal[0].x, projectClipLocal[0].y);
+      for (let i = 1; i < projectClipLocal.length; i++) ctx.lineTo(projectClipLocal[i].x, projectClipLocal[i].y);
+      ctx.closePath();
+    };
+
+    const tilesAndGrout = (
       <>
-        {/* Grout clipped to boundary */}
+        {/* Grout clipped to coping boundary */}
         <Group listening={false} clipFunc={clip}>
           {groutRects}
         </Group>
@@ -1057,12 +1137,16 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
           closed
           listening={false}
         />
-        {/* Tiles clipped to boundary */}
+        {/* Tiles clipped to coping boundary */}
         <Group clipFunc={clip}>
           {fills}
         </Group>
       </>
     );
+
+    return projectClipLocal && projectClipLocal.length >= 3
+      ? (<Group listening={false} clipFunc={projectClip}>{tilesAndGrout}</Group>)
+      : tilesAndGrout;
   };
 
   // Extension handles removed; only boundary polygon editing remains for auto-extend
@@ -1287,17 +1371,15 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
                     stroke="#fff"
                     strokeWidth={2}
                     strokeScaleEnabled={false}
-                    draggable
-                    dragBoundFunc={(pos: Vector2d) => {
-                      const s = gridSize;
-                      const local = toLocalFromAbs(pos);
-                      let snapped = { x: Math.round(local.x / s) * s, y: Math.round(local.y / s) * s };
-                      if (projectClipLocal && projectClipLocal.length >= 3) {
-                        snapped = clampPointToPolygon(snapped, projectClipLocal);
-                      }
-                      const abs = toAbsFromLocal(snapped);
-                      return { x: abs.x, y: abs.y };
-                    }}
+                draggable
+                dragBoundFunc={(pos: Vector2d) => {
+                  // Allow preview to pass beyond boundary; only snap to grid
+                  const s = gridSize;
+                  const local = toLocalFromAbs(pos);
+                  const snapped = { x: Math.round(local.x / s) * s, y: Math.round(local.y / s) * s };
+                  const abs = toAbsFromLocal(snapped);
+                  return { x: abs.x, y: abs.y };
+                }}
                     onDragStart={(e: Konva.KonvaEventObject<DragEvent>) => {
                       e.cancelBubble = true;
                       setDragIndex(i);
@@ -1309,34 +1391,26 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
                       const s = gridSize;
                       const abs = e.target.getAbsolutePosition();
                       const local = toLocalFromAbs(abs);
-                      let x = Math.round(local.x / s) * s;
-                      let y = Math.round(local.y / s) * s;
-                      if (projectClipLocal && projectClipLocal.length >= 3) {
-                        const clamped = clampPointToPolygon({ x, y }, projectClipLocal);
-                        x = clamped.x; y = clamped.y;
-                      }
-                      const copy = boundaryLive.slice();
-                      copy[dragIndex] = { x, y };
-                      setGhostLocal(copy);
-                    }}
-                    onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) => {
-                      e.cancelBubble = true;
-                      if (dragIndex == null) return;
-                      const s = gridSize;
-                      const abs = e.target.getAbsolutePosition();
-                      const local = toLocalFromAbs(abs);
-                      let x = Math.round(local.x / s) * s;
-                      let y = Math.round(local.y / s) * s;
-                      if (projectClipLocal && projectClipLocal.length >= 3) {
-                        const clamped = clampPointToPolygon({ x, y }, projectClipLocal);
-                        x = clamped.x; y = clamped.y;
-                      }
-                      const updated = boundaryLive.slice();
-                      updated[dragIndex] = { x, y };
-                      setDragIndex(null);
-                      setGhostLocal(updated);
-                      setBoundary(updated);
-                    }}
+                  const x = Math.round(local.x / s) * s;
+                  const y = Math.round(local.y / s) * s;
+                  const copy = boundaryLive.slice();
+                  copy[dragIndex] = { x, y };
+                  setGhostLocal(copy);
+                }}
+                onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) => {
+                  e.cancelBubble = true;
+                  if (dragIndex == null) return;
+                  const s = gridSize;
+                  const abs = e.target.getAbsolutePosition();
+                  const local = toLocalFromAbs(abs);
+                  const x = Math.round(local.x / s) * s;
+                  const y = Math.round(local.y / s) * s;
+                  const updated = boundaryLive.slice();
+                  updated[dragIndex] = { x, y };
+                  setDragIndex(null);
+                  setGhostLocal(updated);
+                  setBoundaryClipped(updated);
+                }}
                   />
                 ))}
               </>
