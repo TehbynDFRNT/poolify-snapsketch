@@ -11,6 +11,7 @@ import { snapRectPx, roundHalf } from '@/utils/canvasSnap';
 import { TILE_COLORS, TILE_GAP } from '@/constants/tileConfig';
 import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
 import { GRID_CONFIG } from '@/constants/grid';
+import { useClipMask } from '@/hooks/useClipMask';
 
 type Pt = { x: number; y: number };
 
@@ -108,6 +109,32 @@ function rectIntersectsPolygon(rect: { x: number; y: number; w: number; h: numbe
   return false;
 }
 
+// Closest point on segment AB to point P
+function closestPointOnSegment(p: Pt, a: Pt, b: Pt): Pt {
+  const abx = b.x - a.x, aby = b.y - a.y;
+  const apx = p.x - a.x, apy = p.y - a.y;
+  const ab2 = abx * abx + aby * aby || 1;
+  let t = (apx * abx + apy * aby) / ab2;
+  t = Math.max(0, Math.min(1, t));
+  return { x: a.x + t * abx, y: a.y + t * aby };
+}
+
+// If point is outside polygon, clamp to nearest point on polygon boundary
+function clampPointToPolygon(p: Pt, poly: Pt[]): Pt {
+  if (!poly || poly.length < 3) return p;
+  if (pointInPolygon(p, poly) || isPointNearPolygonBoundary(p, poly, 0.01)) return p;
+  let best: Pt | null = null;
+  let bestD2 = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length];
+    const q = closestPointOnSegment(p, a, b);
+    const dx = p.x - q.x, dy = p.y - q.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < bestD2) { bestD2 = d2; best = q; }
+  }
+  return best || p;
+}
+
 interface PoolComponentProps {
   component: Component;
   isSelected: boolean;
@@ -121,6 +148,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
   const groupRef = useRef<Konva.Group | null>(null);
   const { components: allComponents, updateComponent, zoom, annotationsVisible } = useDesignStore();
   const [patternImage, setPatternImage] = useState<CanvasImageSource | null>(null);
+  const { polygon: projectClipStage } = useClipMask();
 
   // --- Boundary (outer limit) for auto-extensions ---
 
@@ -213,6 +241,26 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     const tr = group.getAbsoluteTransform().copy();
     return tr.point(local);
   };
+
+  // Deterministic stage->local transform using component position/rotation (avoids ref timing issues)
+  const stageToLocalSimple = (p: Pt): Pt => {
+    const dx = p.x - component.position.x;
+    const dy = p.y - component.position.y;
+    const rad = (component.rotation * Math.PI) / 180;
+    const cos = Math.floor(Math.cos(rad) * 1e12) / 1e12; // minor stabilize
+    const sin = Math.floor(Math.sin(rad) * 1e12) / 1e12;
+    return {
+      x: dx * cos + dy * sin,
+      y: -dx * sin + dy * cos,
+    };
+  };
+
+  // Project boundary (stage-space) converted to pool-local once per render
+  const projectClipLocal: Pt[] | null = useMemo(() => {
+    return projectClipStage ? projectClipStage.map(stageToLocalSimple) : null;
+  }, [projectClipStage, component.position.x, component.position.y, component.rotation]);
+
+  
 
   // Node editing state - ghost state in local coordinates (like HouseComponent)
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -381,6 +429,19 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
 
     const outer: Pt[] = boundaryLive;
 
+    // Use precomputed projectClipLocal (pool-local)
+
+    const rectIntersectsBoth = (sr: StageRect) => {
+      const hitOuter = rectIntersectsPolygon(sr, outer);
+      const hitGlobal = projectClipLocal ? rectIntersectsPolygon(sr, projectClipLocal) : true;
+      return hitOuter && hitGlobal;
+    };
+    const rectInsideBoth = (sr: StageRect) => {
+      const inOuter = rectFullyInsidePolygon(sr, outer);
+      const inGlobal = projectClipLocal ? rectFullyInsidePolygon(sr, projectClipLocal) : true;
+      return inOuter && inGlobal;
+    };
+
     // Check if boundary has been edited beyond default (compare with tolerance)
     const isDefaultBoundary = outer.length === defaultBoundary.length &&
       outer.every((p, i) => {
@@ -419,10 +480,20 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
       // For each tile in the outermost row, step outward until it no longer intersects the boundary
       seeds.forEach(seed => {
         let s = 1;
-        // conservative max steps bound using boundary bbox
+        // conservative max steps bound using bbox of (outer ∩ projectClip), approximated by bbox intersection if available
         const bx = outer.map(p => p.x), by = outer.map(p => p.y);
-        const minX = Math.min(...bx), maxX = Math.max(...bx);
-        const minY = Math.min(...by), maxY = Math.max(...by);
+        let minX = Math.min(...bx), maxX = Math.max(...bx);
+        let minY = Math.min(...by), maxY = Math.max(...by);
+        if (projectClipLocal && projectClipLocal.length >= 3) {
+          const gx = projectClipLocal.map(p => p.x), gy = projectClipLocal.map(p => p.y);
+          const gminX = Math.min(...gx), gmaxX = Math.max(...gx);
+          const gminY = Math.min(...gy), gmaxY = Math.max(...gy);
+          // bbox intersection
+          minX = Math.max(minX, gminX);
+          maxX = Math.min(maxX, gmaxX);
+          minY = Math.max(minY, gminY);
+          maxY = Math.min(maxY, gmaxY);
+        }
         const maxTravelPx = (axis === 'x' ? Math.max(Math.abs((seed.x * scale) - minX), Math.abs((seed.x * scale) - maxX))
                                           : Math.max(Math.abs((seed.y * scale) - minY), Math.abs((seed.y * scale) - maxY)));
         const maxSteps = Math.max(1, Math.ceil((maxTravelPx / scale) / Math.max(1, stepMm)));
@@ -439,8 +510,8 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
             h: Math.max(1, roundHalf(seed.height * scale)),
           };
 
-          // Outside the polygon? stop for this column
-          if (!rectIntersectsPolygon(stageRect, outer)) break;
+          // Outside either polygon? stop for this column
+          if (!rectIntersectsBoth(stageRect)) break;
           // Never place tiles inside pool interior
           if (stageOverlaps(stageRect, poolStageRect)) { s++; continue; }
 
@@ -448,7 +519,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
           if (!overlapsExistingOrAdded(stageRect)) {
             addedStage.push(stageRect);
 
-            const isPartialOuter = !rectFullyInsidePolygon(stageRect, outer);
+            const isPartialOuter = !rectInsideBoth(stageRect);
             produced.push({
               x: rxMm,
               y: ryMm,
@@ -494,7 +565,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
         w: Math.max(1, roundHalf(w * scale)),
         h: Math.max(1, roundHalf(h * scale)),
       };
-      if (!rectIntersectsPolygon(sr, outer)) return;
+      if (!rectIntersectsBoth(sr)) return;
       // Exclude pool interior
       if (stageOverlaps(sr, poolStageRect)) return;
       if (overlapsExistingOrAdded(sr)) return;
@@ -504,7 +575,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
         y: ymm,
         width: w,
         height: h,
-        isPartial: !rectFullyInsidePolygon(sr, outer),
+        isPartial: !rectInsideBoth(sr),
         side,
       });
     };
@@ -557,7 +628,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
 
     return produced;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boundaryKey, defaultBoundary, copingCalc, component.properties.copingTiles, showCoping, scale, tileDepthMm.horizontal, tileDepthMm.vertical]);
+  }, [boundaryKey, defaultBoundary, copingCalc, component.properties.copingTiles, showCoping, scale, tileDepthMm.horizontal, tileDepthMm.vertical, projectClipStage, component.position.x, component.position.y, component.rotation]);
 
   // Pattern is pre-rendered at exact pool size, so use 1:1 scale and (0,0) offset
   const patternConfig = useMemo(() => {
@@ -670,7 +741,10 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     const stage = e.target.getStage();
     const pr = stage?.getPointerPosition();
     if (!pr) return;
-    const local = toLocalFromAbs(pr);
+    let local = toLocalFromAbs(pr);
+    if (projectClipLocal && projectClipLocal.length >= 3) {
+      local = clampPointToPolygon(local, projectClipLocal);
+    }
     insertNodeAt(local);
   };
 
@@ -765,6 +839,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     // --- EDGE-ONLY GROUT (uniform band between pool and the adjacent coping row) ---
     const G = gapMm;
     const groutRects: JSX.Element[] = [];
+    // Use precomputed projectClipLocal (pool-local) for grout checks
     if (TILE_GAP.renderGap && G > 0) {
       const seen = new Set<string>();
 
@@ -772,6 +847,11 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
         if (w <= 0 || h <= 0 || !isFinite(w) || !isFinite(h)) return;
         const key = [x, y, w, h].map(v => Math.round(v * 10) / 10).join(':');
         if (seen.has(key)) return;
+        // Skip grout outside the project clip (if present)
+        if (projectClipLocal) {
+          const rr = { x: roundHalf(x * scale), y: roundHalf(y * scale), w: Math.max(1, roundHalf(w * scale)), h: Math.max(1, roundHalf(h * scale)) };
+          if (!rectIntersectsPolygon(rr, projectClipLocal)) return;
+        }
         seen.add(key);
         const r = snapRectPx(x, y, w, h, scale);
         groutRects.push(
@@ -1185,70 +1265,93 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
 
         {/* Boundary polygon for auto extension (visible when selected) */}
         {isSelected && (
-          <>
-            <Line
-              points={boundaryLive.flatMap(p => [p.x, p.y])}
-              stroke="#10B981"
-              strokeWidth={2}
-              strokeScaleEnabled={false}
-              dash={[8, 6]}
-              closed
-              onMouseDown={onBoundaryLineMouseDown}
-            />
-            {boundaryLive.map((p, i) => (
-              <Circle
-                key={`bnode-${i}`}
-                x={p.x}
-                y={p.y}
-                radius={Math.max(2, 4.2 / (zoom || 1))}
-                fill="#10B981"
-                stroke="#fff"
-                strokeWidth={2}
-                strokeScaleEnabled={false}
-                draggable
-                dragBoundFunc={(pos: Vector2d) => {
-                  const s = gridSize;
-                  const local = toLocalFromAbs(pos);
-                  const snapped = { x: Math.round(local.x / s) * s, y: Math.round(local.y / s) * s };
-                  const abs = toAbsFromLocal(snapped);
-                  return { x: abs.x, y: abs.y };
-                }}
-                onDragStart={(e: Konva.KonvaEventObject<DragEvent>) => {
-                  e.cancelBubble = true;
-                  setDragIndex(i);
-                  setGhostLocal(boundaryLive.slice());
-                }}
-                onDragMove={(e: Konva.KonvaEventObject<DragEvent>) => {
-                  e.cancelBubble = true;
-                  if (dragIndex == null) return;
-                  const s = gridSize;
-                  const abs = e.target.getAbsolutePosition();
-                  const local = toLocalFromAbs(abs);
-                  const x = Math.round(local.x / s) * s;
-                  const y = Math.round(local.y / s) * s;
-                  const copy = boundaryLive.slice();
-                  copy[dragIndex] = { x, y };
-                  setGhostLocal(copy);
-                }}
-                onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) => {
-                  e.cancelBubble = true;
-                  if (dragIndex == null) return;
-                  const s = gridSize;
-                  const abs = e.target.getAbsolutePosition();
-                  const local = toLocalFromAbs(abs);
-                  const x = Math.round(local.x / s) * s;
-                  const y = Math.round(local.y / s) * s;
-                  const updated = boundaryLive.slice();
-                  updated[dragIndex] = { x, y };
-                  // Optimistically keep the ghost to avoid snap-back until store updates
-                  setDragIndex(null);
-                  setGhostLocal(updated);
-                  // Persist the updated boundary - store change will reconcile and then we clear ghost
-                  setBoundary(updated);
-                }}
-              />
-            ))}
-          </>
+          (() => {
+            const overlay = (
+              <>
+                <Line
+                  points={boundaryLive.flatMap(p => [p.x, p.y])}
+                  stroke="#10B981"
+                  strokeWidth={2}
+                  strokeScaleEnabled={false}
+                  dash={[8, 6]}
+                  closed
+                  onMouseDown={onBoundaryLineMouseDown}
+                />
+                {boundaryLive.map((p, i) => (
+                  <Circle
+                    key={`bnode-${i}`}
+                    x={p.x}
+                    y={p.y}
+                    radius={Math.max(2, 4.2 / (zoom || 1))}
+                    fill="#10B981"
+                    stroke="#fff"
+                    strokeWidth={2}
+                    strokeScaleEnabled={false}
+                    draggable
+                    dragBoundFunc={(pos: Vector2d) => {
+                      const s = gridSize;
+                      const local = toLocalFromAbs(pos);
+                      let snapped = { x: Math.round(local.x / s) * s, y: Math.round(local.y / s) * s };
+                      if (projectClipLocal && projectClipLocal.length >= 3) {
+                        snapped = clampPointToPolygon(snapped, projectClipLocal);
+                      }
+                      const abs = toAbsFromLocal(snapped);
+                      return { x: abs.x, y: abs.y };
+                    }}
+                    onDragStart={(e: Konva.KonvaEventObject<DragEvent>) => {
+                      e.cancelBubble = true;
+                      setDragIndex(i);
+                      setGhostLocal(boundaryLive.slice());
+                    }}
+                    onDragMove={(e: Konva.KonvaEventObject<DragEvent>) => {
+                      e.cancelBubble = true;
+                      if (dragIndex == null) return;
+                      const s = gridSize;
+                      const abs = e.target.getAbsolutePosition();
+                      const local = toLocalFromAbs(abs);
+                      let x = Math.round(local.x / s) * s;
+                      let y = Math.round(local.y / s) * s;
+                      if (projectClipLocal && projectClipLocal.length >= 3) {
+                        const clamped = clampPointToPolygon({ x, y }, projectClipLocal);
+                        x = clamped.x; y = clamped.y;
+                      }
+                      const copy = boundaryLive.slice();
+                      copy[dragIndex] = { x, y };
+                      setGhostLocal(copy);
+                    }}
+                    onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) => {
+                      e.cancelBubble = true;
+                      if (dragIndex == null) return;
+                      const s = gridSize;
+                      const abs = e.target.getAbsolutePosition();
+                      const local = toLocalFromAbs(abs);
+                      let x = Math.round(local.x / s) * s;
+                      let y = Math.round(local.y / s) * s;
+                      if (projectClipLocal && projectClipLocal.length >= 3) {
+                        const clamped = clampPointToPolygon({ x, y }, projectClipLocal);
+                        x = clamped.x; y = clamped.y;
+                      }
+                      const updated = boundaryLive.slice();
+                      updated[dragIndex] = { x, y };
+                      setDragIndex(null);
+                      setGhostLocal(updated);
+                      setBoundary(updated);
+                    }}
+                  />
+                ))}
+              </>
+            );
+            if (projectClipLocal && projectClipLocal.length >= 3) {
+              const clipOverlay = (ctx: CanvasRenderingContext2D) => {
+                ctx.beginPath();
+                ctx.moveTo(projectClipLocal![0].x, projectClipLocal![0].y);
+                for (let i = 1; i < projectClipLocal!.length; i++) ctx.lineTo(projectClipLocal![i].x, projectClipLocal![i].y);
+                ctx.closePath();
+              };
+              return <Group clipFunc={clipOverlay}>{overlay}</Group>;
+            }
+            return overlay;
+          })()
         )}
       </Group>
   );

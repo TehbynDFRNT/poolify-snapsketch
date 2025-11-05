@@ -150,12 +150,12 @@ export const BoundaryComponent = ({
 
       // Calculate perpendicular offset to position text away from the line
       const lineLength = Math.sqrt(dx * dx + dy * dy);
+      if (lineLength === 0) return; // avoid NaN/Infinity when points coincide
       const perpX = -dy / lineLength; // Perpendicular direction
       const perpY = dx / lineLength;
       const offset = getAnnotationOffsetPx(component.id, component.position);
 
       const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
-      const rot = getAnnotationOffsetPx ? undefined : undefined
       measurements.push(
         <Text
           key={`measurement-${key}`}
@@ -220,25 +220,28 @@ export const BoundaryComponent = ({
 
           // Calculate perpendicular offset for dynamic measurements
           const lineLength = Math.sqrt(dx * dx + dy * dy);
-          const perpX = -dy / lineLength;
-          const perpY = dx / lineLength;
+          const hasLength = lineLength !== 0;
+          const perpX = hasLength ? -dy / lineLength : 0;
+          const perpY = hasLength ? dx / lineLength : 0;
           const offset = getAnnotationOffsetPx(component.id, component.position);
 
           const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
           return (
             <Group key={`ghost-${k}`}>
               <Line points={[a.x, a.y, b.x, b.y]} stroke={color} strokeWidth={3} dash={[8, 6]} opacity={0.8} />
-              <Text
-                x={midX + perpX * offset}
-                y={midY + perpY * offset}
-                text={`Boundary: ${mm}mm`}
-                fontSize={11}
-                fill="#1e3a8a"
-                align="center"
-                rotation={normalizeLabelAngle(angleDeg)}
-                offsetX={20}
-                listening={false}
-              />
+              {hasLength && (
+                <Text
+                  x={midX + perpX * offset}
+                  y={midY + perpY * offset}
+                  text={`Boundary: ${mm}mm`}
+                  fontSize={11}
+                  fill="#1e3a8a"
+                  align="center"
+                  rotation={normalizeLabelAngle(angleDeg)}
+                  offsetX={20}
+                  listening={false}
+                />
+              )}
             </Group>
           );
         })}
@@ -267,6 +270,7 @@ export const BoundaryComponent = ({
         const translated = points.map((p) => ({ x: p.x + dx, y: p.y + dy }));
         updateComponent(component.id, { position: { x: newX, y: newY }, properties: { ...component.properties, points: translated } });
         dragStartPos.current = null;
+        onDragEnd?.({ x: newX, y: newY });
       }}
     >
       {/* Main boundary line (local coords) - click detection only on the line, not interior */}

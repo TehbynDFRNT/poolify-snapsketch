@@ -117,7 +117,7 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
   const tools: Array<{ id: ToolType | 'area' | 'select'; name: string; shortcut: string; hasMenu?: boolean; disabled?: boolean }> = [
     { id: 'select', name: 'Select/Pan', shortcut: 'V', hasMenu: true },
     // Group 1
-    { id: 'boundary', name: 'Boundary', shortcut: 'B', hasMenu: false },
+    { id: 'boundary', name: 'Boundary', shortcut: 'B', hasMenu: false, disabled: hasBoundary },
     { id: 'house', name: 'House', shortcut: 'U', hasMenu: true },
     { id: 'pool', name: 'Pool', shortcut: 'O', hasMenu: true },
     // Group 2

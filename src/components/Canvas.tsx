@@ -124,6 +124,8 @@ export const Canvas = ({
     currentProject,
   } = useDesignStore();
 
+  // Removed global clip wrapper; components render un-clipped
+
   // Zoom handlers - memoized to prevent infinite loops
   const handleZoomIn = useCallback(() => {
     const newZoom = Math.min(zoom * 1.2, 4);
@@ -282,6 +284,15 @@ export const Canvas = ({
         activeTool === 'drainage';
 
       if (isPolylineTool) {
+        // Prevent starting a new boundary if one already exists
+        if (activeTool === 'boundary' && drawingPoints.length === 0) {
+          const alreadyHasBoundary = components.some(c => c.type === 'boundary');
+          if (alreadyHasBoundary) {
+            toast.error('Only one boundary is allowed');
+            onToolChange?.('select');
+            return;
+          }
+        }
         // Smart snap for all polyline tools
         const smart = smartSnap({ x, y }, components);
         let pointToAdd = { x: smart.x, y: smart.y };
@@ -586,10 +597,24 @@ export const Canvas = ({
         },
       });
     } else if (activeTool === 'boundary' || activeTool === 'house') {
-      // House must be closed; boundary can be open polyline or closed
-      if (activeTool === 'house' && !closed) {
-        toast.error('House must be closed - click near the starting point to finish');
+      // Enforce closed polygons for both house and boundary
+      if (!closed) {
+        const what = activeTool === 'house' ? 'House' : 'Boundary';
+        toast.error(`${what} must be closed - click near the starting point to finish`);
         return;
+      }
+
+      // Only allow a single boundary component in the project
+      if (activeTool === 'boundary') {
+        const alreadyHasBoundary = components.some(c => c.type === 'boundary');
+        if (alreadyHasBoundary) {
+          toast.error('Only one boundary is allowed');
+          setDrawingPoints([]);
+          setIsDrawing(false);
+          setGhostPoint(null);
+          onToolChange?.('select');
+          return;
+        }
       }
 
       // Calculate area for house
@@ -713,6 +738,15 @@ export const Canvas = ({
       // Drawing shortcuts
       if (isDrawing) {
         if (e.key === 'Enter') {
+          if (activeTool === 'boundary') {
+            // Force-close boundary on Enter if we have enough points
+            if (drawingPoints.length >= 3) {
+              finishDrawing(true);
+            } else {
+              toast.error('Add at least 3 points to close the boundary');
+            }
+            return;
+          }
           if (activeTool === 'paving_area' && drawingPoints.length >= 3) {
             if (selectedAreaType === 'pavers') {
               // Show paving dialog
