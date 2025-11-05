@@ -255,6 +255,19 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     };
   };
 
+  // Transform using an arbitrary position (used for group-drag preview commit)
+  const stageToLocalAt = (p: Pt, pos: { x: number; y: number }): Pt => {
+    const dx = p.x - pos.x;
+    const dy = p.y - pos.y;
+    const rad = (component.rotation * Math.PI) / 180;
+    const cos = Math.floor(Math.cos(rad) * 1e12) / 1e12;
+    const sin = Math.floor(Math.sin(rad) * 1e12) / 1e12;
+    return {
+      x: dx * cos + dy * sin,
+      y: -dx * sin + dy * cos,
+    };
+  };
+
   // Project boundary (stage-space) converted to pool-local once per render
   const projectClipLocal: Pt[] | null = useMemo(() => {
     return projectClipStage ? projectClipStage.map(stageToLocalSimple) : null;
@@ -336,6 +349,8 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     if (projectClipLocal && projectClipLocal.length >= 3) {
       const clipped = clipPolygon(localPts, projectClipLocal);
       if (clipped && clipped.length >= 3) {
+        // keep UI in sync immediately while store updates
+        setGhostLocal(clipped);
         setBoundary(clipped);
         return;
       }
@@ -344,9 +359,11 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
       const clamped = clampPointToPolygon(last, projectClipLocal);
       const copy = localPts.slice();
       copy[copy.length - 1] = clamped;
+      setGhostLocal(copy);
       setBoundary(copy);
       return;
     }
+    setGhostLocal(localPts);
     setBoundary(localPts);
   };
 
@@ -775,7 +792,22 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     // Update the position on the Konva node for immediate visual feedback
     e.target.x(snappedPos.x);
     e.target.y(snappedPos.y);
-    
+    // Recompute clipped boundary at the new position and persist
+    if (projectClipStage && projectClipStage.length >= 3) {
+      const projLocalAt = projectClipStage.map((p) => stageToLocalAt(p, snappedPos));
+      const clipped = clipPolygon(boundaryLocal, projLocalAt);
+      if (clipped && clipped.length >= 3) {
+        updateComponent(component.id, {
+          position: snappedPos,
+          properties: { ...component.properties, copingBoundary: clipped }
+        });
+      } else {
+        updateComponent(component.id, { position: snappedPos });
+      }
+    } else {
+      updateComponent(component.id, { position: snappedPos });
+    }
+    // Also notify parent if needed (safe redundancy)
     onDragEnd(snappedPos);
   };
 
@@ -1408,7 +1440,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
                   const updated = boundaryLive.slice();
                   updated[dragIndex] = { x, y };
                   setDragIndex(null);
-                  setGhostLocal(updated);
+                  // Keep ghost to show immediate result; cleared once store matches
                   setBoundaryClipped(updated);
                 }}
                   />
