@@ -345,9 +345,47 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     return dedup;
   };
 
+  // Remove redundant vertices: near-duplicates and collinear points within tolerance
+  const simplifyPolygon = (poly: Pt[], eps = 1e-6): Pt[] => {
+    if (!poly || poly.length < 3) return poly || [];
+    // Remove consecutive duplicates first
+    const uniq: Pt[] = [];
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i];
+      const last = uniq[uniq.length - 1];
+      if (!last || Math.hypot(p.x - last.x, p.y - last.y) > eps) uniq.push(p);
+    }
+    // If closes back to start, drop the last
+    if (uniq.length >= 2) {
+      const first = uniq[0], last = uniq[uniq.length - 1];
+      if (Math.hypot(first.x - last.x, first.y - last.y) <= eps) uniq.pop();
+    }
+    if (uniq.length < 3) return uniq;
+    // Remove collinear points
+    const out: Pt[] = [];
+    const n = uniq.length;
+    const isCollinear = (a: Pt, b: Pt, c: Pt): boolean => {
+      const abx = b.x - a.x, aby = b.y - a.y;
+      const bcx = c.x - b.x, bcy = c.y - b.y;
+      const cross = Math.abs(abx * bcy - aby * bcx);
+      const abLen = Math.hypot(abx, aby) || 1;
+      const bcLen = Math.hypot(bcx, bcy) || 1;
+      // scale-invariant collinearity tolerance
+      return cross <= eps * (abLen + bcLen);
+    };
+    for (let i = 0; i < n; i++) {
+      const a = uniq[(i - 1 + n) % n];
+      const b = uniq[i];
+      const c = uniq[(i + 1) % n];
+      if (!isCollinear(a, b, c)) out.push(b);
+    }
+    // Edge case: if everything became collinear, fall back to uniq
+    return out.length >= 3 ? out : uniq;
+  };
+
   const setBoundaryClipped = (localPts: Pt[]) => {
     if (projectClipLocal && projectClipLocal.length >= 3) {
-      const clipped = clipPolygon(localPts, projectClipLocal);
+      const clipped = simplifyPolygon(clipPolygon(localPts, projectClipLocal));
       if (clipped && clipped.length >= 3) {
         // keep UI in sync immediately while store updates
         setGhostLocal(clipped);
@@ -359,12 +397,14 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
       const clamped = clampPointToPolygon(last, projectClipLocal);
       const copy = localPts.slice();
       copy[copy.length - 1] = clamped;
-      setGhostLocal(copy);
-      setBoundary(copy);
+      const simple = simplifyPolygon(copy);
+      setGhostLocal(simple);
+      setBoundary(simple);
       return;
     }
-    setGhostLocal(localPts);
-    setBoundary(localPts);
+    const simple = simplifyPolygon(localPts);
+    setGhostLocal(simple);
+    setBoundary(simple);
   };
 
   // When the store boundary matches our ghost, drop the ghost to avoid stale overlays
@@ -422,6 +462,8 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     const vertical = copingCalc.shallowEnd.depth || 400;
     return { horizontal, vertical };
   }, [copingCalc]);
+
+  // (moved tile-edge snapping definitions below autoTilesMM to avoid TDZ)
 
   // --- Auto-tile generation helpers ---
   type MMTile = { x: number; y: number; width: number; height: number; isPartial: boolean; side: Side };
@@ -717,6 +759,61 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     return produced;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boundaryKey, defaultBoundary, copingCalc, component.properties.copingTiles, showCoping, scale, tileDepthMm.horizontal, tileDepthMm.vertical, projectClipStage, component.position.x, component.position.y, component.rotation]);
+
+  // Secondary snap-to-tile edges (in pool-local/stage units)
+  const tileEdgeLines = useMemo(() => {
+    const xs = new Set<number>();
+    const ys = new Set<number>();
+    const addRectMm = (xmm: number, ymm: number, wmm: number, hmm: number) => {
+      const lx = roundHalf(xmm * scale);
+      const rx = roundHalf((xmm + wmm) * scale);
+      const ty = roundHalf(ymm * scale);
+      const by = roundHalf((ymm + hmm) * scale);
+      xs.add(lx); xs.add(rx);
+      ys.add(ty); ys.add(by);
+    };
+    // Base ring
+    (copingCalc?.leftSide?.paverPositions || []).forEach(p => addRectMm(p.x, p.y, p.width, p.height));
+    (copingCalc?.rightSide?.paverPositions || []).forEach(p => addRectMm(p.x, p.y, p.width, p.height));
+    (copingCalc?.shallowEnd?.paverPositions || []).forEach(p => addRectMm(p.x, p.y, p.width, p.height));
+    (copingCalc?.deepEnd?.paverPositions || []).forEach(p => addRectMm(p.x, p.y, p.width, p.height));
+    // User tiles
+    (component.properties.copingTiles || []).forEach((t: any) => addRectMm(t.x, t.y, t.width, t.height));
+    // Auto tiles
+    (autoTilesMM || []).forEach(t => addRectMm(t.x, t.y, t.width, t.height));
+    const xArr = Array.from(xs.values()).sort((a, b) => a - b);
+    const yArr = Array.from(ys.values()).sort((a, b) => a - b);
+    return { xArr, yArr };
+  }, [copingCalc, component.properties.copingTiles, autoTilesMM, scale]);
+
+  const snapWithSecondaryTileEdges = (local: Pt, gridPt: Pt): Pt => {
+    const tol = Math.min(8, GRID_CONFIG.spacing * 0.35); // px tolerance
+    let bestTilePt: Pt | null = null;
+    let bestTileDist = Infinity;
+    // Nearest vertical edge
+    for (const x of tileEdgeLines.xArr) {
+      const dx = Math.abs(local.x - x);
+      if (dx <= tol && dx < bestTileDist) {
+        bestTileDist = dx;
+        bestTilePt = { x, y: local.y };
+      } else if (dx > tol && x > local.x + tol) break;
+    }
+    // Nearest horizontal edge
+    for (const y of tileEdgeLines.yArr) {
+      const dy = Math.abs(local.y - y);
+      if (dy <= tol && dy < bestTileDist) {
+        bestTileDist = dy;
+        bestTilePt = { x: local.x, y };
+      } else if (dy > tol && y > local.y + tol) break;
+    }
+    const gridDist = Math.hypot(local.x - gridPt.x, local.y - gridPt.y);
+    if (bestTilePt) {
+      const tileDist = Math.hypot(local.x - bestTilePt.x, local.y - bestTilePt.y);
+      // Only use tile snap if clearly intended (closer than grid and within tol)
+      if (tileDist + 1e-6 < gridDist && bestTileDist <= tol) return bestTilePt;
+    }
+    return gridPt;
+  };
 
   // Pattern is pre-rendered at exact pool size, so use 1:1 scale and (0,0) offset
   const patternConfig = useMemo(() => {
@@ -1405,10 +1502,11 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
                     strokeScaleEnabled={false}
                 draggable
                 dragBoundFunc={(pos: Vector2d) => {
-                  // Allow preview to pass beyond boundary; only snap to grid
+                  // Allow preview to pass beyond boundary; snap to grid with secondary tile-edge snap
                   const s = gridSize;
                   const local = toLocalFromAbs(pos);
-                  const snapped = { x: Math.round(local.x / s) * s, y: Math.round(local.y / s) * s };
+                  const grid = { x: Math.round(local.x / s) * s, y: Math.round(local.y / s) * s };
+                  const snapped = snapWithSecondaryTileEdges(local, grid);
                   const abs = toAbsFromLocal(snapped);
                   return { x: abs.x, y: abs.y };
                 }}
@@ -1423,8 +1521,8 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
                       const s = gridSize;
                       const abs = e.target.getAbsolutePosition();
                       const local = toLocalFromAbs(abs);
-                  const x = Math.round(local.x / s) * s;
-                  const y = Math.round(local.y / s) * s;
+                  const grid = { x: Math.round(local.x / s) * s, y: Math.round(local.y / s) * s };
+                  const { x, y } = snapWithSecondaryTileEdges(local, grid);
                   const copy = boundaryLive.slice();
                   copy[dragIndex] = { x, y };
                   setGhostLocal(copy);
@@ -1435,8 +1533,8 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
                   const s = gridSize;
                   const abs = e.target.getAbsolutePosition();
                   const local = toLocalFromAbs(abs);
-                  const x = Math.round(local.x / s) * s;
-                  const y = Math.round(local.y / s) * s;
+                  const grid = { x: Math.round(local.x / s) * s, y: Math.round(local.y / s) * s };
+                  const { x, y } = snapWithSecondaryTileEdges(local, grid);
                   const updated = boundaryLive.slice();
                   updated[dragIndex] = { x, y };
                   setDragIndex(null);
