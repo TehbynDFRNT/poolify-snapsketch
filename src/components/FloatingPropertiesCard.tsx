@@ -141,6 +141,26 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
                 </div>
 
                 {component.properties.copingCalculation && (() => {
+                  // Use copingStatistics if available (includes auto-tiles from boundary extensions)
+                  // Otherwise fall back to manual calculation from base tiles
+                  if (component.properties.copingStatistics) {
+                    const stats = component.properties.copingStatistics;
+                    return (
+                      <div className="text-xs bg-muted p-2 rounded space-y-1">
+                        <div className="font-medium">
+                          Coping: {stats.total || 0} pavers
+                        </div>
+                        <div className="text-muted-foreground">
+                          {stats.full || 0} full + {stats.partial || 0} partial
+                        </div>
+                        <div className="text-muted-foreground">
+                          Area: {(stats.areaM2 || 0).toFixed(2)} m²
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Fallback: calculate from base tiles only (no auto-tiles)
                   const calc = component.properties.copingCalculation;
                   const baseTiles = [
                     ...(calc.deepEnd?.paverPositions || []),

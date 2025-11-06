@@ -307,22 +307,27 @@ export const PavingAreaComponent = ({
     [paversLocalVisible, frame.x, frame.y]
   );
 
-  // ---------- statistics (using standard fillAreaWithPavers logic) ----------
+  // ---------- statistics derived from on-canvas visible tiles (aligns with Pool coping logic) ----------
   const statistics = useMemo(() => {
-    if (areaSurface !== 'pavers' || boundaryStage.length < 3) {
-      return { fullPavers: 0, edgePavers: 0, totalPavers: 0, totalArea: 0, orderQuantity: 0, wastage: 0 };
+    if (areaSurface !== 'pavers') {
+      return { fullPavers: 0, edgePavers: 0, totalPavers: 0, totalArea: 0, orderQuantity: 0, wastage: component.properties.wastagePercentage || 0 };
     }
-
-    // Use the standard fillAreaWithPavers function for consistent statistics
-    const pavers = fillAreaWithPavers(
-      boundaryStage,
-      sizeStr as any,
-      orient,
-      component.properties.showEdgePavers ?? true
-    );
-
-    return calculateStatistics(pavers, component.properties.wastagePercentage || 0);
-  }, [areaSurface, boundaryStage, sizeStr, orient, component.properties.showEdgePavers, component.properties.wastagePercentage]);
+    const fullPavers = paversLocalVisible.filter(p => !p.isEdgePaver).length;
+    const edgePavers = paversLocalVisible.length - fullPavers;
+    const totalPavers = paversLocalVisible.length;
+    // Convert px area to m²
+    const pxPerMm = GRID_CONFIG.spacing / 100;
+    const mmPerPx = 1 / pxPerMm;
+    let totalArea = 0;
+    for (const p of paversLocalVisible) {
+      const wMm = p.width * mmPerPx;
+      const hMm = p.height * mmPerPx;
+      totalArea += (wMm * hMm) / 1_000_000;
+    }
+    const wastage = component.properties.wastagePercentage || 0;
+    const orderQuantity = totalPavers + Math.ceil(totalPavers * (wastage / 100));
+    return { fullPavers, edgePavers, totalPavers, totalArea, orderQuantity, wastage };
+  }, [areaSurface, paversLocalVisible, component.properties.wastagePercentage]);
   useEffect(() => {
     const current = component.properties.statistics;
     if (

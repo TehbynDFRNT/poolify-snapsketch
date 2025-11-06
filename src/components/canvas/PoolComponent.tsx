@@ -609,6 +609,31 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
 
       // For each tile in the outermost row, step outward until it no longer intersects the boundary
       seeds.forEach(seed => {
+        // First check if this seed tile is near the extended boundary area
+        // Only generate auto-tiles for seeds that are actually affected by the boundary extension
+        const seedStageRect: StageRect = {
+          x: roundHalf(seed.x * scale),
+          y: roundHalf(seed.y * scale),
+          w: Math.max(1, roundHalf(seed.width * scale)),
+          h: Math.max(1, roundHalf(seed.height * scale)),
+        };
+
+        // Check if the next potential tile position would be within the extended boundary
+        // This prevents generating tiles for the entire perimeter when only a small area is extended
+        const firstStepMm = stepMm * sign;
+        const testXMm = axis === 'x' ? (seed.x + firstStepMm) : seed.x;
+        const testYMm = axis === 'y' ? (seed.y + firstStepMm) : seed.y;
+        const testRect: StageRect = {
+          x: roundHalf(testXMm * scale),
+          y: roundHalf(testYMm * scale),
+          w: Math.max(1, roundHalf(seed.width * scale)),
+          h: Math.max(1, roundHalf(seed.height * scale)),
+        };
+
+        // Skip this seed if the first extension doesn't intersect the boundary
+        // This means the boundary wasn't extended in this area
+        if (!rectIntersectsPolygon(testRect, outer)) return;
+
         let s = 1;
         // conservative max steps bound using bbox of (outer ∩ projectClip), approximated by bbox intersection if available
         const bx = outer.map(p => p.x), by = outer.map(p => p.y);
