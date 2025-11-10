@@ -196,7 +196,8 @@ export function ShareProjectDialog({ open, onOpenChange, project }: ShareProject
   const copyPublicLink = () => {
     if (!publicLink) return;
 
-    const url = `${window.location.origin}/share/${publicLink.token}`;
+    const baseUrl = import.meta.env.VITE_BASE_URL || window.location.origin;
+    const url = `${baseUrl}/share/${publicLink.token}`;
     navigator.clipboard.writeText(url);
 
     toast({
@@ -517,7 +518,7 @@ export function ShareProjectDialog({ open, onOpenChange, project }: ShareProject
                   <div className="flex gap-2 mt-2">
                     <Input
                       readOnly
-                      value={`${window.location.origin}/share/${publicLink.token}`}
+                      value={`${import.meta.env.VITE_BASE_URL || window.location.origin}/share/${publicLink.token}`}
                       className="font-mono text-sm"
                     />
                     <Button
