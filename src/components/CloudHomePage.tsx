@@ -174,6 +174,36 @@ export function CloudHomePage() {
 
       if (error) throw error;
 
+      // Automatically create public link in the background
+      const generateToken = () => {
+        const array = new Uint8Array(32);
+        crypto.getRandomValues(array);
+        return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+      };
+
+      // Create public link (don't await - run in background)
+      supabase
+        .from('project_public_links')
+        .insert({
+          project_id: newProject.id,
+          token: generateToken(),
+          allow_export: true,
+          expires_at: null,
+          created_by: user.id,
+        })
+        .then(() => {
+          // Log public link creation
+          supabase.from('activity_log').insert({
+            project_id: newProject.id,
+            user_id: user.id,
+            action: 'public_link_auto_created',
+            details: { auto_generated: true },
+          });
+        })
+        .catch((err) => {
+          console.error('Failed to auto-create public link:', err);
+        });
+
       // Log activity
       await supabase.from('activity_log').insert({
         project_id: newProject.id,

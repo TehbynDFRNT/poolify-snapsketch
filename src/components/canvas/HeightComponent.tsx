@@ -28,7 +28,8 @@ export const HeightComponent = ({
 
   // Height marker dimensions
   const topCapWidth = 14; // Width of top horizontal cap (70% of original 20)
-  const bottomCapWidth = 7; // Width of bottom horizontal cap (half of top)
+  const slashLength = 12; // Length of diagonal slash at bottom
+  const lineExtension = 10; // Visual extension past slash (in pixels)
   const lineColor = '#EF4444'; // Red color
   const lineWidth = 2;
 
@@ -60,17 +61,17 @@ export const HeightComponent = ({
         fill="transparent"
       />
 
-      {/* Bottom horizontal cap - center aligned, half length */}
+      {/* Bottom diagonal slash - 45 degree angle through measurement point */}
       <Line
-        points={[-bottomCapWidth / 2, 0, bottomCapWidth / 2, 0]}
+        points={[-slashLength / 2, -slashLength / 2, slashLength / 2, slashLength / 2]}
         stroke={lineColor}
         strokeWidth={lineWidth}
         lineCap="round"
       />
 
-      {/* Vertical line - left aligned */}
+      {/* Vertical line - extends 5mm past bottom slash, measurement point at y=0 */}
       <Line
-        points={[0, 0, 0, -heightPx]}
+        points={[0, lineExtension, 0, -heightPx]}
         stroke={lineColor}
         strokeWidth={lineWidth}
         lineCap="round"

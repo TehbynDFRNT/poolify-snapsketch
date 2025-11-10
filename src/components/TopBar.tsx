@@ -5,7 +5,8 @@ import {
   Redo2,
   Save,
   Download,
-  Menu
+  Menu,
+  Share2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -23,6 +24,7 @@ interface TopBarProps {
   onSatelliteToggle: () => void;
   onAnnotationsToggle: () => void;
   onSave: () => void;
+  onShare?: () => void;
   onExport: () => void;
   onMenuClick: () => void;
 }
@@ -41,6 +43,7 @@ export const TopBar = ({
   onSatelliteToggle,
   onAnnotationsToggle,
   onSave,
+  onShare,
   onExport,
   onMenuClick,
 }: TopBarProps) => {
@@ -136,7 +139,19 @@ export const TopBar = ({
         >
           <Save className="w-5 h-5" />
         </Button>
-        
+
+        {onShare && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onShare}
+            className="min-w-[44px] min-h-[44px]"
+            title="Share project"
+          >
+            <Share2 className="w-5 h-5" />
+          </Button>
+        )}
+
         <Button
           onClick={onExport}
           className="min-h-[44px] gap-2"

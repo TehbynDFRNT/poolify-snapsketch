@@ -22,6 +22,7 @@ import { BottomPanel } from './BottomPanel';
 import { FloatingPropertiesCard } from './FloatingPropertiesCard';
 import { FloatingKeyboardShortcuts } from './FloatingKeyboardShortcuts';
 import { ExportDialog } from './ExportDialog';
+import { ShareProjectDialog } from './ShareProjectDialog';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { exportToPDF } from '@/utils/pdfExport';
 import { exportAsImage } from '@/utils/imageExport';
@@ -77,6 +78,7 @@ export const DesignCanvas = () => {
     }
   };
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
   // Start collapsed by default
   const [bottomPanelHeight, setBottomPanelHeight] = useState(40);
@@ -533,6 +535,7 @@ export const DesignCanvas = () => {
         onSatelliteToggle={toggleSatellite}
         onAnnotationsToggle={toggleAnnotations}
         onSave={handleSave}
+        onShare={permission === 'owner' ? () => setShareDialogOpen(true) : undefined}
         onExport={() => setExportDialogOpen(true)}
         onMenuClick={() => setMenuOpen(true)}
       />
@@ -609,6 +612,17 @@ export const DesignCanvas = () => {
         onOpenChange={setExportDialogOpen}
         onExport={handleExport}
       />
+
+      {currentProject.id && permission === 'owner' && (
+        <ShareProjectDialog
+          open={shareDialogOpen}
+          onOpenChange={setShareDialogOpen}
+          project={{
+            id: currentProject.id,
+            customer_name: currentProject.customerName || 'Untitled Project',
+          }}
+        />
+      )}
 
       <AlertDialog open={clearAllDialogOpen} onOpenChange={setClearAllDialogOpen}>
         <AlertDialogContent>

@@ -251,6 +251,50 @@ export type Database = {
           },
         ]
       }
+      project_public_links: {
+        Row: {
+          id: string
+          project_id: string
+          token: string
+          permission: string
+          allow_export: boolean
+          expires_at: string | null
+          revoked_at: string | null
+          created_by: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          token: string
+          permission?: string
+          allow_export?: boolean
+          expires_at?: string | null
+          revoked_at?: string | null
+          created_by: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          token?: string
+          permission?: string
+          allow_export?: boolean
+          expires_at?: string | null
+          revoked_at?: string | null
+          created_by?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_public_links_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_shares: {
         Row: {
           id: string

@@ -46,12 +46,26 @@ export const ReferenceLineComponent: React.FC<Props> = ({
     arrowEnds: true,
   };
 
+  const slashLength = 12; // Length of diagonal slash at endpoints
+  const lineExtension = 10; // Visual extension past slash (in pixels)
+
   const showMeasurement = component.properties.showMeasurement !== false;
   const label = component.properties.label;
   const annotation = component.properties.annotation;
 
   // Calculate line angle for annotation rotation
   const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+  // Calculate extended line endpoints (extends 5mm past each slash)
+  const lineAngle = Math.atan2(dy, dx);
+  const extendedStart = {
+    x: start.x - Math.cos(lineAngle) * lineExtension,
+    y: start.y - Math.sin(lineAngle) * lineExtension,
+  };
+  const extendedEnd = {
+    x: end.x + Math.cos(lineAngle) * lineExtension,
+    y: end.y + Math.sin(lineAngle) * lineExtension,
+  };
 
   // Calculate perpendicular offset for annotation (varies per object)
   const perpAngle = Math.atan2(dy, dx) + Math.PI / 2; // 90 degrees perpendicular
@@ -104,9 +118,9 @@ export const ReferenceLineComponent: React.FC<Props> = ({
       onDragStart={() => setIsDraggingNode(true)}
       onDragEnd={handleNodeDragEnd}
     >
-      {/* Main line */}
+      {/* Main line - extends 5mm past slashes, measurement points remain at start/end */}
       <Line
-        points={[start.x, start.y, end.x, end.y]}
+        points={[extendedStart.x, extendedStart.y, extendedEnd.x, extendedEnd.y]}
         stroke={style.color}
         strokeWidth={selected ? style.lineWidth + 1 : style.lineWidth}
         dash={style.dashed ? [10, 5] : []}
@@ -115,21 +129,33 @@ export const ReferenceLineComponent: React.FC<Props> = ({
         hitStrokeWidth={8}
       />
 
-      {/* Arrow caps */}
+      {/* Diagonal slash caps perpendicular to line */}
       {style.arrowEnds && (
         <>
-          <Circle
-            x={start.x}
-            y={start.y}
-            radius={4}
-            fill={style.color}
+          {/* Start point slash - perpendicular to line direction */}
+          <Line
+            points={[
+              start.x - Math.cos(angle * Math.PI / 180 + Math.PI / 4) * slashLength / 2,
+              start.y - Math.sin(angle * Math.PI / 180 + Math.PI / 4) * slashLength / 2,
+              start.x + Math.cos(angle * Math.PI / 180 + Math.PI / 4) * slashLength / 2,
+              start.y + Math.sin(angle * Math.PI / 180 + Math.PI / 4) * slashLength / 2,
+            ]}
+            stroke={style.color}
+            strokeWidth={style.lineWidth}
+            lineCap="round"
             listening={false}
           />
-          <Circle
-            x={end.x}
-            y={end.y}
-            radius={4}
-            fill={style.color}
+          {/* End point slash - perpendicular to line direction */}
+          <Line
+            points={[
+              end.x - Math.cos(angle * Math.PI / 180 + Math.PI / 4) * slashLength / 2,
+              end.y - Math.sin(angle * Math.PI / 180 + Math.PI / 4) * slashLength / 2,
+              end.x + Math.cos(angle * Math.PI / 180 + Math.PI / 4) * slashLength / 2,
+              end.y + Math.sin(angle * Math.PI / 180 + Math.PI / 4) * slashLength / 2,
+            ]}
+            stroke={style.color}
+            strokeWidth={style.lineWidth}
+            lineCap="round"
             listening={false}
           />
         </>

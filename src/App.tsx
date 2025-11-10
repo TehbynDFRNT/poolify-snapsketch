@@ -9,6 +9,8 @@ import { CloudHomePage } from "./components/CloudHomePage";
 import { DesignCanvas } from "./components/DesignCanvas";
 import { InstallPrompt } from "./components/InstallPrompt";
 import { IOSInstallPrompt } from "./components/IOSInstallPrompt";
+import { PublicProjectView } from "./components/PublicProjectView";
+import { CpqTestPage } from "./components/CpqTestPage";
 import { SignUp } from "./pages/SignUp";
 import { Login } from "./pages/Login";
 import { ForgotPassword } from "./pages/ForgotPassword";
@@ -35,7 +37,8 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
-            
+            <Route path="/share/:token" element={<PublicProjectView />} />
+
             {/* Protected routes */}
             <Route path="/projects" element={
               <ProtectedRoute>
@@ -62,7 +65,10 @@ const App = () => (
                 <PoolManagement />
               </ProtectedRoute>
             } />
-            
+
+            {/* Dev/Testing Routes */}
+            <Route path="/cpq-test" element={<CpqTestPage />} />
+
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
