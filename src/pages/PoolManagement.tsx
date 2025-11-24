@@ -12,6 +12,7 @@ import { ArrowLeft, Upload, Search, Edit, Trash2 } from 'lucide-react';
 import { usePoolVariants, useTogglePoolStatus, useDeletePoolVariant, useCreatePoolVariant, PoolVariant } from '@/hooks/usePoolVariants';
 import { PoolEditorDialog } from '@/components/PoolEditorDialog';
 import { DXFImportDialog } from '@/components/DXFImportDialog';
+import { CSVImportDialog } from '@/components/CSVImportDialog';
 import { parseDXFPool, DXFPoolData } from '@/utils/dxfParser';
 import {
   AlertDialog,
@@ -35,6 +36,7 @@ export function PoolManagement() {
   const [poolToDelete, setPoolToDelete] = useState<string | null>(null);
   const [dxfImportOpen, setDxfImportOpen] = useState(false);
   const [parsedDxfData, setParsedDxfData] = useState<DXFPoolData | null>(null);
+  const [csvImportOpen, setCsvImportOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: pools, isLoading } = usePoolVariants();
@@ -197,10 +199,16 @@ export function PoolManagement() {
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold">Pool Management</h1>
-          <Button onClick={handleImportDXF}>
-            <Upload className="w-4 h-4 mr-2" />
-            Import DXF
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setCsvImportOpen(true)}>
+              <Upload className="w-4 h-4 mr-2" />
+              Import CSV
+            </Button>
+            <Button onClick={handleImportDXF}>
+              <Upload className="w-4 h-4 mr-2" />
+              Import DXF
+            </Button>
+          </div>
           <input
             ref={fileInputRef}
             type="file"
@@ -302,6 +310,11 @@ export function PoolManagement() {
         onOpenChange={setDxfImportOpen}
         poolData={parsedDxfData}
         onImport={handleConfirmImport}
+      />
+
+      <CSVImportDialog
+        open={csvImportOpen}
+        onOpenChange={setCsvImportOpen}
       />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
