@@ -309,6 +309,10 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     return { x: (B2 * C1 - B1 * C2) / det, y: (A1 * C2 - A2 * C1) / det };
   };
 
+  // Sutherland-Hodgman polygon clipping algorithm
+  // IMPORTANT: This algorithm requires the CLIP polygon (2nd argument) to be CONVEX.
+  // Subject polygon (1st argument) can be concave. If clip is concave, results are incorrect.
+  // For rect-poly intersections, ensure the rectangle is the clip (see intersectAreaRectPoly).
   const clipPolygon = (subject: Pt[], clip: Pt[]): Pt[] => {
     if (!clip || clip.length < 3 || !subject || subject.length < 3) return subject;
     // Determine clip orientation; inside is to the left if CCW, to the right if CW
@@ -381,6 +385,28 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     }
     // Edge case: if everything became collinear, fall back to uniq
     return out.length >= 3 ? out : uniq;
+  };
+
+  // --- Visible-area helpers (stage-space) ---
+  const rectToPoly = (sr: { x: number; y: number; w: number; h: number }): Pt[] => {
+    return [
+      { x: sr.x,         y: sr.y },
+      { x: sr.x + sr.w,  y: sr.y },
+      { x: sr.x + sr.w,  y: sr.y + sr.h },
+      { x: sr.x,         y: sr.y + sr.h },
+    ];
+  };
+  const polyAreaAbs = (poly: Pt[]): number => {
+    // polygonArea2 is defined above; returns "twice area" (signed)
+    return Math.abs(polygonArea2(poly)) / 2;
+  };
+  // Compute area(rect ∩ poly) safely by clipping the (possibly concave) polygon
+  // with the rectangle (convex). Sutherland-Hodgman requires the CLIP polygon to be convex.
+  const intersectAreaRectPoly = (sr: { x: number; y: number; w: number; h: number }, poly: Pt[] | null): number => {
+    if (!poly || poly.length < 3) return 0;
+    const rect = rectToPoly(sr);
+    const clipped = clipPolygon(poly, rect); // clip = rectangle (convex) -> correct for concave boundaries
+    return clipped.length >= 3 ? polyAreaAbs(clipped) : 0;
   };
 
   const setBoundaryClipped = (localPts: Pt[]) => {
@@ -561,16 +587,37 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
 
     // Use precomputed projectClipLocal (pool-local)
 
-    const rectIntersectsBoth = (sr: StageRect) => {
-      const hitOuter = rectIntersectsPolygon(sr, outer);
-      const hitGlobal = projectClipLocal ? rectIntersectsPolygon(sr, projectClipLocal) : true;
-      return hitOuter && hitGlobal;
+    // Build visible region for area-based checks
+    const visibleRegionForGen: Pt[] | null = (() => {
+      if (!outer || outer.length < 3) return null;
+      if (projectClipLocal && projectClipLocal.length >= 3) {
+        const clipped = clipPolygon(outer, projectClipLocal);
+        return clipped.length >= 3 ? clipped : null;
+      }
+      return outer;
+    })();
+
+    const MIN_VISIBLE_PX2 = 40;  // 1/40 of 400x400mm tile area (4,000 mm² = 40 px²) - allows smaller cut tiles
+    const AREA_EPS_PX2    = 40;  // full vs partial tolerance
+
+    const rectHasPositiveOverlap = (sr: StageRect, region: Pt[] | null): boolean => {
+      if (!region) return true; // no clipping ⇒ treat as visible
+      return intersectAreaRectPoly(sr, region) >= MIN_VISIBLE_PX2;
     };
-    const rectInsideBoth = (sr: StageRect) => {
-      const inOuter = rectFullyInsidePolygon(sr, outer);
-      const inGlobal = projectClipLocal ? rectFullyInsidePolygon(sr, projectClipLocal) : true;
-      return inOuter && inGlobal;
+    const rectFullyInside = (sr: StageRect, region: Pt[] | null): boolean => {
+      if (!region) return true;
+      const vis = intersectAreaRectPoly(sr, region);
+      return (sr.w * sr.h - vis) <= AREA_EPS_PX2;
     };
+
+    // Use area-based checks instead of point-distance checks
+    const rectIntersectsBoth = (sr: StageRect) =>
+      rectHasPositiveOverlap(sr, outer) &&
+      (projectClipLocal ? rectHasPositiveOverlap(sr, projectClipLocal) : true);
+
+    const rectInsideBoth = (sr: StageRect) =>
+      rectFullyInside(sr, outer) &&
+      (projectClipLocal ? rectFullyInside(sr, projectClipLocal) : true);
 
     // Check if boundary has been edited beyond default (compare with tolerance)
     const isDefaultBoundary = outer.length === defaultBoundary.length &&
@@ -973,29 +1020,85 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     insertNodeAt(local);
   };
 
-  // Optional: compute coping statistics (m², full/partial counts) and persist
+  // Visible-only coping statistics (m², full/partial counts) and persist
   useEffect(() => {
+    // Build the visible region in stage space: coping boundary ∩ project clip (if any)
+    const visibleRegion: Pt[] | null = (() => {
+      if (!boundaryLive || boundaryLive.length < 3) return null;
+      if (projectClipLocal && projectClipLocal.length >= 3) {
+        const clipped = clipPolygon(boundaryLive, projectClipLocal);
+        return clipped.length >= 3 ? clipped : null;
+      }
+      return boundaryLive;
+    })();
+
+    // Collect all tiles in MM (base ring + user + auto)
+    type MMTile = { x: number; y: number; width: number; height: number; isPartial: boolean; side: 'top'|'bottom'|'left'|'right' };
     const mmAll: MMTile[] = ([] as MMTile[])
       .concat(baseTilesMM.top, baseTilesMM.bottom, baseTilesMM.left, baseTilesMM.right)
       .concat(userTilesMM)
       .concat(autoTilesMM);
 
-    const full = mmAll.filter(t => !t.isPartial).length;
-    const partial = mmAll.length - full;
-    const areaMm2 = mmAll.reduce((acc, t) => acc + (t.width * t.height), 0);
-    const areaM2 = areaMm2 / 1_000_000;
+    // Convert to stage rect (px) for overlap math
+    const toStageRect = (t: MMTile) => ({
+      x: roundHalf(t.x * scale),
+      y: roundHalf(t.y * scale),
+      w: Math.max(1, roundHalf(t.width  * scale)),
+      h: Math.max(1, roundHalf(t.height * scale)),
+      cut: t.isPartial,
+    });
+
+    // Thresholds: ignore pure "touch" (no area). Evaluate in stage units.
+    const MIN_VISIBLE_PX2 = 40;  // 1/40 of 400x400mm tile area (4,000 mm² = 40 px²) - allows smaller cut tiles
+    const AREA_EPS_PX2    = 40;  // full vs partial tolerance
+
+    let full = 0;
+    let partial = 0;
+    let visibleAreaPx2Sum = 0;
+
+    for (const t of mmAll) {
+      const sr = toStageRect(t);
+      const rectAreaPx2 = sr.w * sr.h;
+
+      // If there is no meaningful visible region, nothing is visible
+      if (!visibleRegion) continue;
+
+      // Compute visible overlap area (stage)
+      const visPx2 = intersectAreaRectPoly(sr, visibleRegion);
+
+      // Exclude tiles with no visible area (fixes grout-only extension "touch" case)
+      if (visPx2 < MIN_VISIBLE_PX2) continue;
+
+      visibleAreaPx2Sum += visPx2;
+
+      // Full if essentially the whole rect is visible; else partial
+      const clippedByBoundary = (rectAreaPx2 - visPx2) > AREA_EPS_PX2;
+      const isPartialByGeometry = clippedByBoundary;
+      const isPartialFinal = sr.cut || isPartialByGeometry;
+
+      if (isPartialFinal) partial++; else full++;
+    }
+
+    // Convert visible area to m²
+    const areaM2 = (visibleAreaPx2Sum / (scale * scale)) / 1_000_000;
 
     type CopingStats = { full?: number; partial?: number; total?: number; areaM2?: number };
     const prev = (component.properties.copingStatistics as unknown as CopingStats) || {};
-    if (prev.full !== full || prev.partial !== partial || Math.abs((prev.areaM2 || 0) - areaM2) > 1e-6) {
+    const total = full + partial;
+    if (prev.full !== full || prev.partial !== partial || prev.total !== total || Math.abs((prev.areaM2 || 0) - areaM2) > 1e-6) {
       updateComponent(component.id, {
         properties: {
           ...component.properties,
-          copingStatistics: { full, partial, total: mmAll.length, areaM2 }
+          copingStatistics: { full, partial, total, areaM2 }
         }
       });
     }
-  }, [autoTilesMM, baseTilesMM.top, baseTilesMM.bottom, baseTilesMM.left, baseTilesMM.right, userTilesMM, component.id, component.properties, updateComponent]);
+  }, [
+    // deps that affect visibility or tiles
+    boundaryLive, projectClipLocal,
+    autoTilesMM, baseTilesMM.top, baseTilesMM.bottom, baseTilesMM.left, baseTilesMM.right, userTilesMM,
+    component.id, component.properties, updateComponent, scale
+  ]);
 
   // Load and pre-render pattern image for pool fill (rotated 180° and sized to pool)
   useEffect(() => {
