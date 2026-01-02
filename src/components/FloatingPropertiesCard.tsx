@@ -4,10 +4,8 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useDesignStore } from '@/store/designStore';
-import { fillAreaWithPavers, calculateStatistics } from '@/utils/pavingFill';
 import { POOL_LIBRARY } from '@/constants/pools';
-import { GRID_CONFIG } from '@/constants/grid';
-import { calculatePoolCoping, DEFAULT_COPING_OPTIONS } from '@/utils/copingCalculation';
+import { SimpleCopingStats } from '@/types';
 
 interface FloatingPropertiesCardProps {
   component: Component | null;
@@ -93,100 +91,52 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
                    component.properties.poolId}
                 </div>
               </div>
-              {/* Pool Coping Tile Dimensions */}
+              {/* Pool & Coping Area Statistics */}
               <div className="space-y-2 pt-2 border-t">
-                <div>
-                  <Label className="text-xs font-medium">Coping Tile Dimensions</Label>
-                  {(() => {
-                    const hasExtensions = (component.properties.copingTiles && component.properties.copingTiles.length > 0)
-                      || ((component.properties as any).copingExtensions && (component.properties as any).copingExtensions.length > 0);
-                    return (
-                      <>
-                        <div className="flex gap-2 mt-1">
-                        {['coping-400x400','coping-600x400','coping-400x600'].map(id => (
-                          <Button
-                            key={id}
-                            variant={(component.properties.copingConfig?.id || 'none') === id ? 'default' : 'outline'}
-                            size="sm"
-                            disabled={hasExtensions}
-                            onClick={() => {
-                              if (hasExtensions) return;
-                              const cfg = DEFAULT_COPING_OPTIONS.find(o => o.id === id)!;
-                              const poolData = component.properties.pool || POOL_LIBRARY.find(p => p.id === component.properties.poolId);
-                              if (!poolData) return;
-                              const calc = calculatePoolCoping(poolData, cfg);
-                              updateComponent(component.id, {
-                                properties: {
-                                  ...component.properties,
-                                  showCoping: true,
-                                  copingConfig: cfg,
-                                  copingCalculation: calc,
-                                }
-                              });
-                            }}
-                            className="flex-1"
-                          >
-                            {id === 'coping-400x400' ? '400×400' : id === 'coping-600x400' ? '600×400' : '400×600'}
-                          </Button>
-                        ))}
-                        </div>
-                        {hasExtensions && (
-                          <div className="text-xs text-amber-600 mt-1">
-                            Delete extended coping tiles before changing tile dimensions.
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
+                {(() => {
+                  const stats = component.properties.copingStatistics as SimpleCopingStats | undefined;
+                  const poolData = component.properties.pool || POOL_LIBRARY.find(p => p.id === component.properties.poolId);
 
-                {component.properties.copingCalculation && (() => {
-                  // Use copingStatistics if available (includes auto-tiles from boundary extensions)
-                  // Otherwise fall back to manual calculation from base tiles
-                  if (component.properties.copingStatistics) {
-                    const stats = component.properties.copingStatistics;
-                    return (
-                      <div className="text-xs bg-muted p-2 rounded space-y-1">
-                        <div className="font-medium">
-                          Coping: {stats.total || 0} pavers
-                        </div>
-                        <div className="text-muted-foreground">
-                          {stats.full || 0} full + {stats.partial || 0} partial
-                        </div>
-                        <div className="text-muted-foreground">
-                          Area: {(stats.areaM2 || 0).toFixed(2)} m²
-                        </div>
-                      </div>
-                    );
+                  // Calculate pool area from outline
+                  let poolAreaM2 = 0;
+                  if (poolData?.outline && poolData.outline.length >= 3) {
+                    let area = 0;
+                    for (let i = 0; i < poolData.outline.length; i++) {
+                      const j = (i + 1) % poolData.outline.length;
+                      area += poolData.outline[i].x * poolData.outline[j].y;
+                      area -= poolData.outline[j].x * poolData.outline[i].y;
+                    }
+                    poolAreaM2 = Math.abs(area / 2) / 1_000_000; // mm² to m²
                   }
-
-                  // Fallback: calculate from base tiles only (no auto-tiles)
-                  const calc = component.properties.copingCalculation;
-                  const baseTiles = [
-                    ...(calc.deepEnd?.paverPositions || []),
-                    ...(calc.shallowEnd?.paverPositions || []),
-                    ...(calc.leftSide?.paverPositions || []),
-                    ...(calc.rightSide?.paverPositions || []),
-                  ];
-                  const userTiles = component.properties.copingTiles || [];
-                  const allTiles = [...baseTiles, ...userTiles];
-
-                  const fullPavers = allTiles.filter(t => !t.isPartial).length;
-                  const partialPavers = allTiles.filter(t => t.isPartial).length;
-                  const totalPavers = allTiles.length;
-                  const totalArea = allTiles.reduce((sum, t) => sum + (t.width * t.height), 0) / 1000000;
 
                   return (
                     <div className="text-xs bg-muted p-2 rounded space-y-1">
-                      <div className="font-medium">
-                        Coping: {totalPavers} pavers
+                      <div className="flex justify-between">
+                        <span>Pool:</span>
+                        <span className="font-medium">{poolAreaM2.toFixed(2)} m²</span>
                       </div>
-                      <div className="text-muted-foreground">
-                        {fullPavers} full + {partialPavers} partial
-                      </div>
-                      <div className="text-muted-foreground">
-                        Area: {totalArea.toFixed(2)} m²
-                      </div>
+                      {component.properties.showCoping && stats && (
+                        <>
+                          <div className="flex justify-between">
+                            <span>Coping:</span>
+                            <span className="font-medium">{(stats.baseCopingAreaM2 || 0).toFixed(2)} m²</span>
+                          </div>
+                          {(stats.extensionAreaM2 || 0) > 0.01 && (
+                            <div className="flex justify-between">
+                              <span>Extra paving:</span>
+                              <span className="font-medium">{(stats.extensionAreaM2 || 0).toFixed(2)} m²</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between pt-1 border-t font-semibold">
+                            <span>Total Paving:</span>
+                            <span>{(stats.areaM2 || 0).toFixed(2)} m²</span>
+                          </div>
+                          <div className="flex justify-between font-semibold text-primary">
+                            <span>Total Area:</span>
+                            <span>{(poolAreaM2 + (stats.areaM2 || 0)).toFixed(2)} m²</span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   );
                 })()}
@@ -326,37 +276,60 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
           )}
 
           {component.type === 'fence' && (
-            <div>
-              <Label className="text-xs">Fence Type</Label>
-              <div className="flex gap-2 mt-1">
-                <Button
-                  variant={component.properties.fenceType !== 'metal' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => updateComponent(component.id, {
-                    properties: {
-                      ...component.properties,
-                      fenceType: 'glass'
-                    }
-                  })}
-                  className="flex-1"
-                >
-                  Glass
-                </Button>
-                <Button
-                  variant={component.properties.fenceType === 'metal' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => updateComponent(component.id, {
-                    properties: {
-                      ...component.properties,
-                      fenceType: 'metal'
-                    }
-                  })}
-                  className="flex-1"
-                >
-                  Metal
-                </Button>
+            <>
+              <div>
+                <Label className="text-xs">Fence Type</Label>
+                <div className="flex gap-2 mt-1">
+                  <Button
+                    variant={component.properties.fenceType !== 'metal' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => updateComponent(component.id, {
+                      properties: {
+                        ...component.properties,
+                        fenceType: 'glass'
+                      }
+                    })}
+                    className="flex-1"
+                  >
+                    Glass
+                  </Button>
+                  <Button
+                    variant={component.properties.fenceType === 'metal' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => updateComponent(component.id, {
+                      properties: {
+                        ...component.properties,
+                        fenceType: 'metal'
+                      }
+                    })}
+                    className="flex-1"
+                  >
+                    Metal
+                  </Button>
+                </div>
               </div>
-            </div>
+              {/* Total Linear Meters - uses live totalLM from component properties */}
+              {(component.properties.totalLM !== undefined || (component.properties.points && component.properties.points.length >= 2)) && (
+                <div className="bg-muted rounded-lg p-3">
+                  <div className="text-sm flex justify-between">
+                    <span>Total Length:</span>
+                    <span className="font-medium">
+                      {(component.properties.totalLM as number)?.toFixed(2) ?? (() => {
+                        const pts = component.properties.points;
+                        if (!pts || pts.length < 2) return '0.00';
+                        let total = 0;
+                        for (let i = 0; i < pts.length - 1; i++) {
+                          const dx = pts[i + 1].x - pts[i].x;
+                          const dy = pts[i + 1].y - pts[i].y;
+                          total += Math.sqrt(dx * dx + dy * dy);
+                        }
+                        return ((total * 10) / 1000).toFixed(2);
+                      })()} LM
+                    </span>
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {component.type === 'gate' && (
@@ -394,37 +367,60 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
           )}
 
           {component.type === 'drainage' && (
-            <div>
-              <Label className="text-xs">Drainage Type</Label>
-              <div className="flex gap-2 mt-1">
-                <Button
-                  variant={component.properties.drainageType !== 'rock' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => updateComponent(component.id, {
-                    properties: {
-                      ...component.properties,
-                      drainageType: 'ultradrain'
-                    }
-                  })}
-                  className="flex-1"
-                >
-                  Ultra Drain
-                </Button>
-                <Button
-                  variant={component.properties.drainageType === 'rock' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => updateComponent(component.id, {
-                    properties: {
-                      ...component.properties,
-                      drainageType: 'rock'
-                    }
-                  })}
-                  className="flex-1"
-                >
-                  Rock Drain
-                </Button>
+            <>
+              <div>
+                <Label className="text-xs">Drainage Type</Label>
+                <div className="flex gap-2 mt-1">
+                  <Button
+                    variant={component.properties.drainageType !== 'rock' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => updateComponent(component.id, {
+                      properties: {
+                        ...component.properties,
+                        drainageType: 'ultradrain'
+                      }
+                    })}
+                    className="flex-1"
+                  >
+                    Ultra Drain
+                  </Button>
+                  <Button
+                    variant={component.properties.drainageType === 'rock' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => updateComponent(component.id, {
+                      properties: {
+                        ...component.properties,
+                        drainageType: 'rock'
+                      }
+                    })}
+                    className="flex-1"
+                  >
+                    Rock Drain
+                  </Button>
+                </div>
               </div>
-            </div>
+              {/* Total Linear Meters - uses live totalLM from component properties */}
+              {(component.properties.totalLM !== undefined || (component.properties.points && component.properties.points.length >= 2)) && (
+                <div className="bg-muted rounded-lg p-3">
+                  <div className="text-sm flex justify-between">
+                    <span>Total Length:</span>
+                    <span className="font-medium">
+                      {(component.properties.totalLM as number)?.toFixed(2) ?? (() => {
+                        const pts = component.properties.points;
+                        if (!pts || pts.length < 2) return '0.00';
+                        let total = 0;
+                        for (let i = 0; i < pts.length - 1; i++) {
+                          const dx = pts[i + 1].x - pts[i].x;
+                          const dy = pts[i + 1].y - pts[i].y;
+                          total += Math.sqrt(dx * dx + dy * dy);
+                        }
+                        return ((total * 10) / 1000).toFixed(2);
+                      })()} LM
+                    </span>
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {component.type === 'quick_measure' && (
@@ -533,10 +529,7 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
                     size="sm"
                     onClick={() => {
                       updateComponent(component.id, {
-                        properties: {
-                          ...component.properties,
-                          areaSurface: 'pavers'
-                        }
+                        properties: { ...component.properties, areaSurface: 'pavers' }
                       });
                     }}
                     className="flex-1"
@@ -548,10 +541,7 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
                     size="sm"
                     onClick={() => {
                       updateComponent(component.id, {
-                        properties: {
-                          ...component.properties,
-                          areaSurface: 'concrete'
-                        }
+                        properties: { ...component.properties, areaSurface: 'concrete' }
                       });
                     }}
                     className="flex-1"
@@ -563,10 +553,7 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
                     size="sm"
                     onClick={() => {
                       updateComponent(component.id, {
-                        properties: {
-                          ...component.properties,
-                          areaSurface: 'grass'
-                        }
+                        properties: { ...component.properties, areaSurface: 'grass' }
                       });
                     }}
                     className="flex-1"
@@ -576,194 +563,21 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
                 </div>
               </div>
 
-              {/* Only show paver options when surface type is pavers */}
-              {(!component.properties.areaSurface || component.properties.areaSurface === 'pavers') && (
-                <>
-                  <div>
-                    <Label className="text-xs">Paver Size</Label>
-                    <div className="flex gap-2 mt-1">
-                      <Button
-                        variant={component.properties.paverSize === '400x400' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => {
-                          const pavers = fillAreaWithPavers(
-                            component.properties.boundary || [],
-                            '400x400',
-                            'vertical',
-                            component.properties.showEdgePavers || true
-                          );
-                          const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
-                          updateComponent(component.id, {
-                            properties: {
-                              ...component.properties,
-                              paverSize: '400x400',
-                              pavers,
-                              statistics,
-                            }
-                          });
-                        }}
-                        className="flex-1"
-                      >
-                        400 × 400
-                      </Button>
-                      <Button
-                        variant={component.properties.paverSize === '400x600' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => {
-                          const pavers = fillAreaWithPavers(
-                            component.properties.boundary || [],
-                            '400x600',
-                            component.properties.paverOrientation || 'vertical',
-                            component.properties.showEdgePavers || true
-                          );
-                          const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
-                          updateComponent(component.id, {
-                            properties: {
-                              ...component.properties,
-                              paverSize: '400x600',
-                              pavers,
-                              statistics,
-                            }
-                          });
-                        }}
-                        className="flex-1"
-                      >
-                        400 × 600
-                      </Button>
-                    </div>
-                  </div>
-
-                  {component.properties.paverSize === '400x600' && (
-                    <div>
-                      <Label className="text-xs">Orientation</Label>
-                      <div className="flex gap-2 mt-1">
-                        <Button
-                          variant={component.properties.paverOrientation === 'vertical' ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => {
-                            const pavers = fillAreaWithPavers(
-                              component.properties.boundary || [],
-                              '400x600',
-                              'vertical',
-                              component.properties.showEdgePavers || true
-                            );
-                            const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
-                            updateComponent(component.id, {
-                              properties: {
-                                ...component.properties,
-                                paverOrientation: 'vertical',
-                                pavers,
-                                statistics,
-                              }
-                            });
-                          }}
-                          className="flex-1"
-                        >
-                          Vertical
-                        </Button>
-                        <Button
-                          variant={component.properties.paverOrientation === 'horizontal' ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => {
-                            const pavers = fillAreaWithPavers(
-                              component.properties.boundary || [],
-                              '400x600',
-                              'horizontal',
-                              component.properties.showEdgePavers || true
-                            );
-                            const statistics = calculateStatistics(pavers, component.properties.wastagePercentage || 0);
-                            updateComponent(component.id, {
-                              properties: {
-                                ...component.properties,
-                                paverOrientation: 'horizontal',
-                                pavers,
-                                statistics,
-                              }
-                            });
-                          }}
-                          className="flex-1"
-                        >
-                          Horizontal
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="bg-muted rounded-lg p-3 space-y-2">
-                    <h4 className="font-semibold text-sm">Material Count</h4>
-                    <div className="text-sm space-y-1">
-                      <div className="flex justify-between">
-                        <span>Full pavers:</span>
-                        <span className="font-medium">{component.properties.statistics?.fullPavers || 0}</span>
-                      </div>
-                      <div className="flex justify-between text-orange-600">
-                        <span>Edge pavers:</span>
-                        <span className="font-medium">{component.properties.statistics?.edgePavers || 0}</span>
-                      </div>
-                      <div className="flex justify-between pt-1 border-t">
-                        <span>Total area:</span>
-                        <span className="font-medium">
-                          {(() => {
-                            const boundary = component.properties.boundary || [];
-                            if (boundary.length < 3) return '0.00';
-                            let area = 0;
-                            for (let i = 0; i < boundary.length; i++) {
-                              const j = (i + 1) % boundary.length;
-                              area += boundary[i].x * boundary[j].y;
-                              area -= boundary[j].x * boundary[i].y;
-                            }
-                            area = Math.abs(area / 2); // px²
-                            const pxPerMm = GRID_CONFIG.spacing / 100;
-                            const mmPerPx = 1 / pxPerMm;
-                            const areaInM2 = (area * mmPerPx * mmPerPx) / 1_000_000;
-                            return areaInM2.toFixed(2);
-                          })()} m²
-                        </span>
-                      </div>
-                      {(component.properties.wastagePercentage || 0) > 0 && (
-                        <div className="flex justify-between text-primary pt-1 border-t font-semibold">
-                          <span>Order Quantity:</span>
-                          <span>{component.properties.statistics?.orderQuantity || 0} pavers</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Show area summary for concrete/grass surfaces */}
-              {component.properties.areaSurface && component.properties.areaSurface !== 'pavers' && (
-                <div className="bg-muted rounded-lg p-3 space-y-2">
-                  <h4 className="font-semibold text-sm">
-                    {component.properties.areaSurface === 'concrete' ? 'Concrete Area' : 'Grass Area'}
-                  </h4>
-                  <div className="text-sm space-y-1">
-                    <div className="flex justify-between">
-                      <span>Total area:</span>
-                      <span className="font-medium">
-                        {(() => {
-                          const boundary = component.properties.boundary || [];
-                          if (boundary.length < 3) return '0';
-                          let area = 0;
-                          for (let i = 0; i < boundary.length; i++) {
-                            const j = (i + 1) % boundary.length;
-                            area += boundary[i].x * boundary[j].y;
-                            area -= boundary[j].x * boundary[i].y;
-                          }
-                          area = Math.abs(area / 2);
-                          // Convert from canvas px² to m²
-                          // pxPerMm = GRID_CONFIG.spacing / 100 (px per mm)
-                          // mmPerPx = 1 / pxPerMm; area_mm2 = area_px2 * (mmPerPx^2)
-                          const pxPerMm = GRID_CONFIG.spacing / 100;
-                          const mmPerPx = 1 / pxPerMm;
-                          const areaInM2 = (area * mmPerPx * mmPerPx) / 1_000_000;
-                          return areaInM2.toFixed(2);
-                        })()} m²
-                      </span>
-                    </div>
-                  </div>
+              {/* Area Statistics - uses live values from component properties */}
+              <div className="bg-muted rounded-lg p-3 space-y-1">
+                <div className="text-sm flex justify-between">
+                  <span>Total area:</span>
+                  <span className="font-medium">
+                    {(component.properties.statistics?.totalArea || 0).toFixed(2)} m²
+                  </span>
                 </div>
-              )}
+                <div className="text-sm flex justify-between">
+                  <span>Perimeter:</span>
+                  <span className="font-medium">
+                    {(component.properties.statistics?.perimeterLM || 0).toFixed(2)} LM
+                  </span>
+                </div>
+              </div>
             </>
           )}
 

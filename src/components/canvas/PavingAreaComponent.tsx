@@ -1,11 +1,9 @@
-import { Group, Line, Rect, Text, Circle } from 'react-konva';
+import { Group, Line, Text, Circle } from 'react-konva';
 import { Component } from '@/types';
 import { useMemo, useEffect, useRef, useState, useCallback } from 'react';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG, SNAP_CONFIG } from '@/constants/grid';
-import { fillAreaWithPavers, calculateStatistics } from '@/utils/pavingFill';
-import { roundHalf } from '@/utils/canvasSnap';
-import { TILE_COLORS, TILE_GAP } from '@/constants/tileConfig';
+import { TILE_COLORS } from '@/constants/tileConfig';
 import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
 
 interface PavingAreaComponentProps {
@@ -17,144 +15,22 @@ interface PavingAreaComponentProps {
 }
 
 type Pt = { x: number; y: number };
-type Frame = { x: number; y: number; side: number };
-type PaverRect = {
-  id: string;
-  position: { x: number; y: number }; // local to frame
-  width: number;
-  height: number;
-  isEdgePaver: boolean; // true = cut
-};
 
-/** ---------- Geometry helpers ---------- */
-
-// standard ray casting
-function pointInPolygon(point: Pt, polygon: Pt[]): boolean {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].x, yi = polygon[i].y;
-    const xj = polygon[j].x, yj = polygon[j].y;
-    const intersect =
-      yi > point.y !== yj > point.y &&
-      point.x < ((xj - xi) * (point.y - yi)) / (yj - yi + 0.0000001) + xi;
-    if (intersect) inside = !inside;
+/** Calculate polygon area using shoelace formula - returns m² */
+function calculatePolygonAreaM2(pts: Pt[]): number {
+  if (!pts || pts.length < 3) return 0;
+  let area = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length;
+    area += pts[i].x * pts[j].y;
+    area -= pts[j].x * pts[i].y;
   }
-  return inside;
+  area = Math.abs(area / 2); // px²
+  // Convert from canvas px² to m²
+  const pxPerMm = GRID_CONFIG.spacing / 100;
+  const mmPerPx = 1 / pxPerMm;
+  return (area * mmPerPx * mmPerPx) / 1_000_000;
 }
-
-function onSegment(p: Pt, q: Pt, r: Pt) {
-  return (
-    q.x <= Math.max(p.x, r.x) + 1e-6 &&
-    q.x + 1e-6 >= Math.min(p.x, r.x) &&
-    q.y <= Math.max(p.y, r.y) + 1e-6 &&
-    q.y + 1e-6 >= Math.min(p.y, r.y)
-  );
-}
-function orientation(p: Pt, q: Pt, r: Pt) {
-  const val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
-  if (Math.abs(val) < 1e-9) return 0;
-  return val > 0 ? 1 : 2;
-}
-function segmentsIntersect(p1: Pt, q1: Pt, p2: Pt, q2: Pt) {
-  const o1 = orientation(p1, q1, p2);
-  const o2 = orientation(p1, q1, q2);
-  const o3 = orientation(p2, q2, p1);
-  const o4 = orientation(p2, q2, q1);
-  if (o1 !== o2 && o3 !== o4) return true;
-  if (o1 === 0 && onSegment(p1, p2, q1)) return true;
-  if (o2 === 0 && onSegment(p1, q2, q1)) return true;
-  if (o3 === 0 && onSegment(p2, p1, q2)) return true;
-  if (o4 === 0 && onSegment(p2, q1, q2)) return true;
-  return false;
-}
-
-function rectCornersLocal(r: { x: number; y: number; w: number; h: number }): Pt[] {
-  return [
-    { x: r.x, y: r.y },
-    { x: r.x + r.w, y: r.y },
-    { x: r.x + r.w, y: r.y + r.h },
-    { x: r.x, y: r.y + r.h },
-  ];
-}
-
-// Check if a point is on or very close to a polygon edge
-function isPointOnPolygonBoundary(pt: Pt, poly: Pt[], tolerance = 3): boolean {
-  for (let i = 0; i < poly.length; i++) {
-    const p1 = poly[i];
-    const p2 = poly[(i + 1) % poly.length];
-
-    // Check if point is on the line segment p1-p2
-    const dx = p2.x - p1.x;
-    const dy = p2.y - p1.y;
-    const lengthSquared = dx * dx + dy * dy;
-
-    if (lengthSquared < 0.001) continue; // Skip zero-length segments
-
-    // Project point onto the line
-    const t = Math.max(0, Math.min(1, ((pt.x - p1.x) * dx + (pt.y - p1.y) * dy) / lengthSquared));
-    const projX = p1.x + t * dx;
-    const projY = p1.y + t * dy;
-
-    // Check distance from point to projection
-    const distSquared = (pt.x - projX) * (pt.x - projX) + (pt.y - projY) * (pt.y - projY);
-    if (distSquared < tolerance * tolerance) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function rectFullyInsidePolygon(rect: { x: number; y: number; w: number; h: number }, poly: Pt[]) {
-  // Shrink the rectangle slightly inward (1px on each side) to account for grout gaps and floating point errors
-  const inset = 1;
-  const shrunkRect = {
-    x: rect.x + inset,
-    y: rect.y + inset,
-    w: Math.max(1, rect.w - inset * 2),
-    h: Math.max(1, rect.h - inset * 2)
-  };
-
-  // Check if all corners of the shrunk rectangle are inside (or very close to boundary)
-  const corners = rectCornersLocal(shrunkRect);
-  return corners.every((c) => pointInPolygon(c, poly) || isPointOnPolygonBoundary(c, poly));
-}
-function rectIntersectsPolygon(rect: { x: number; y: number; w: number; h: number }, poly: Pt[]) {
-  const corners = rectCornersLocal(rect);
-
-  // Count how many corners are inside or on boundary
-  let cornersInOrOn = 0;
-  for (const c of corners) {
-    if (pointInPolygon(c, poly) || isPointOnPolygonBoundary(c, poly, 2)) {
-      cornersInOrOn++;
-    }
-  }
-
-  // If at least 2 corners are in/on the polygon, it's a meaningful intersection
-  if (cornersInOrOn >= 2) return true;
-
-  // Check if polygon vertex is inside rect
-  const inRect = (p: Pt) => p.x >= rect.x && p.x <= rect.x + rect.w && p.y >= rect.y && p.y <= rect.y + rect.h;
-  if (poly.some(inRect)) return true;
-
-  // Check edge intersections
-  const rectEdges: [Pt, Pt][] = [
-    [corners[0], corners[1]],
-    [corners[1], corners[2]],
-    [corners[2], corners[3]],
-    [corners[3], corners[0]],
-  ];
-  for (let i = 0; i < poly.length; i++) {
-    const a = poly[i];
-    const b = poly[(i + 1) % poly.length];
-    for (const [r1, r2] of rectEdges) {
-      if (segmentsIntersect(a, b, r1, r2)) return true;
-    }
-  }
-
-  return false;
-}
-
-/** ---------- Main Component ---------- */
 
 export const PavingAreaComponent = ({
   component,
@@ -168,180 +44,74 @@ export const PavingAreaComponent = ({
   const zoom = useDesignStore((s) => s.zoom);
   const allComponents = useDesignStore((s) => s.components);
 
-  // config
-  const groutMm = TILE_GAP.size;
   const pxPerMm = GRID_CONFIG.spacing / 100;
-  const groutPx = TILE_GAP.renderGap ? groutMm * pxPerMm : 0;
-  const groutStrokePx = groutMm * pxPerMm;
-
   const boundaryStage: Pt[] = component.properties.boundary || [];
   const areaSurface = (component.properties as any).areaSurface || 'pavers';
 
-  const sizeStr: string = component.properties.paverSize || '400x400';
-  const orient: 'horizontal' | 'vertical' = component.properties.paverOrientation || 'vertical';
-  // Legacy tilePlacementOrigin removed; frame is the single anchor (top-left phase)
-  // Snap division: 1=edge only, 2=half, 4=quarter (default 4)
-  const snapDivision: number = (component.properties as any).tileSnapDivision ?? 4;
-
   const groupRef = useRef<any>(null);
-  // Keep the outer group anchored while vertex dragging to avoid visual scatter
-  const dragAnchorFrameRef = useRef<Frame | null>(null);
-  const [previewFrame, setPreviewFrame] = useState<Frame | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [localPreview, setLocalPreview] = useState<Pt[] | null>(null);
+  const [selectedNodes, setSelectedNodes] = useState<number[]>([]);
 
-  // ---------- tiling frame (invisible square) ----------
-  // Persist a square that encloses the initial polygon bbox. This does NOT change when nodes are moved.
-  const existingFrame: Frame | undefined = (component.properties as any).tilingFrame;
-  const initialFrame: Frame = useMemo(() => {
-    if (!boundaryStage.length) return { x: 0, y: 0, side: 0 };
+  // Calculate bounding box for positioning
+  const bbox = useMemo(() => {
+    if (!boundaryStage.length) return { x: 0, y: 0, width: 0, height: 0 };
     const xs = boundaryStage.map((p) => p.x);
     const ys = boundaryStage.map((p) => p.y);
-    const minX = Math.min(...xs), maxX = Math.max(...xs);
-    const minY = Math.min(...ys), maxY = Math.max(...ys);
-    const w = maxX - minX, h = maxY - minY;
-    const baseSize = Math.max(w, h);
-
-    // Add buffer space (50% extra on each side) to ensure tiles extend beyond vertex drag limits
-    const bufferMultiplier = 1.5;
-    const side = baseSize * bufferMultiplier;
-    const bufferOffset = (side - baseSize) / 2;
-
-    return { x: minX - bufferOffset, y: minY - bufferOffset, side };
+    const minX = Math.min(...xs);
+    const minY = Math.min(...ys);
+    return {
+      x: minX,
+      y: minY,
+      width: Math.max(...xs) - minX,
+      height: Math.max(...ys) - minY,
+    };
   }, [boundaryStage]);
 
-  // Use a preview frame while editing so the tiling area can expand in real-time.
-  const frame: Frame = previewFrame ?? (existingFrame && existingFrame.side > 0 ? existingFrame : initialFrame);
-  const anchorFrame: Frame = dragAnchorFrameRef.current ?? frame;
+  // Boundary in local coords (relative to bbox origin)
+  const boundaryLocal = useMemo(
+    () => boundaryStage.map((p) => ({ x: p.x - bbox.x, y: p.y - bbox.y })),
+    [boundaryStage, bbox.x, bbox.y]
+  );
 
-  // On first mount (or if legacy objects lack frame), persist it.
+  // Calculate area statistics from committed boundary
+  const areaM2 = useMemo(() => calculatePolygonAreaM2(boundaryStage), [boundaryStage]);
+
+  // Calculate LIVE area from preview during drag (for real-time display)
+  const liveAreaM2 = useMemo(() => {
+    if (!localPreview) return areaM2;
+    // Convert local preview back to stage coordinates for area calc
+    const previewStage = localPreview.map(p => ({ x: p.x + bbox.x, y: p.y + bbox.y }));
+    return calculatePolygonAreaM2(previewStage);
+  }, [localPreview, bbox.x, bbox.y, areaM2]);
+
+  // Calculate LIVE perimeter
+  const livePerimeterLM = useMemo(() => {
+    const pts = localPreview || boundaryLocal;
+    let perimeter = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % pts.length];
+      perimeter += Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+    }
+    // Convert px to mm (10px = 100mm) then to meters
+    return (perimeter * 10) / 1000;
+  }, [localPreview, boundaryLocal]);
+
+  // Update component statistics when area changes (uses live values during drag)
   useEffect(() => {
-    if (!existingFrame || existingFrame.side <= 0) {
+    const current = component.properties.statistics;
+    if (!current || Math.abs((current.totalArea || 0) - liveAreaM2) > 0.001 || Math.abs((current.perimeterLM || 0) - livePerimeterLM) > 0.001) {
       updateComponent(component.id, {
         properties: {
           ...component.properties,
-          tilingFrame: initialFrame,
+          statistics: { totalArea: liveAreaM2, perimeterLM: livePerimeterLM, fullPavers: 0, edgePavers: 0, orderQuantity: 0 },
         },
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [existingFrame?.side, initialFrame.side]);
+  }, [liveAreaM2, livePerimeterLM, component.id, component.properties, updateComponent]);
 
-  // boundary in frame-local coords
-  const boundaryLocal = useMemo(
-    () => boundaryStage.map((p) => ({ x: p.x - frame.x, y: p.y - frame.y })),
-    [boundaryStage, frame.x, frame.y]
-  );
-
-  // ---------- tile size in px ----------
-  const { tileW, tileH } = useMemo(() => {
-    // parse "400x600"
-    const [aStr, bStr] = (sizeStr || '400x400').split('x');
-    const a = parseFloat(aStr) || 400;
-    const b = parseFloat(bStr) || 400;
-    let wmm = a, hmm = b;
-    if (orient === 'horizontal') {
-      // width is the longer side
-      if (a < b) { wmm = b; hmm = a; }
-    } else {
-      // vertical: height is the longer side
-      if (a > b) { wmm = b; hmm = a; }
-    }
-    return { tileW: wmm * pxPerMm, tileH: hmm * pxPerMm };
-  }, [sizeStr, orient, pxPerMm]);
-
-  const stepX = useMemo(() => roundHalf(tileW + groutPx), [tileW, groutPx]);
-  const stepY = useMemo(() => roundHalf(tileH + groutPx), [tileH, groutPx]);
-  const phaseX = useMemo(() => groutPx / 2, [groutPx]);
-  const phaseY = useMemo(() => groutPx / 2, [groutPx]);
-  const snapStepX = useMemo(() => stepX / Math.max(1, snapDivision), [stepX, snapDivision]);
-  const snapStepY = useMemo(() => stepY / Math.max(1, snapDivision), [stepY, snapDivision]);
-
-  // ---------- generate full grid in frame-local coords (covers frame + one extra ring to allow partials) ----------
-  const gridLocalAll: PaverRect[] = useMemo(() => {
-    if (areaSurface !== 'pavers' || frame.side <= 0) return [];
-    const cols: number[] = [];
-    const rows: number[] = [];
-    // top-left anchored with symmetric grout phase (−G/2)
-    for (let x = -phaseX; x < frame.side + tileW + phaseX + 1; x += stepX) cols.push(roundHalf(x));
-    for (let y = -phaseY; y < frame.side + tileH + phaseY + 1; y += stepY) rows.push(roundHalf(y));
-
-    const w = Math.max(1, roundHalf(tileW));
-    const h = Math.max(1, roundHalf(tileH));
-
-    const tiles: PaverRect[] = [];
-    let id = 0;
-    for (const y of rows) {
-      for (const x of cols) {
-        tiles.push({
-          id: `paver-${id++}`,
-          position: { x, y },
-          width: w,
-          height: h,
-          isEdgePaver: false,
-        });
-      }
-    }
-    return tiles;
-  }, [areaSurface, frame.side, tileW, tileH, stepX, stepY, phaseX, phaseY]);
-
-  // ---------- filter grid to only tiles intersecting the polygon (mask), also mark cut tiles ----------
-  const paversLocalVisible: PaverRect[] = useMemo(() => {
-    if (areaSurface !== 'pavers' || boundaryLocal.length < 3) return [];
-    const poly = boundaryLocal;
-    const vis: PaverRect[] = [];
-    for (const t of gridLocalAll) {
-      const rect = { x: t.position.x, y: t.position.y, w: t.width, h: t.height };
-      if (!rectIntersectsPolygon(rect, poly)) continue;
-      const isFull = rectFullyInsidePolygon(rect, poly);
-      vis.push({ ...t, isEdgePaver: !isFull });
-    }
-    return vis;
-  }, [areaSurface, boundaryLocal, gridLocalAll]);
-
-  // stage-coord pavers (for statistics / ghost)
-  const paversStageVisible = useMemo(
-    () =>
-      paversLocalVisible.map((p) => ({
-        ...p,
-        position: { x: p.position.x + frame.x, y: p.position.y + frame.y },
-      })),
-    [paversLocalVisible, frame.x, frame.y]
-  );
-
-  // ---------- statistics derived from on-canvas visible tiles (aligns with Pool coping logic) ----------
-  const statistics = useMemo(() => {
-    if (areaSurface !== 'pavers') {
-      return { fullPavers: 0, edgePavers: 0, totalPavers: 0, totalArea: 0, orderQuantity: 0, wastage: component.properties.wastagePercentage || 0 };
-    }
-    const fullPavers = paversLocalVisible.filter(p => !p.isEdgePaver).length;
-    const edgePavers = paversLocalVisible.length - fullPavers;
-    const totalPavers = paversLocalVisible.length;
-    // Convert px area to m²
-    const pxPerMm = GRID_CONFIG.spacing / 100;
-    const mmPerPx = 1 / pxPerMm;
-    let totalArea = 0;
-    for (const p of paversLocalVisible) {
-      const wMm = p.width * mmPerPx;
-      const hMm = p.height * mmPerPx;
-      totalArea += (wMm * hMm) / 1_000_000;
-    }
-    const wastage = component.properties.wastagePercentage || 0;
-    const orderQuantity = totalPavers + Math.ceil(totalPavers * (wastage / 100));
-    return { fullPavers, edgePavers, totalPavers, totalArea, orderQuantity, wastage };
-  }, [areaSurface, paversLocalVisible, component.properties.wastagePercentage]);
-  useEffect(() => {
-    const current = component.properties.statistics;
-    if (
-      !current ||
-      current.fullPavers !== statistics.fullPavers ||
-      current.edgePavers !== statistics.edgePavers ||
-      current.totalArea !== statistics.totalArea
-    ) {
-      updateComponent(component.id, { properties: { ...component.properties, statistics } });
-    }
-  }, [statistics, component.id, component.properties, updateComponent]);
-
-  // ---------- selection / nodes ----------
-  const [selectedNodes, setSelectedNodes] = useState<number[]>([]);
+  // Node selection
   const isNodeSelected = (i: number) => selectedNodes.includes(i);
   useEffect(() => {
     if (!isSelected) setSelectedNodes([]);
@@ -353,63 +123,7 @@ export const PavingAreaComponent = ({
     });
   };
 
-  // ---------- ghost & edit preview ----------
-  const [ghost, setGhost] = useState<null | { boundary: Pt[]; pavers: PaverRect[] }>(null);
-  const [localPreview, setLocalPreview] = useState<Pt[] | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const showLive = !ghost && !localPreview;
-  const [poolSnapPreview, setPoolSnapPreview] = useState<null | {
-    edgeX?: number;
-    edgeY?: number;
-    rect: { minX: number; maxX: number; minY: number; maxY: number };
-  }>(null);
-
-  const toStage = (local: Pt[]) => local.map((p) => ({ x: p.x + frame.x, y: p.y + frame.y }));
-  const snapWorldToTile = useCallback((wx: number, wy: number) => {
-    // Convert world to frame-local
-    const lx = wx - frame.x;
-    const ly = wy - frame.y;
-
-    let snappedLx = lx;
-    let snappedLy = ly;
-    // top-left anchored snap with symmetric grout phase (−G/2)
-    snappedLx = Math.round((lx + phaseX) / snapStepX) * snapStepX - phaseX;
-    snappedLy = Math.round((ly + phaseY) / snapStepY) * snapStepY - phaseY;
-
-    // Back to world
-    return { x: roundHalf(frame.x + snappedLx), y: roundHalf(frame.y + snappedLy) };
-  }, [frame.x, frame.y, frame.side, snapStepX, snapStepY, phaseX, phaseY]);
-
-  // (reverted) No special grout-center snap helper; use standard phased tile snap
-  
-  // Compute tiles for a given frame and polygon (all in frame-local coords)
-  const computeTilesForFrame = useCallback((polyLocal: Pt[], fr: Frame): PaverRect[] => {
-    if (areaSurface !== 'pavers' || fr.side <= 0 || polyLocal.length < 3) return [];
-
-    // Build grid in local coords for the provided frame
-    const cols: number[] = [];
-    const rows: number[] = [];
-    // top-left anchored frame grid
-    for (let x = 0; x < fr.side + tileW + 1; x += stepX) cols.push(roundHalf(x));
-    for (let y = 0; y < fr.side + tileH + 1; y += stepY) rows.push(roundHalf(y));
-
-    const w = Math.max(1, roundHalf(tileW));
-    const h = Math.max(1, roundHalf(tileH));
-
-    const out: PaverRect[] = [];
-    let id = 0;
-    for (const y of rows) {
-      for (const x of cols) {
-        const rect = { x, y, w, h };
-        if (!rectIntersectsPolygon(rect, polyLocal)) continue;
-        const isFull = rectFullyInsidePolygon(rect, polyLocal);
-        out.push({ id: `paver-${id++}` , position: { x, y }, width: w, height: h, isEdgePaver: !isFull });
-      }
-    }
-    return out;
-  }, [areaSurface, tileW, tileH, stepX, stepY]);
-
-  // ---------- context menu ----------
+  // Context menu
   const handleRightClick = (e: any) => {
     e.evt.preventDefault();
     if (!onContextMenu) return;
@@ -418,12 +132,10 @@ export const PavingAreaComponent = ({
     onContextMenu(component, { x: pt.x, y: pt.y });
   };
 
-  // ---------- segment measurements ----------
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-
+  // Measurements
   const renderMeasurements = () => {
     if (!(annotationsVisible || isSelected)) return null;
-      const measurements: JSX.Element[] = [];
+    const measurements: JSX.Element[] = [];
     const pts = localPreview || boundaryLocal;
     const n = pts.length;
 
@@ -432,10 +144,10 @@ export const PavingAreaComponent = ({
       const b = pts[(i + 1) % n];
       const dx = b.x - a.x;
       const dy = b.y - a.y;
-      const lengthInMM = Math.round(Math.sqrt(dx * dx + dy * dy) * 10); // 1px = 10mm
+      const lengthInMM = Math.round(Math.sqrt(dx * dx + dy * dy) * 10);
 
-      // Calculate perpendicular offset to position text away from the line
       const lineLength = Math.sqrt(dx * dx + dy * dy);
+      if (lineLength < 1) continue;
       const perpX = -dy / lineLength;
       const perpY = dx / lineLength;
       const offset = getAnnotationOffsetPx(component.id, component.position);
@@ -443,7 +155,6 @@ export const PavingAreaComponent = ({
       const midX = (a.x + b.x) / 2;
       const midY = (a.y + b.y) / 2;
 
-      // Skip measurement if this segment is being dragged
       if (dragIndex != null && (dragIndex === i || dragIndex === (i + 1) % n)) continue;
 
       const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
@@ -452,7 +163,7 @@ export const PavingAreaComponent = ({
           key={`measurement-${i}`}
           x={midX + perpX * offset}
           y={midY + perpY * offset}
-          text={`Paving Area: ${lengthInMM}mm`}
+          text={`${lengthInMM}mm`}
           fontSize={11}
           fill={TILE_COLORS.groutColor}
           align="center"
@@ -462,168 +173,79 @@ export const PavingAreaComponent = ({
         />
       );
     }
+
+    // Add live stats label at top of shape
+    const xs = pts.map(p => p.x);
+    const ys = pts.map(p => p.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const labelOffset = getAnnotationOffsetPx(component.id, component.position) + 15;
+
+    const surfaceLabel = areaSurface === 'concrete' ? 'Concrete'
+      : areaSurface === 'grass' ? 'Grass'
+      : 'Paving';
+
+    measurements.push(
+      <Text
+        key="area-stats"
+        x={(minX + maxX) / 2}
+        y={minY - labelOffset}
+        text={`${surfaceLabel}: ${livePerimeterLM.toFixed(2)} LM · ${liveAreaM2.toFixed(2)} m²`}
+        fontSize={10}
+        fill={areaSurface === 'grass' ? '#15803d' : areaSurface === 'concrete' ? '#64748b' : '#D4A574'}
+        align="center"
+        offsetX={50}
+        listening={false}
+      />
+    );
+
     return measurements;
   };
 
-  // ---------- drag whole object (moves the frame + boundary together) ----------
+  // Drag whole object
   const handleDragEnd = () => {
     const node = groupRef.current;
     if (!node) return;
     const nextX = node.x();
     const nextY = node.y();
-    let dx = nextX - frame.x;
-    let dy = nextY - frame.y;
+    const dx = nextX - bbox.x;
+    const dy = nextY - bbox.y;
 
     if (dx === 0 && dy === 0) return;
 
-    const movedBoundary = boundaryStage.map((p) => ({ x: p.x + dx, y: p.y + dy }));
-    const nextFrame: Frame = { x: frame.x + dx, y: frame.y + dy, side: frame.side };
-    // Compute snap offsets to align the AREA (external shape) edges to nearby pool edges.
-    const pxPerMm = GRID_CONFIG.spacing / 100;
-    const xsRect = movedBoundary.map(p => p.x);
-    const ysRect = movedBoundary.map(p => p.y);
-    const areaRect = { minX: Math.min(...xsRect), maxX: Math.max(...xsRect), minY: Math.min(...ysRect), maxY: Math.max(...ysRect) };
-    let snapOffset = { dx: 0, dy: 0 };
-    const TOL = 10 * pxPerMm; // 10mm gentle snap
+    // Snap to grid
+    const grid = SNAP_CONFIG.gridSnap || 10;
+    const snappedDx = Math.round(dx / grid) * grid;
+    const snappedDy = Math.round(dy / grid) * grid;
 
-    const applyPreview = !!poolSnapPreview;
-    const considerEdgeX = applyPreview ? [poolSnapPreview!.edgeX] : [];
-    const considerEdgeY = applyPreview ? [poolSnapPreview!.edgeY] : [];
+    const movedBoundary = boundaryStage.map((p) => ({
+      x: p.x + snappedDx,
+      y: p.y + snappedDy,
+    }));
 
-    const candidateEdgesX: number[] = [];
-    const candidateEdgesY: number[] = [];
-    if (considerEdgeX[0] != null) candidateEdgesX.push(considerEdgeX[0]!);
-    if (considerEdgeY[0] != null) candidateEdgesY.push(considerEdgeY[0]!);
-
-    if (!applyPreview) {
-      // Gather from pools if no preview
-      allComponents.forEach(c => {
-        if (c.type !== 'pool') return;
-        const poolLen = (c.dimensions?.width || 0) * pxPerMm;
-        const poolWid = (c.dimensions?.height || 0) * pxPerMm;
-        candidateEdgesX.push(c.position.x, c.position.x + poolLen);
-        candidateEdgesY.push(c.position.y, c.position.y + poolWid);
-      });
-    }
-
-    const nearEdge = (val: number, edges: number[]) => {
-      let best: { edge: number; d: number } | null = null;
-      edges.forEach(e => {
-        const d = Math.abs(val - e);
-        if (best == null || d < best.d) best = { edge: e, d };
-      });
-      return best;
-    };
-
-    if (candidateEdgesX.length > 0) {
-      // choose which area edge (minX or maxX) is closer to any pool edge
-      const bestMin = nearEdge(areaRect.minX, candidateEdgesX);
-      const bestMax = nearEdge(areaRect.maxX, candidateEdgesX);
-      const pick = (!bestMin || (bestMax && bestMax.d < bestMin.d)) ? { edge: bestMax!.edge, d: bestMax!.d, side: 'maxX' } : { edge: bestMin!.edge, d: bestMin!.d, side: 'minX' };
-      if (pick.d <= TOL) {
-        snapOffset.dx = (pick.side === 'minX' ? pick.edge - areaRect.minX : pick.edge - areaRect.maxX);
-      }
-    }
-    if (candidateEdgesY.length > 0) {
-      const bestMin = nearEdge(areaRect.minY, candidateEdgesY);
-      const bestMax = nearEdge(areaRect.maxY, candidateEdgesY);
-      const pick = (!bestMin || (bestMax && bestMax.d < bestMin.d)) ? { edge: bestMax!.edge, d: bestMax!.d, side: 'maxY' } : { edge: bestMin!.edge, d: bestMin!.d, side: 'minY' };
-      if (pick.d <= TOL) {
-        snapOffset.dy = (pick.side === 'minY' ? pick.edge - areaRect.minY : pick.edge - areaRect.maxY);
-      }
-    }
-
-    if (snapOffset.dx !== 0 || snapOffset.dy !== 0) {
-      // Apply external shape snap by translating boundary/frame and origin together
-      movedBoundary.forEach(p => { p.x += snapOffset.dx; p.y += snapOffset.dy; });
-      nextFrame.x += snapOffset.dx; nextFrame.y += snapOffset.dy;
-      dx += snapOffset.dx; dy += snapOffset.dy;
-    } else {
-      // No pool snap: fall back to grid snap for the frame origin
-      const grid = SNAP_CONFIG.gridSnap || 10;
-      const snappedX = Math.round(nextFrame.x / grid) * grid;
-      const snappedY = Math.round(nextFrame.y / grid) * grid;
-      const gdx = snappedX - nextFrame.x;
-      const gdy = snappedY - nextFrame.y;
-      if (gdx !== 0 || gdy !== 0) {
-        movedBoundary.forEach(p => { p.x += gdx; p.y += gdy; });
-        nextFrame.x = snappedX; nextFrame.y = snappedY;
-        dx += gdx; dy += gdy;
-      }
-    }
-
-    updateComponent(component.id, { properties: { ...component.properties, boundary: movedBoundary, tilingFrame: nextFrame } });
-
-    setPoolSnapPreview(null);
+    updateComponent(component.id, {
+      properties: { ...component.properties, boundary: movedBoundary },
+    });
   };
 
-  // ---------- vertex drag (clamped to frame) ----------
-  // Store original vertices in STAGE coordinates so we can safely
-  // expand or shift the frame during an edit without losing the drag delta.
-  const vertexOriginalStageRef = useRef<Pt[] | null>(null);
-  const vertexDragAnchorRef = useRef<number | null>(null);
-  const dragStartPointerRef = useRef<{ x: number; y: number } | null>(null);
-
-  // NOTE: Do not hard-clamp vertices to the frame while editing.
-  // Allow vertices to move beyond the current tiling frame; we will
-  // expand the frame on commit if needed. Hard clamping causes the
-  // "stuck near edge" behavior the user observed.
-  const clampLocal = (pts: Pt[]): Pt[] => pts;
-
-  // Snap a point (in frame-local coords) to the nearest tile grid intersection
-  const snapToTileGrid = (pt: Pt): Pt => {
-    if (areaSurface !== 'pavers') return pt;
-    let snappedX = pt.x;
-    let snappedY = pt.y;
-    // top-left anchored snap with symmetric grout phase (−G/2)
-    snappedX = Math.round((pt.x + phaseX) / snapStepX) * snapStepX - phaseX;
-    snappedY = Math.round((pt.y + phaseY) / snapStepY) * snapStepY - phaseY;
-    return { x: snappedX, y: snappedY };
-  };
-
-  const onVertexMouseDown = (i: number, evt: any) => {
-    evt.cancelBubble = true;
-    toggleNode(i, evt.evt.shiftKey);
-  };
+  // Vertex dragging
+  const vertexOriginalRef = useRef<Pt[] | null>(null);
 
   const onVertexDragStart = (i: number, evt: any) => {
     evt.cancelBubble = true;
     if (!isNodeSelected(i)) setSelectedNodes([i]);
-    // Capture originals in stage space
-    vertexOriginalStageRef.current = boundaryStage.map((p) => ({ ...p }));
-    vertexDragAnchorRef.current = i;
+    vertexOriginalRef.current = boundaryStage.map((p) => ({ ...p }));
     setDragIndex(i);
-    // Freeze outer group position during this edit
-    dragAnchorFrameRef.current = { x: frame.x, y: frame.y, side: frame.side };
-    // Record pointer at drag start in canvas coords (accounts for pan/zoom)
-    const stage = evt.target.getStage();
-    const pr = stage?.getPointerPosition();
-    if (pr) {
-      const scaleX = stage.scaleX() || 1;
-      const scaleY = stage.scaleY() || 1;
-      const offsetX = stage.x() || 0;
-      const offsetY = stage.y() || 0;
-      dragStartPointerRef.current = {
-        x: (pr.x - offsetX) / scaleX,
-        y: (pr.y - offsetY) / scaleY,
-      };
-    } else {
-      dragStartPointerRef.current = null;
-    }
     setLocalPreview(boundaryLocal);
   };
 
   const onVertexDragMove = (i: number, evt: any) => {
     evt.cancelBubble = true;
-    const origStage = vertexOriginalStageRef.current;
-    if (!origStage) return;
-
-    const handleIdx = vertexDragAnchorRef.current ?? i;
-    // Compute deltas in stage coordinates to be resilient to frame shifts
     const stage = evt.target.getStage();
     const pointerRaw = stage?.getPointerPosition();
-    if (!pointerRaw) return;
-    // Convert screen pointer to canvas-content coords (account for pan/zoom)
+    if (!pointerRaw || !vertexOriginalRef.current) return;
+
     const scaleX = stage.scaleX() || 1;
     const scaleY = stage.scaleY() || 1;
     const offsetX = stage.x() || 0;
@@ -632,164 +254,79 @@ export const PavingAreaComponent = ({
       x: (pointerRaw.x - offsetX) / scaleX,
       y: (pointerRaw.y - offsetY) / scaleY,
     };
-    const start = origStage[handleIdx];
 
-    // Compute raw delta from drag start pointer to current pointer in canvas coords
-    const ps = dragStartPointerRef.current || { x: start.x, y: start.y };
-    const rawDx = pointer.x - ps.x;
-    const rawDy = pointer.y - ps.y;
-    // Desired target for the anchor vertex
-    const target = { x: start.x + rawDx, y: start.y + rawDy };
-    // Snap target to tile grid to avoid initial jump
-    const snappedP = snapWorldToTile(target.x, target.y);
-    const dx = snappedP.x - start.x;
-    const dy = snappedP.y - start.y;
+    // Snap to grid
+    const grid = SNAP_CONFIG.gridSnap || 10;
+    const snappedX = Math.round(pointer.x / grid) * grid;
+    const snappedY = Math.round(pointer.y / grid) * grid;
 
-    // New vertices in stage space
-    const nextStage = origStage.map((p, idx) => (isNodeSelected(idx) ? { x: p.x + dx, y: p.y + dy } : p));
-
-    // Do not expand frame during drag; keep it stable to avoid jumps.
-    const nextFrame = frame;
-
-    // Convert nextStage to preview-local coords, then snap LIVE to tile grid using the
-    // same nextFrame so the cursor follows tile intersections rather than the base grid.
-    const nextLocalSnapped = nextStage.map((p) => ({ x: p.x - nextFrame.x, y: p.y - nextFrame.y }));
-    const snappedLocal = nextLocalSnapped.map((pt) => {
-      const worldX = nextFrame.x + pt.x;
-      const worldY = nextFrame.y + pt.y;
-      const s = snapWorldToTile(worldX, worldY);
-      return { x: s.x - nextFrame.x, y: s.y - nextFrame.y };
+    // Update selected vertices
+    const nextStage = vertexOriginalRef.current.map((p, idx) => {
+      if (isNodeSelected(idx)) {
+        const origP = vertexOriginalRef.current![idx];
+        const dx = snappedX - vertexOriginalRef.current![i].x;
+        const dy = snappedY - vertexOriginalRef.current![i].y;
+        return { x: origP.x + dx, y: origP.y + dy };
+      }
+      return p;
     });
 
-    // Show snapped preview (handles/line stay on tile intersections)
-    setLocalPreview(snappedLocal);
+    // Convert to local for preview - use ORIGINAL bbox origin, not recalculated
+    // This keeps preview coordinates relative to where the Group is actually positioned
+    const nextLocal = nextStage.map((p) => ({ x: p.x - bbox.x, y: p.y - bbox.y }));
 
-    // Build a ghost using the snapped boundary so tiles preview the final placement
-    const stageBoundary = snappedLocal.map((p) => ({ x: p.x + nextFrame.x, y: p.y + nextFrame.y }));
-    const tilesLocal = computeTilesForFrame(snappedLocal, nextFrame);
-    const tilesStage = tilesLocal.map((t) => ({
-      ...t,
-      position: { x: t.position.x + nextFrame.x, y: t.position.y + nextFrame.y },
-    }));
-
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(() => {
-      setGhost({ boundary: stageBoundary, pavers: tilesStage });
-    });
+    setLocalPreview(nextLocal);
   };
 
-  const commitLocal = (local: Pt[]) => {
-    // Snap to tile grid in local coords, then convert to stage coords
-    const snappedLocal = local.map(snapToTileGrid);
-    const stagePts = toStage(snappedLocal);
+  const onVertexDragEnd = (i: number, evt: any) => {
+    evt.cancelBubble = true;
+    if (!vertexOriginalRef.current) return;
 
-    // Ensure the tiling frame encloses the new boundary with a safe margin.
-    // Expand the frame if needed to prevent future drags from hitting the frame edge.
-    const xs = stagePts.map((p) => p.x);
-    const ys = stagePts.map((p) => p.y);
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
-
-    // Safety margin: at least two tile steps (accounts for grout) so we don't
-    // immediately hit the frame after a commit. Use the larger step.
-    const margin = Math.max(stepX, stepY) * 2;
-
-    // Compute an expanded square that contains both the previous persisted
-    // frame (if any) and the new bbox + margin. Use the preview frame if
-    // present during this commit.
-    const baseFrame = previewFrame ?? existingFrame ?? frame;
-    const left = Math.min(baseFrame.x, minX - margin);
-    const top = Math.min(baseFrame.y, minY - margin);
-    const right = Math.max(baseFrame.x + baseFrame.side, maxX + margin);
-    const bottom = Math.max(baseFrame.y + baseFrame.side, maxY + margin);
-    const nextSide = Math.max(right - left, bottom - top);
-
-    // Persist the updated frame unconditionally so the invisible square
-    // matches the polygon after the drag completes.
-    // Classify each snapped vertex as 'edge' or 'inbetween'
-    const classify = (p: Pt): 'edge' | 'inbetween' => {
-      const rx = Math.abs(((p.x + phaseX) % stepX + stepX) % stepX);
-      const ry = Math.abs(((p.y + phaseY) % stepY + stepY) % stepY);
-      const edgeX = rx < 0.01 || Math.abs(stepX - rx) < 0.01;
-      const edgeY = ry < 0.01 || Math.abs(stepY - ry) < 0.01;
-      return edgeX || edgeY ? 'edge' : 'inbetween';
-    };
-    const snapMeta = snappedLocal.map(classify);
-    const classifyAxis = (p: Pt): 'edge-x' | 'edge-y' | 'corner' | 'inbetween' => {
-      const rx = Math.abs(((p.x + phaseX) % stepX + stepX) % stepX);
-      const ry = Math.abs(((p.y + phaseY) % stepY + stepY) % stepY);
-      const onX = rx < 0.01 || Math.abs(stepX - rx) < 0.01; // vertical grout (x-aligned)
-      const onY = ry < 0.01 || Math.abs(stepY - ry) < 0.01; // horizontal grout (y-aligned)
-      if (onX && onY) return 'corner';
-      if (onX) return 'edge-x';
-      if (onY) return 'edge-y';
-      return 'inbetween';
-    };
-    const vertexAxisMeta = snappedLocal.map(classifyAxis);
-
-    // Classify each edge orientation: horizontal | vertical | angled (using small epsilon)
-    const edgeMeta: Array<'horizontal' | 'vertical' | 'angled'> = [];
-    const eps = 1e-2;
-    for (let i = 0; i < stagePts.length; i++) {
-      const a = stagePts[i];
-      const b = stagePts[(i + 1) % stagePts.length];
-      const dx = Math.abs(b.x - a.x);
-      const dy = Math.abs(b.y - a.y);
-      if (dx <= eps && dy > eps) edgeMeta.push('vertical');
-      else if (dy <= eps && dx > eps) edgeMeta.push('horizontal');
-      else edgeMeta.push('angled');
+    const stage = evt.target.getStage();
+    const pointerRaw = stage?.getPointerPosition();
+    if (!pointerRaw) {
+      setLocalPreview(null);
+      setDragIndex(null);
+      return;
     }
 
-    // Grout-aligned edge detection per rule:
-    // - If vertical edge (x = c): both endpoints must be on y-edge or corner
-    // - If horizontal edge (y = c): both endpoints must be on x-edge or corner
-    const isYEdge = (m: 'edge-x' | 'edge-y' | 'corner' | 'inbetween') => m === 'edge-y' || m === 'corner';
-    const isXEdge = (m: 'edge-x' | 'edge-y' | 'corner' | 'inbetween') => m === 'edge-x' || m === 'corner';
-    const groutEdge: boolean[] = [];
-    for (let i = 0; i < stagePts.length; i++) {
-      const m1 = vertexAxisMeta[i];
-      const m2 = vertexAxisMeta[(i + 1) % vertexAxisMeta.length];
-      const e = edgeMeta[i];
-      if (e === 'vertical') groutEdge.push(isYEdge(m1) && isYEdge(m2));
-      else if (e === 'horizontal') groutEdge.push(isXEdge(m1) && isXEdge(m2));
-      else groutEdge.push(false);
-    }
+    const scaleX = stage.scaleX() || 1;
+    const scaleY = stage.scaleY() || 1;
+    const offsetX = stage.x() || 0;
+    const offsetY = stage.y() || 0;
+    const pointer = {
+      x: (pointerRaw.x - offsetX) / scaleX,
+      y: (pointerRaw.y - offsetY) / scaleY,
+    };
+
+    const grid = SNAP_CONFIG.gridSnap || 10;
+    const snappedX = Math.round(pointer.x / grid) * grid;
+    const snappedY = Math.round(pointer.y / grid) * grid;
+
+    const nextStage = vertexOriginalRef.current.map((p, idx) => {
+      if (isNodeSelected(idx)) {
+        const origP = vertexOriginalRef.current![idx];
+        const dx = snappedX - vertexOriginalRef.current![i].x;
+        const dy = snappedY - vertexOriginalRef.current![i].y;
+        return { x: origP.x + dx, y: origP.y + dy };
+      }
+      return p;
+    });
 
     updateComponent(component.id, {
-      properties: {
-        ...component.properties,
-        boundary: stagePts,
-        tilingFrame: { x: left, y: top, side: nextSide },
-        boundarySnapMeta: snapMeta,
-        boundaryVertexAxisMeta: vertexAxisMeta,
-        boundaryEdgeMeta: edgeMeta,
-        boundaryGroutEdge: groutEdge,
-        tileSnapDivision: snapDivision,
-      },
+      properties: { ...component.properties, boundary: nextStage },
     });
 
-    setGhost(null);
     setLocalPreview(null);
-    setPreviewFrame(null);
-    vertexOriginalStageRef.current = null;
-    vertexDragAnchorRef.current = null;
-    // Release outer group anchor after commit
-    dragAnchorFrameRef.current = null;
-  };
-
-  const onVertexDragEnd = (_i: number, evt: any) => {
-    evt.cancelBubble = true;
-    const local = localPreview || boundaryLocal;
-    commitLocal(local);
     setDragIndex(null);
+    vertexOriginalRef.current = null;
   };
 
-  // ---------- subtle textures for concrete/grass (unchanged) ----------
+  // Patterns for concrete/grass
   const createConcretePattern = useCallback((): HTMLCanvasElement => {
     const c = document.createElement('canvas');
-    c.width = 12; c.height = 12;
+    c.width = 12;
+    c.height = 12;
     const ctx = c.getContext('2d')!;
     ctx.fillStyle = '#e5e7eb';
     ctx.fillRect(0, 0, c.width, c.height);
@@ -799,24 +336,24 @@ export const PavingAreaComponent = ({
       const y = (i * 3 + 5) % c.height;
       ctx.fillRect(x, y, 1, 1);
     }
-    ctx.strokeStyle = 'rgba(0,0,0,0.05)';
-    ctx.beginPath(); ctx.moveTo(0, c.height); ctx.lineTo(c.width, 0); ctx.stroke();
     return c;
   }, []);
 
   const createGrassPattern = useCallback((): HTMLCanvasElement => {
     const c = document.createElement('canvas');
-    c.width = 12; c.height = 12;
+    c.width = 12;
+    c.height = 12;
     const ctx = c.getContext('2d')!;
     ctx.fillStyle = '#15803d';
     ctx.fillRect(0, 0, c.width, c.height);
     ctx.strokeStyle = 'rgba(20, 83, 45, 0.35)';
     for (let i = 0; i < 3; i++) {
       const x = (i * 4 + 2) % c.width;
-      ctx.beginPath(); ctx.moveTo(x, c.height); ctx.lineTo(x + 1, c.height - 3); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x, c.height);
+      ctx.lineTo(x + 1, c.height - 3);
+      ctx.stroke();
     }
-    ctx.strokeStyle = 'rgba(21, 128, 61, 0.3)';
-    ctx.beginPath(); ctx.moveTo(0, c.height - 4); ctx.lineTo(3, c.height - 1); ctx.stroke();
     return c;
   }, []);
 
@@ -826,300 +363,119 @@ export const PavingAreaComponent = ({
     return null;
   }, [areaSurface, createConcretePattern, createGrassPattern]);
 
-  // ---------- render ----------
+  // Get fill color/pattern based on surface type
+  // Use extendedTile color for pavers to match coping extension style
+  const getFillColor = () => {
+    if (areaSurface === 'concrete') return '#e5e7eb';
+    if (areaSurface === 'grass') return '#15803d';
+    return TILE_COLORS.extendedTile; // Lighter sandstone to match coping extension
+  };
+
+  const displayBoundary = localPreview || boundaryLocal;
+
   return (
-    <>
-      <Group
-        ref={groupRef}
-        x={anchorFrame.x}
-        y={anchorFrame.y}
+    <Group
+      ref={groupRef}
+      x={bbox.x}
+      y={bbox.y}
+      onClick={onSelect}
+      onTap={onSelect}
+      onContextMenu={handleRightClick}
+      draggable={activeTool !== 'hand' && isSelected && !localPreview}
+      onDragEnd={handleDragEnd}
+    >
+      {/* Filled polygon - use Line with fill for reliable rendering */}
+      <Line
+        points={displayBoundary.flatMap((p) => [p.x, p.y])}
+        closed
+        fill={getFillColor()}
+        fillPatternImage={areaPattern as any}
+        fillPatternRepeat={areaPattern ? 'repeat' : undefined}
+        strokeEnabled={false}
+        listening={false}
+      />
+
+      {/* Hit area (transparent, on top for clicks) */}
+      <Line
+        points={displayBoundary.flatMap((p) => [p.x, p.y])}
+        closed
+        fill="rgba(0,0,0,0.0001)"
+        strokeEnabled={false}
         onClick={onSelect}
         onTap={onSelect}
-        onContextMenu={handleRightClick}
-        draggable={activeTool !== 'hand' && isSelected && !localPreview}
-        onDragMove={(e) => {
-          // Live preview of snapping to nearby pool coping edges (non-aggressive)
-          const nextX = e.target.x();
-          const nextY = e.target.y();
-          const dx = nextX - frame.x;
-          const dy = nextY - frame.y;
+      />
 
-          const movedBoundary = boundaryStage.map((p) => ({ x: p.x + dx, y: p.y + dy }));
-          const xs = movedBoundary.map((p) => p.x);
-          const ys = movedBoundary.map((p) => p.y);
-          const rect = { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
-          const areaCenter = { x: (rect.minX + rect.maxX) / 2, y: (rect.minY + rect.maxY) / 2 };
-
-          const pxPerMm = GRID_CONFIG.spacing / 100;
-          const TOL = 10 * pxPerMm; // 10mm visual proximity
-
-          let best: { edgeX?: number; edgeY?: number; score: number } | null = null;
-          allComponents.forEach((c) => {
-            if (c.type !== 'pool') return;
-            const poolLen = (c.dimensions?.width || 0) * pxPerMm;
-            const poolWid = (c.dimensions?.height || 0) * pxPerMm;
-            const poolRect = { minX: c.position.x, minY: c.position.y, maxX: c.position.x + poolLen, maxY: c.position.y + poolWid };
-
-            const edgesX = [poolRect.minX, poolRect.maxX];
-            const edgesY = [poolRect.minY, poolRect.maxY];
-
-            const nearXEdge = edgesX
-              .map((ex) => ({ ex, d: Math.abs(areaCenter.x - ex) }))
-              .reduce((a, b) => (a.d < b.d ? a : b), { ex: edgesX[0], d: Math.abs(areaCenter.x - edgesX[0]) });
-            const nearYEdge = edgesY
-              .map((ey) => ({ ey, d: Math.abs(areaCenter.y - ey) }))
-              .reduce((a, b) => (a.d < b.d ? a : b), { ey: edgesY[0], d: Math.abs(areaCenter.y - edgesY[0]) });
-
-            const cand: { edgeX?: number; edgeY?: number; score: number } = { score: Infinity } as any;
-            if (nearXEdge.d <= TOL) cand.edgeX = nearXEdge.ex;
-            if (nearYEdge.d <= TOL) cand.edgeY = nearYEdge.ey;
-            if (cand.edgeX === undefined && cand.edgeY === undefined) return;
-            cand.score = (cand.edgeX ? nearXEdge.d : 0) + (cand.edgeY ? nearYEdge.d : 0);
-            if (!best || cand.score < best.score) best = cand;
-          });
-
-          if (best) setPoolSnapPreview({ edgeX: best.edgeX, edgeY: best.edgeY, rect });
-          else if (poolSnapPreview) setPoolSnapPreview(null);
-        }}
-        onDragEnd={handleDragEnd}
-      >
-        {/* Content offset so outer group remains stable during vertex drags */}
-        <Group x={frame.x - anchorFrame.x} y={frame.y - anchorFrame.y}>
-        {/* Hit area = actual polygon, not the whole tiling frame */}
+      {/* Border - only show when selected */}
+      {isSelected && (
         <Line
-          points={boundaryLocal.flatMap((p) => [p.x, p.y])}
+          points={displayBoundary.flatMap((p) => [p.x, p.y])}
           closed
-          fill="rgba(0,0,0,0.0001)"  /* nearly transparent fill so hits register only inside */
-          strokeEnabled={false}
-          onClick={onSelect}
-          onTap={onSelect}
+          stroke="#3B82F6"
+          strokeWidth={2}
+          strokeScaleEnabled={false}
+          dash={[10, 5]}
+          listening={false}
         />
+      )}
 
-        {/* content (hidden during ghost) */}
-        {showLive && (
-          <>
-            {/* Everything is clipped to the polygon boundary */}
-            <Group
-              clipFunc={(ctx) => {
-                ctx.beginPath();
-                boundaryLocal.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)));
-                ctx.closePath();
-              }}
-            >
-              {areaSurface === 'pavers' ? (
-                <>
-                  {/* Grout underlay - fills polygon with grout color */}
-                  {TILE_GAP.renderGap && TILE_GAP.size > 0 && (
-                    <Line
-                      points={boundaryLocal.flatMap((p) => [p.x, p.y])}
-                      fill={TILE_COLORS.groutColor}
-                      closed
-                      listening={false}
-                    />
-                  )}
+      {/* Measurements */}
+      {renderMeasurements()}
 
-                  {/* Tile fills - generated over the frame; polygon only clips them */}
-                  {paversLocalVisible.map((p) => {
-                    const x1 = roundHalf(p.position.x);
-                    const y1 = roundHalf(p.position.y);
-                    const w = Math.max(0, roundHalf(p.width));
-                    const h = Math.max(0, roundHalf(p.height));
-                    const x2 = x1 + w;
-                    const y2 = y1 + h;
-                    return (
-                      <Group key={p.id} listening={false}>
-                        <Rect
-                          x={x1}
-                          y={y1}
-                          width={w}
-                          height={h}
-                          fill={p.isEdgePaver ? TILE_COLORS.cutTile : TILE_COLORS.baseTile}
-                          opacity={1}
-                        />
-                        {p.isEdgePaver && (
-                          <Text
-                            x={x2 - 12 - 3}
-                            y={y2 - 12 - 3}
-                            text="✂"
-                            fontSize={11}
-                            fill={TILE_COLORS.cutIndicator}
-                            listening={false}
-                          />
-                        )}
-                      </Group>
-                    );
-                  })}
-                </>
-              ) : (
-                // Non-paver surfaces: texture fill + toned border
-                <>
-                  {areaPattern && (
-                    <Rect
-                      x={0}
-                      y={0}
-                      width={frame.side}
-                      height={frame.side}
-                      listening={false}
-                      fillPatternImage={areaPattern as any}
-                      fillPatternRepeat="repeat"
-                    />
-                  )}
-                  <Line
-                    points={boundaryLocal.flatMap((p) => [p.x, p.y])}
-                    closed
-                    listening={false}
-                    stroke="rgba(0,0,0,0.12)"
-                    strokeWidth={1}
-                    strokeScaleEnabled={false}
-                  />
-                </>
-              )}
-            </Group>
-
-            {/* boundary (show only when selected) */}
-            {isSelected && (
-              <>
-                <Line
-                  points={boundaryLocal.flatMap((p) => [p.x, p.y])}
-                  stroke="#3B82F6"
-                  strokeWidth={3}
-                  strokeScaleEnabled={false}
-                  dash={[10, 5]}
-                  closed
-                />
-                {/* Segment measurements */}
-                {renderMeasurements()}
-              </>
-            )}
-          </>
-        )}
-
-        {/* edit preview boundary (local) */}
-        {localPreview && (
-          <Line
-            points={localPreview.flatMap((p) => [p.x, p.y])}
+      {/* Vertex handles when selected */}
+      {isSelected &&
+        displayBoundary.map((pt, i) => (
+          <Circle
+            key={`v-${i}`}
+            x={pt.x}
+            y={pt.y}
+            radius={Math.max(2, 4.2 / (zoom || 1))}
+            fill={isNodeSelected(i) ? '#3B82F6' : 'white'}
             stroke="#3B82F6"
-            strokeWidth={3}
+            strokeWidth={2}
             strokeScaleEnabled={false}
-            dash={[10, 5]}
-            closed
-          />
-        )}
-
-        {/* handles (only when selected) */}
-        {isSelected && (
-          <>
-            {/* vertex handles */}
-            {boundaryLocal.map((pt, i) => (
-              <Circle
-                key={`v-${i}`}
-                name={`vertex-${i}`}
-                x={localPreview ? localPreview[i]?.x ?? pt.x : pt.x}
-                y={localPreview ? localPreview[i]?.y ?? pt.y : pt.y}
-                radius={Math.max(2, 4.2 / (zoom || 1))}
-                fill={isNodeSelected(i) ? '#3B82F6' : 'white'}
-                stroke="#3B82F6"
-                strokeWidth={2}
-                strokeScaleEnabled={false}
-                onMouseDown={(e) => onVertexMouseDown(i, e)}
-                draggable
-                dragBoundFunc={(pos) => {
-                  const s = snapWorldToTile(frame.x + pos.x, frame.y + pos.y);
-                  return { x: s.x - frame.x, y: s.y - frame.y };
-                }}
-                onDragStart={(e) => onVertexDragStart(i, e)}
-                onDragMove={(e) => onVertexDragMove(i, e)}
-                onDragEnd={(e) => onVertexDragEnd(i, e)}
-              />
-            ))}
-          </>
-        )}
-        </Group>
-      </Group>
-
-      {/* Pool snap preview guides (green), non-aggressive */}
-      {poolSnapPreview && (
-        <Group listening={false} opacity={0.9}>
-          {typeof poolSnapPreview.edgeX === 'number' && (
-            <Line
-              points={[
-                poolSnapPreview.edgeX, poolSnapPreview.rect.minY - 1000,
-                poolSnapPreview.edgeX, poolSnapPreview.rect.maxY + 1000,
-              ]}
-              stroke="#22c55e"
-              strokeWidth={2}
-              dash={[6, 6]}
-              strokeScaleEnabled={false}
-            />
-          )}
-          {typeof poolSnapPreview.edgeY === 'number' && (
-            <Line
-              points={[
-                poolSnapPreview.rect.minX - 1000, poolSnapPreview.edgeY,
-                poolSnapPreview.rect.maxX + 1000, poolSnapPreview.edgeY,
-              ]}
-              stroke="#22c55e"
-              strokeWidth={2}
-              dash={[6, 6]}
-              strokeScaleEnabled={false}
-            />
-          )}
-        </Group>
-      )}
-
-      {/* Ghost (stage coords) while editing - tiles fixed, only mask changes */}
-      {ghost && (
-        <Group listening={false} opacity={0.75}>
-          <Group
-            clipFunc={(ctx) => {
-              ctx.beginPath();
-              ghost.boundary.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
-              ctx.closePath();
+            onMouseDown={(e) => {
+              e.cancelBubble = true;
+              toggleNode(i, e.evt.shiftKey);
             }}
-          >
-            {areaSurface === 'pavers' ? (
-              <>
-                <Line
-                  points={ghost.boundary.flatMap((p) => [p.x, p.y])}
-                  fill={TILE_COLORS.baseTile}
-                  closed
-                  listening={false}
-                  opacity={0.75}
-                />
-                {ghost.pavers.map((p) => (
-                  <Rect
-                    key={`ghost-${p.id}`}
-                    x={p.position.x}
-                    y={p.position.y}
-                    width={Math.max(0, p.width)}
-                    height={Math.max(0, p.height)}
-                    fill={p.isEdgePaver ? TILE_COLORS.cutTile : TILE_COLORS.baseTile}
-                    opacity={0.6}
-                  />
-                ))}
-              </>
-            ) : (
-              <Line
-                points={ghost.boundary.flatMap((p) => [p.x, p.y])}
-                fill={areaSurface === 'concrete' ? '#d1d5db' : '#15803d'}
-                closed
-                listening={false}
-                opacity={0.6}
-              />
-            )}
-          </Group>
+            draggable
+            dragBoundFunc={(pos) => {
+              // Prevent Konva from moving the circle internally
+              // We control position via localPreview state instead
+              // Transform pointer to local coords and snap
+              const stage = groupRef.current?.getStage();
+              const group = groupRef.current;
+              if (!stage || !group) return pos;
 
-          <Line
-            points={ghost.boundary.flatMap((p) => [p.x, p.y])}
-            stroke="#93C5FD"
-            strokeWidth={3}
-            dash={[10, 5]}
-            closed
-            listening={false}
-            strokeScaleEnabled={false}
+              const pointerRaw = stage.getPointerPosition();
+              if (!pointerRaw) return pos;
+
+              const scaleX = stage.scaleX() || 1;
+              const scaleY = stage.scaleY() || 1;
+              const stageOffsetX = stage.x() || 0;
+              const stageOffsetY = stage.y() || 0;
+
+              // Convert to canvas coordinates
+              const canvasX = (pointerRaw.x - stageOffsetX) / scaleX;
+              const canvasY = (pointerRaw.y - stageOffsetY) / scaleY;
+
+              // Snap to grid
+              const grid = SNAP_CONFIG.gridSnap || 10;
+              const snappedX = Math.round(canvasX / grid) * grid;
+              const snappedY = Math.round(canvasY / grid) * grid;
+
+              // Convert to local (relative to group/bbox)
+              const localX = snappedX - bbox.x;
+              const localY = snappedY - bbox.y;
+
+              // Transform back to absolute for Konva
+              const absTransform = group.getAbsoluteTransform();
+              return absTransform.point({ x: localX, y: localY });
+            }}
+            onDragStart={(e) => onVertexDragStart(i, e)}
+            onDragMove={(e) => onVertexDragMove(i, e)}
+            onDragEnd={(e) => onVertexDragEnd(i, e)}
           />
-        </Group>
-      )}
-    </>
+        ))}
+    </Group>
   );
 };

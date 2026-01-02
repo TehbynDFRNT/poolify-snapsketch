@@ -5,11 +5,12 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { X, Loader2 } from 'lucide-react';
-import { calculatePoolCoping, CopingConfig, DEFAULT_COPING_OPTIONS, LegacyCopingConfig } from '@/utils/copingCalculation';
+import { DEFAULT_COPING_OPTIONS, LegacyCopingConfig, legacyToSimpleConfig } from '@/utils/copingCalculation';
+import { SimpleCopingConfig } from '@/types';
 import { usePublishedPools } from '@/hooks/usePoolVariants';
 
 interface PoolSelectorProps {
-  onSelect: (pool: Pool, copingOptions: { showCoping: boolean; copingConfig?: CopingConfig | LegacyCopingConfig; copingCalculation?: any }) => void;
+  onSelect: (pool: Pool, copingOptions: { showCoping: boolean; copingConfig?: SimpleCopingConfig }) => void;
   onClose: () => void;
 }
 
@@ -43,14 +44,14 @@ export const PoolSelector = ({ onSelect, onClose }: PoolSelectorProps) => {
         };
         
         const showCoping = selectedCopingId !== 'none';
-        const copingCalculation = showCoping && selectedCoping 
-          ? calculatePoolCoping(pool, selectedCoping) 
+        // Convert legacy coping config to simplified version
+        const copingConfig = showCoping && selectedCoping
+          ? legacyToSimpleConfig(selectedCoping)
           : undefined;
-        
+
         onSelect(pool, {
           showCoping,
-          copingConfig: selectedCoping,
-          copingCalculation,
+          copingConfig,
         });
         onClose();
       }

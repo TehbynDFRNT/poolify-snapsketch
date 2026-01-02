@@ -49,6 +49,22 @@ export interface Component {
 }
 
 
+// Simplified coping configuration (new system)
+// Tile sizes: 400x400 or 400x600 (600mm always runs along pool edge)
+export interface SimpleCopingConfig {
+  tileSize: '400x400' | '400x600';
+  rowsPerSide?: number; // 1-3, defaults to 1 (uniform for sides/shallow)
+  rowsDeepEnd?: number; // 1-3, defaults to 2 (double width on deep end)
+}
+
+// Simplified coping statistics (new system)
+export interface SimpleCopingStats {
+  areaM2: number;           // Total coping area in square meters
+  baseCopingAreaM2: number; // Just the ring around pool
+  extensionAreaM2: number;  // Area from boundary polygon - pool - base coping
+}
+
+// @deprecated - Legacy interface, kept for backwards compatibility with saved projects
 export interface CopingCalculation {
   deepEnd: {
     rows: number;
@@ -93,9 +109,11 @@ export interface ComponentProperties {
   poolId?: string;
   pool?: any; // embedded pool geometry
   showCoping?: boolean;
-  copingConfig?: any;
+  copingConfig?: SimpleCopingConfig;
+  copingStatistics?: SimpleCopingStats;
+  copingBoundary?: Array<{ x: number; y: number }>; // Extension boundary polygon (stage units)
+  // @deprecated - Legacy properties kept for backwards compatibility
   copingCalculation?: CopingCalculation;
-  // User-added coping tiles (in pool-local mm coordinates) - all tiles are atomic
   copingTiles?: Array<{
     x: number;
     y: number;
@@ -104,7 +122,6 @@ export interface ComponentProperties {
     isPartial: boolean;
     side: 'top' | 'bottom' | 'left' | 'right';
   }>;
-  // Legacy property (deprecated - use copingTiles)
   copingExtensions?: Array<{
     x: number;
     y: number;
@@ -216,11 +233,8 @@ export interface Summary {
     type: string;
     dimensions: string;
     coping?: {
-      totalPavers: number;
-      fullPavers: number;
-      partialPavers: number;
-      area: number;
-      paverSize: string;
+      area: number;       // Total area in m²
+      paverSize: string;  // e.g., "400x400"
     };
   }>;
   paving: Array<{

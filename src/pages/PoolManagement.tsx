@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,12 +8,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/hooks/use-toast';
-import { ArrowLeft, Upload, Search, Edit, Trash2 } from 'lucide-react';
-import { usePoolVariants, useTogglePoolStatus, useDeletePoolVariant, useCreatePoolVariant, PoolVariant } from '@/hooks/usePoolVariants';
+import { ArrowLeft, Upload, Search, Edit, Trash2, Plus } from 'lucide-react';
+import { usePoolVariants, useTogglePoolStatus, useDeletePoolVariant, PoolVariant } from '@/hooks/usePoolVariants';
 import { PoolEditorDialog } from '@/components/PoolEditorDialog';
-import { DXFImportDialog } from '@/components/DXFImportDialog';
 import { CSVImportDialog } from '@/components/CSVImportDialog';
-import { parseDXFPool, DXFPoolData } from '@/utils/dxfParser';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,15 +32,11 @@ export function PoolManagement() {
   const [editingPool, setEditingPool] = useState<PoolVariant | undefined>();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [poolToDelete, setPoolToDelete] = useState<string | null>(null);
-  const [dxfImportOpen, setDxfImportOpen] = useState(false);
-  const [parsedDxfData, setParsedDxfData] = useState<DXFPoolData | null>(null);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: pools, isLoading } = usePoolVariants();
   const toggleStatus = useTogglePoolStatus();
   const deletePool = useDeletePoolVariant();
-  const createPool = useCreatePoolVariant();
 
   useEffect(() => {
     checkUserRole();
@@ -102,72 +96,9 @@ export function PoolManagement() {
     }
   };
 
-  const handleImportDXF = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!file.name.toLowerCase().endsWith('.dxf')) {
-      toast({
-        title: 'Invalid file',
-        description: 'Please select a DXF file',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    try {
-      const poolData = await parseDXFPool(file, 100); // 1:100 scale
-      setParsedDxfData(poolData);
-      setDxfImportOpen(true);
-    } catch (error) {
-      toast({
-        title: 'Failed to parse DXF',
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'destructive',
-      });
-    } finally {
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
-  };
-
-  const handleConfirmImport = async (poolName: string) => {
-    if (!parsedDxfData) return;
-
-    try {
-      await createPool.mutateAsync({
-        pool_name: poolName,
-        outline: parsedDxfData.outline,
-        zone_of_influence: parsedDxfData.zoneOfInfluence,
-        shallow_end_position: parsedDxfData.shallowEndPosition,
-        deep_end_position: parsedDxfData.deepEndPosition,
-        status: 'draft',
-        features: null,
-        notes: null,
-        published_at: null,
-        sort_order: null,
-      });
-
-      toast({
-        title: 'Pool imported',
-        description: `${poolName} has been added successfully`,
-      });
-
-      setParsedDxfData(null);
-    } catch (error) {
-      toast({
-        title: 'Failed to import pool',
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'destructive',
-      });
-      throw error;
-    }
+  const handleAddPool = () => {
+    setEditingPool(undefined);
+    setEditorOpen(true);
   };
 
   if (userRole !== 'admin') {
@@ -200,22 +131,15 @@ export function PoolManagement() {
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold">Pool Management</h1>
           <div className="flex gap-2">
-            <Button onClick={() => setCsvImportOpen(true)}>
+            <Button variant="outline" onClick={() => setCsvImportOpen(true)}>
               <Upload className="w-4 h-4 mr-2" />
               Import CSV
             </Button>
-            <Button onClick={handleImportDXF}>
-              <Upload className="w-4 h-4 mr-2" />
-              Import DXF
+            <Button onClick={handleAddPool}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Pool
             </Button>
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".dxf"
-            onChange={handleFileSelect}
-            className="hidden"
-          />
         </div>
 
         <div className="mb-6">
@@ -237,12 +161,12 @@ export function PoolManagement() {
             <Card>
               <CardContent className="py-12 text-center">
                 <p className="text-muted-foreground mb-4">
-                  {searchQuery ? 'No pools found matching your search' : 'No pools yet. Import your first DXF pool file.'}
+                  {searchQuery ? 'No pools found matching your search' : 'No pools yet. Create your first pool.'}
                 </p>
                 {!searchQuery && (
-                  <Button onClick={handleImportDXF}>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Import DXF
+                  <Button onClick={handleAddPool}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Pool
                   </Button>
                 )}
               </CardContent>
@@ -303,13 +227,6 @@ export function PoolManagement() {
         open={editorOpen}
         onOpenChange={setEditorOpen}
         pool={editingPool}
-      />
-
-      <DXFImportDialog
-        open={dxfImportOpen}
-        onOpenChange={setDxfImportOpen}
-        poolData={parsedDxfData}
-        onImport={handleConfirmImport}
       />
 
       <CSVImportDialog

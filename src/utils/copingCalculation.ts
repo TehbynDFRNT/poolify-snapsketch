@@ -1,590 +1,390 @@
-//
-// Global‑orientation coping planner
-// - Corner‑first, centre‑only cuts, mirrored left/right & shallow/deep
-// - One global tile orientation (no rotation at corners)
-// - Per‑axis MIN_CUT = max(200, floor(along/2))  => 600‑along → 300 mm
-//
+import { TILE_GAP } from '@/constants/tileConfig';
+import type { SimpleCopingConfig, SimpleCopingStats } from '@/types';
 
-import { TILE_GAP, TILE_SIZES } from '@/constants/tileConfig';
+// Keep GROUT_MM export for pavingFill.ts compatibility
+export const GROUT_MM = TILE_GAP.size;
 
-export const GROUT_MM = TILE_GAP.size; // Use centralized gap configuration
-export const MIN_CUT_MM = 200;
+// =============================================================================
+// Tile depth lookup based on tile size selection
+// =============================================================================
 
-export interface Pool {
-  length: number;  // mm (distance along the long sides)
-  width: number;   // mm (distance along the short ends)
+// Tile dimensions for coping:
+// - Depth = dimension perpendicular to pool edge (into the coping)
+// - Width = dimension along the pool edge
+// For 400x600, the 600mm is always along the edge, so depth is 400mm
+const TILE_DEPTHS: Record<string, number> = {
+  '400x400': 400,
+  '400x600': 400,  // 600mm runs along edge, 400mm is depth
+};
+
+const TILE_WIDTHS: Record<string, number> = {
+  '400x400': 400,
+  '400x600': 600,  // 600mm runs along the pool edge
+};
+
+// =============================================================================
+// Simple Coping Calculation (New System)
+// =============================================================================
+
+interface Point { x: number; y: number; }
+
+/**
+ * Calculate perimeter of a polygon from its outline points
+ */
+function calculatePerimeter(outline: Point[]): number {
+  if (!outline || outline.length < 2) return 0;
+
+  let perimeter = 0;
+  for (let i = 0; i < outline.length; i++) {
+    const p1 = outline[i];
+    const p2 = outline[(i + 1) % outline.length];
+    perimeter += Math.hypot(p2.x - p1.x, p2.y - p1.y);
+  }
+  return perimeter;
 }
 
 /**
- * Tile dimensions in world coordinates (fixed orientation for all sides):
- *   width = tile size in X-axis (world horizontal)
- *   height = tile size in Y-axis (world vertical)
- *
- * 400x400:  { width: 400, height: 400 }  → square tiles
- * 600x400:  { width: 600, height: 400 }  → all tiles 600mm(X) × 400mm(Y)
- * 400x600:  { width: 400, height: 600 }  → all tiles 400mm(X) × 600mm(Y)
- *
- * Mapping to edges:
- * - Horizontal edges (top/bottom): along = width, row depth = height
- * - Vertical edges (left/right): along = height, row depth = width
+ * Calculate polygon area using Shoelace formula
  */
-export interface GlobalTile {
-  width: number;  // mm in world X-axis
-  height: number; // mm in world Y-axis
-}
+function polygonArea(pts: Point[]): number {
+  if (!pts || pts.length < 3) return 0;
 
-export interface CopingConfig {
-  id: string;
-  name: string;
-  tile: GlobalTile;           // fixed world orientation for the whole pool
-  rows: {
-    sides: number;            // rows on the long sides (left/right)
-    shallow: number;          // rows at shallow end
-    deep: number;             // rows at deep end
-  };
-}
-
-export const COPING_OPTIONS: CopingConfig[] = [
-  {
-    id: 'coping-400x400',
-    name: 'Coping 400×400 (square)',
-    tile: { width: 400, height: 400 },
-    rows: { sides: 1, shallow: 1, deep: 2 },
-  },
-  {
-    id: 'coping-600x400',
-    name: 'Coping 600×400 (long-X)',
-    tile: { width: 600, height: 400 },
-    rows: { sides: 1, shallow: 1, deep: 2 },
-  },
-  {
-    id: 'coping-400x600',
-    name: 'Coping 400×600 (long-Y)',
-    tile: { width: 400, height: 600 },
-    rows: { sides: 1, shallow: 1, deep: 2 },
-  },
-];
-
-export type CentreMode = 'perfect' | 'single_cut' | 'double_cut';
-
-export interface AxisPlan {
-  // Inputs (for one axis)
-  edgeLength: number;   // L
-  along: number;        // A (tile size along the edge for this axis)
-  grout: number;        // G
-  minCut: number;       // min cut for this axis (>=200, 600‑along → 300)
-
-  // Core outputs for one row on this axis
-  paversPerCorner: number;       // p per corner, placed from each end
-  removedFromEachSide: number;   // symmetric removals to hit min cuts
-  gapBeforeCentre: number;       // g0 (mm) BEFORE inserting any centre pieces
-  centreMode: CentreMode;
-  cutSizes: number[];            // [] | [c] | [cL, cR]  (mm)
-  meetsMinCut: boolean;
-
-  // Counts for one row
-  fullPaversTotal: number;       // 2*p
-  partialPaversTotal: number;    // 0, 1, or 2
-  paversTotal: number;           // full + partial
-}
-
-export interface EdgeTotals {
-  rows: number;
-  depth: number;  // tile depth for this edge (mm) - pure tile size without grout
-  fullPavers: number;
-  partialPavers: number;
-  pavers: number;
-}
-
-export interface CopingPlan {
-  // Axis plans (reused/mirrored)
-  lengthAxis: AxisPlan; // applies to both long sides (left & right)
-  widthAxis: AxisPlan;  // applies to both ends (shallow & deep), after corner extension
-
-  // Per‑edge totals (rows applied)
-  leftSide: EdgeTotals;
-  rightSide: EdgeTotals;
-  shallowEnd: EdgeTotals;
-  deepEnd: EdgeTotals;
-
-  // Totals
-  totalFullPavers: number;
-  totalPartialPavers: number;
-  totalPavers: number;
-
-  // Sanity: by construction these are always true
-  symmetry: { sidesMirror: true; endsMirror: true; };
+  let area = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length;
+    area += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+  }
+  return Math.abs(area) / 2;
 }
 
 /**
- * Compute per‑axis plan (corner‑first → centre‑only cuts).
- *
- * Definitions:
- *   A = along, G = grout, U = A + G, L = edgeLength
- *   p = pavers per corner
- *   g0 = remaining centre free space BEFORE adding centre pieces:
- *        g0 = L - 2*p*U + 2*G
- *
- * Centre requirements (with joints counted explicitly):
- *   perfect:             g0 ≈ 1*G
- *   single cut:          g0 = 2*G + c,          c ≥ minCut
- *   double cut (equal):  g0 = 3*G + cL + cR,   cL,cR ≥ minCut
- *
- * If 0 < g0 < (2*G + minCut), remove one full paver from EACH side (p--) → g0 += 2*U.
+ * Calculate simple coping area based on pool perimeter and tile configuration
+ * Returns base coping area (the ring around the pool) in square meters
  */
-export function planAxis(edgeLength: number, along: number, grout = GROUT_MM): AxisPlan {
-  const G = grout;
-  const A = along;
-  const U = A + G;
-  const eps = 1; // mm tolerance for "perfect"
-  const minCut = Math.max(200, Math.floor(A / 2)); // <= YOUR RULE: 600‑along → 300
+export function calculateSimpleCoping(
+  poolOutline: Point[],
+  config: SimpleCopingConfig
+): { baseCopingAreaM2: number; tileDepthMm: number; tileWidthMm: number } {
+  const perimeter = calculatePerimeter(poolOutline);
+  const tileDepthMm = TILE_DEPTHS[config.tileSize] || 400;
+  const tileWidthMm = TILE_WIDTHS[config.tileSize] || 400;
+  const rows = config.rowsPerSide || 1;
 
-  // ensure at least one centre joint can exist: 2*p*U - G ≤ L
-  let p = Math.floor((edgeLength + G) / (2 * U));
-  p = Math.max(0, p);
+  // Base coping area = perimeter × tile_depth × rows
+  // This is approximate - actual area accounts for corner overlaps
+  const baseCopingAreaMm2 = perimeter * tileDepthMm * rows;
+  const baseCopingAreaM2 = baseCopingAreaMm2 / 1_000_000;
 
-  let g0 = edgeLength - 2 * p * U + 2 * G;
-  let removed = 0;
+  return { baseCopingAreaM2, tileDepthMm, tileWidthMm };
+}
 
-  while (g0 > 0 && g0 < (2 * G + minCut) && p > 0) {
-    p -= 1;
-    removed += 1;
-    g0 += 2 * U;
-  }
+/**
+ * Calculate extension area from boundary polygon
+ * Extension = boundary polygon area - pool area - base coping area
+ */
+export function calculateExtensionArea(
+  boundaryPolygon: Point[] | undefined,
+  poolOutline: Point[],
+  baseCopingAreaM2: number,
+  scale: number
+): number {
+  if (!boundaryPolygon || boundaryPolygon.length < 3) return 0;
 
-  let centreMode: CentreMode;
-  let cutSizes: number[] = [];
-  let meetsMinCut = true;
+  // Convert pool outline to stage units for comparison
+  const poolOutlineStage = poolOutline.map(p => ({ x: p.x * scale, y: p.y * scale }));
 
-  if (Math.abs(g0 - G) <= eps) {
-    centreMode = 'perfect';
-  } else if (g0 >= (3 * G + 2 * minCut)) {
-    // two equal cuts with exact decimal precision
-    const totalCuts = g0 - 3 * G;
-    const cL = totalCuts / 2;  // exact division with decimal precision
-    const cR = totalCuts / 2;  // same value for perfect symmetry
-    centreMode = 'double_cut';
-    cutSizes = [cL, cR];
-    meetsMinCut = (cL >= minCut && cR >= minCut);
-  } else if (g0 >= (2 * G + minCut)) {
-    const c = g0 - 2 * G;
-    centreMode = 'single_cut';
-    cutSizes = [c];
-    meetsMinCut = (c >= minCut);
-  } else {
-    // Tiny pools: accept undersize single cut (flagged)
-    const c = Math.max(0, g0 - 2 * G);
-    centreMode = 'single_cut';
-    cutSizes = [c];
-    meetsMinCut = (c >= minCut);
-  }
+  // Calculate areas
+  const boundaryArea = polygonArea(boundaryPolygon);
+  const poolArea = polygonArea(poolOutlineStage);
 
-  const fullPaversTotal = 2 * p;
-  const partialPaversTotal = cutSizes.length;
-  const paversTotal = fullPaversTotal + partialPaversTotal;
+  // Convert base coping area to stage units (mm² to px²)
+  const baseCopingAreaPx = baseCopingAreaM2 * 1_000_000 * scale * scale;
+
+  // Extension is the area beyond base coping
+  const extensionAreaPx = boundaryArea - poolArea - baseCopingAreaPx;
+
+  // Convert back to m²
+  const extensionAreaM2 = (extensionAreaPx / (scale * scale)) / 1_000_000;
+
+  return Math.max(0, extensionAreaM2);
+}
+
+/**
+ * Calculate complete coping statistics
+ */
+export function calculateCopingStats(
+  poolOutline: Point[],
+  config: SimpleCopingConfig,
+  boundaryPolygon?: Point[],
+  scale: number = 0.1
+): SimpleCopingStats {
+  const { baseCopingAreaM2 } = calculateSimpleCoping(poolOutline, config);
+  const extensionAreaM2 = calculateExtensionArea(boundaryPolygon, poolOutline, baseCopingAreaM2, scale);
 
   return {
-    edgeLength,
-    along: A,
-    grout: G,
-    minCut,
-
-    paversPerCorner: p,
-    removedFromEachSide: removed,
-    gapBeforeCentre: Math.round(g0),
-    centreMode,
-    cutSizes,
-    meetsMinCut,
-
-    fullPaversTotal,
-    partialPaversTotal,
-    paversTotal,
+    areaM2: baseCopingAreaM2 + extensionAreaM2,
+    baseCopingAreaM2,
+    extensionAreaM2,
   };
 }
 
+// =============================================================================
+// Polygon Expansion Helper (for rendering coping band)
+// =============================================================================
+
 /**
- * Main planner with global‑orientation rules.
+ * Determine if polygon is clockwise in SCREEN coordinates (Y increases downward).
  *
- * IMPORTANT: With a single global tile orientation:
- *  • Long sides (length axis, horizontal) run ALONG = tile.x, rows project by tile.y per row.
- *  • Ends (width axis, vertical) run ALONG = tile.y, rows project by tile.x per row.
- *  • Corner extension on the ends is produced by the side rows: rows.sides × (side row depth).
+ * Uses the surveyor's formula (trapezoidal rule):
+ *   sum = Σ (x_{i+1} - x_i) * (y_{i+1} + y_i)
+ *
+ * For this formula:
+ *   - NEGATIVE sum = Clockwise (CW) in screen coords
+ *   - POSITIVE sum = Counter-clockwise (CCW) in screen coords
+ *
+ * Example: Rectangle (0,0)→(100,0)→(100,100)→(0,100) is CW in screen coords
+ *   Edge 0→1: (100-0)*(0+0) = 0
+ *   Edge 1→2: (100-100)*(100+0) = 0
+ *   Edge 2→3: (0-100)*(100+100) = -20000
+ *   Edge 3→0: (0-0)*(0+100) = 0
+ *   Sum = -20000 (negative = CW) ✓
+ *
+ * IMPORTANT: Pool outlines are defined CW (top-left → top-right → bottom-right → bottom-left)
  */
-export function planPoolCopingGlobal(pool: Pool, config: CopingConfig): CopingPlan {
-  const { tile, rows } = config;
-
-  // Map tile dimensions to edge orientations:
-  // - Horizontal edges (long sides, X-direction): tiles are width(X) along edge, height(Y) per row
-  // - Vertical edges (ends, Y-direction): tiles are height(Y) along edge, width(X) per row
-  const sideRowDepth = tile.height;  // horizontal edges extend in Y
-  const endRowDepth = tile.width;     // vertical edges extend in X
-
-  // Corner extension: side tiles extend outward, so ends must span wider to cover corners
-  const cornerExtension = rows.sides * (sideRowDepth + GROUT_MM);
-  const widthEdgeLength = pool.width + 2 * cornerExtension;  // ends extend to cover side tiles
-  const lengthEdgeLength = pool.length;  // sides don't need extension
-
-  // Axis plans for different edge orientations
-  const lengthAxis = planAxis(lengthEdgeLength, /*along*/ tile.width); // horizontal edges
-  const widthAxis  = planAxis(widthEdgeLength, /*along*/ tile.height); // vertical edges
-
-  // Totals per edge (apply rows)
-  const leftSide: EdgeTotals = {
-    rows: rows.sides,
-    depth: tile.height,  // horizontal edge uses tile.height as depth
-    fullPavers: lengthAxis.fullPaversTotal * rows.sides,
-    partialPavers: lengthAxis.partialPaversTotal * rows.sides,
-    pavers: lengthAxis.paversTotal * rows.sides,
-  };
-  const rightSide: EdgeTotals = {
-    rows: rows.sides,
-    depth: tile.height,  // horizontal edge uses tile.height as depth
-    fullPavers: lengthAxis.fullPaversTotal * rows.sides,
-    partialPavers: lengthAxis.partialPaversTotal * rows.sides,
-    pavers: lengthAxis.paversTotal * rows.sides,
-  };
-  const shallowEnd: EdgeTotals = {
-    rows: rows.shallow,
-    depth: tile.width,  // vertical edge uses tile.width as depth
-    fullPavers: widthAxis.fullPaversTotal * rows.shallow,
-    partialPavers: widthAxis.partialPaversTotal * rows.shallow,
-    pavers: widthAxis.paversTotal * rows.shallow,
-  };
-  const deepEnd: EdgeTotals = {
-    rows: rows.deep,
-    depth: tile.width,  // vertical edge uses tile.width as depth
-    fullPavers: widthAxis.fullPaversTotal * rows.deep,
-    partialPavers: widthAxis.partialPaversTotal * rows.deep,
-    pavers: widthAxis.paversTotal * rows.deep,
-  };
-
-  const totalFullPavers =
-    leftSide.fullPavers + rightSide.fullPavers + shallowEnd.fullPavers + deepEnd.fullPavers;
-
-  const totalPartialPavers =
-    leftSide.partialPavers + rightSide.partialPavers + shallowEnd.partialPavers + deepEnd.partialPavers;
-
-  return {
-    lengthAxis,
-    widthAxis,
-
-    leftSide,
-    rightSide,
-    shallowEnd,
-    deepEnd,
-
-    totalFullPavers,
-    totalPartialPavers,
-    totalPavers: totalFullPavers + totalPartialPavers,
-
-    symmetry: { sidesMirror: true, endsMirror: true },
-  };
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// LEGACY TYPES AND FUNCTIONS (for backward compatibility)
-// ──────────────────────────────────────────────────────────────────────────────
-
-export interface CopingPaver {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  isPartial: boolean;
-}
-
-export interface CopingSide {
-  rows: number;
-  depth: number;  // tile depth for this edge (mm) - pure tile size without grout
-  width: number;  // total width of coping on this edge
-  length: number; // edge length
-  fullPavers: number;
-  partialPaver: number | null;
-  paverPositions: CopingPaver[];
-}
-
-export interface CopingCalculation {
-  deepEnd: CopingSide;
-  shallowEnd: CopingSide;
-  leftSide: CopingSide;
-  rightSide: CopingSide;
-  totalFullPavers: number;
-  totalPartialPavers: number;
-  totalPavers: number;
-  totalArea: number;
+function isClockwise(pts: Point[]): boolean {
+  let sum = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length;
+    sum += (pts[j].x - pts[i].x) * (pts[j].y + pts[i].y);
+  }
+  return sum < 0; // Negative sum = CW in screen coordinates
 }
 
 /**
- * Legacy config interface with along/inward
+ * Expand a polygon outward by a given distance
+ * Used to create the outer edge of the coping band from pool outline
+ * Automatically detects winding order and expands correctly
  */
+export function expandPolygon(pts: Point[], distance: number): Point[] {
+  if (!pts || pts.length < 3) return pts;
+
+  // Remove duplicate closing point if present (first == last)
+  let cleanPts = pts;
+  if (pts.length > 3) {
+    const first = pts[0];
+    const last = pts[pts.length - 1];
+    if (Math.abs(first.x - last.x) < 0.01 && Math.abs(first.y - last.y) < 0.01) {
+      cleanPts = pts.slice(0, -1);
+    }
+  }
+  if (cleanPts.length < 3) return pts;
+
+  const n = cleanPts.length;
+  const result: Point[] = [];
+
+  // Detect winding order to determine outward normal direction
+  // CW polygon (in screen coords Y-down): outside is to the RIGHT of edge direction
+  // CCW polygon: outside is to the LEFT of edge direction
+  const cw = isClockwise(cleanPts);
+
+  const normalize = (v: Point): Point => {
+    const m = Math.hypot(v.x, v.y);
+    return m > 0 ? { x: v.x / m, y: v.y / m } : { x: 0, y: 0 };
+  };
+
+  for (let i = 0; i < n; i++) {
+    const prev = cleanPts[(i - 1 + n) % n];
+    const curr = cleanPts[i];
+    const next = cleanPts[(i + 1) % n];
+
+    // Edge vectors
+    const v1 = normalize({ x: curr.x - prev.x, y: curr.y - prev.y });
+    const v2 = normalize({ x: next.x - curr.x, y: next.y - curr.y });
+
+    // Outward normals - for CW use right perpendicular (y, -x), for CCW use left (-y, x)
+    const n1 = cw ? { x: v1.y, y: -v1.x } : { x: -v1.y, y: v1.x };
+    const n2 = cw ? { x: v2.y, y: -v2.x } : { x: -v2.y, y: v2.x };
+
+    // Bisector direction
+    const bisector = normalize({ x: n1.x + n2.x, y: n1.y + n2.y });
+
+    // Handle sharp corners - limit offset to prevent self-intersection
+    const cross = v1.x * v2.y - v1.y * v2.x;
+    const angle = Math.asin(Math.min(1, Math.max(-1, cross)));
+    const cosHalfAngle = Math.cos(angle / 2);
+    const offset = distance / Math.max(0.3, Math.abs(cosHalfAngle));
+
+    result.push({
+      x: curr.x + bisector.x * offset,
+      y: curr.y + bisector.y * offset,
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Expand a polygon outward with per-edge distances
+ * Each vertex i is expanded based on the distances of its adjacent edges (i-1 and i)
+ * Used to create coping with different widths per side (e.g., double width on deep end)
+ *
+ * @param pts - Polygon points (CW or CCW)
+ * @param edgeDistances - Distance for each edge (edge i connects vertex i to vertex i+1)
+ *                        If shorter than pts.length, remaining edges use the last value
+ */
+export function expandPolygonPerEdge(pts: Point[], edgeDistances: number[]): Point[] {
+  if (!pts || pts.length < 3) return pts;
+
+  // Remove duplicate closing point if present (first == last)
+  let cleanPts = pts;
+  if (pts.length > 3) {
+    const first = pts[0];
+    const last = pts[pts.length - 1];
+    if (Math.abs(first.x - last.x) < 0.01 && Math.abs(first.y - last.y) < 0.01) {
+      cleanPts = pts.slice(0, -1);
+    }
+  }
+  if (cleanPts.length < 3) return pts;
+
+  const n = cleanPts.length;
+  const result: Point[] = [];
+
+  // Build full edge distances array
+  const distances: number[] = [];
+  for (let i = 0; i < n; i++) {
+    distances.push(edgeDistances[Math.min(i, edgeDistances.length - 1)] || 0);
+  }
+
+  const cw = isClockwise(cleanPts);
+
+  const normalize = (v: Point): Point => {
+    const m = Math.hypot(v.x, v.y);
+    return m > 0 ? { x: v.x / m, y: v.y / m } : { x: 0, y: 0 };
+  };
+
+  for (let i = 0; i < n; i++) {
+    const prev = cleanPts[(i - 1 + n) % n];
+    const curr = cleanPts[i];
+    const next = cleanPts[(i + 1) % n];
+
+    // Edge vectors
+    const v1 = normalize({ x: curr.x - prev.x, y: curr.y - prev.y }); // edge i-1 (prev -> curr)
+    const v2 = normalize({ x: next.x - curr.x, y: next.y - curr.y }); // edge i (curr -> next)
+
+    // Outward normals
+    const n1 = cw ? { x: v1.y, y: -v1.x } : { x: -v1.y, y: v1.x };
+    const n2 = cw ? { x: v2.y, y: -v2.x } : { x: -v2.y, y: v2.x };
+
+    // Get distances for the two edges meeting at this vertex
+    const prevEdgeIdx = (i - 1 + n) % n;
+    const currEdgeIdx = i;
+    const d1 = distances[prevEdgeIdx]; // distance for edge i-1
+    const d2 = distances[currEdgeIdx]; // distance for edge i
+
+    // If distances are equal, use bisector method (simpler)
+    if (Math.abs(d1 - d2) < 0.01) {
+      const bisector = normalize({ x: n1.x + n2.x, y: n1.y + n2.y });
+      const cross = v1.x * v2.y - v1.y * v2.x;
+      const angle = Math.asin(Math.min(1, Math.max(-1, cross)));
+      const cosHalfAngle = Math.cos(angle / 2);
+      const offset = d1 / Math.max(0.3, Math.abs(cosHalfAngle));
+      result.push({
+        x: curr.x + bisector.x * offset,
+        y: curr.y + bisector.y * offset,
+      });
+    } else {
+      // Different distances: compute intersection of the two offset lines
+      // Offset line 1: point on edge i-1 offset by d1 along n1
+      // Offset line 2: point on edge i offset by d2 along n2
+
+      // Points on the offset edges
+      const p1 = { x: curr.x + n1.x * d1, y: curr.y + n1.y * d1 };
+      const p2 = { x: curr.x + n2.x * d2, y: curr.y + n2.y * d2 };
+
+      // Line directions (same as edge directions)
+      const dir1 = v1; // direction of edge i-1
+      const dir2 = v2; // direction of edge i
+
+      // Find intersection of the two offset lines
+      // Line 1: p1 + t * dir1
+      // Line 2: p2 + s * dir2
+      const cross = dir1.x * dir2.y - dir1.y * dir2.x;
+
+      if (Math.abs(cross) < 1e-9) {
+        // Parallel edges - just use average offset
+        const avgD = (d1 + d2) / 2;
+        const bisector = normalize({ x: n1.x + n2.x, y: n1.y + n2.y });
+        result.push({
+          x: curr.x + bisector.x * avgD,
+          y: curr.y + bisector.y * avgD,
+        });
+      } else {
+        // Solve for t: (p1 + t * dir1) = (p2 + s * dir2)
+        // t = ((p2 - p1) × dir2) / (dir1 × dir2)
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const t = (dx * dir2.y - dy * dir2.x) / cross;
+
+        result.push({
+          x: p1.x + t * dir1.x,
+          y: p1.y + t * dir1.y,
+        });
+      }
+    }
+  }
+
+  return result;
+}
+
+// =============================================================================
+// Legacy Exports (for backwards compatibility)
+// =============================================================================
+
 export interface LegacyCopingConfig {
   id: string;
   name: string;
-  tile: {
-    along: number;
-    inward: number;
-  };
-  rows: {
-    sides: number;
-    shallow: number;
-    deep: number;
-  };
+  tile: { along: number; inward: number };
+  rows: { sides: number; shallow: number; deep: number };
 }
 
-/**
- * Legacy coping options (for backward compatibility)
- */
 export const DEFAULT_COPING_OPTIONS: LegacyCopingConfig[] = [
   {
     id: 'coping-400x400',
-    name: TILE_SIZES['400x400'].label,
-    tile: { along: TILE_SIZES['400x400'].width, inward: TILE_SIZES['400x400'].height },
-    rows: { sides: 1, shallow: 1, deep: 2 },
-  },
-  {
-    id: 'coping-600x400',
-    name: TILE_SIZES['600x400'].label,
-    tile: { along: TILE_SIZES['600x400'].width, inward: TILE_SIZES['600x400'].height },
+    name: 'Coping 400×400',
+    tile: { along: 400, inward: 400 },
     rows: { sides: 1, shallow: 1, deep: 2 },
   },
   {
     id: 'coping-400x600',
-    name: TILE_SIZES['400x600'].label,
-    tile: { along: TILE_SIZES['400x600'].width, inward: TILE_SIZES['400x600'].height },
+    name: 'Coping 400×600',
+    tile: { along: 600, inward: 400 }, // 600mm along edge, 400mm depth
     rows: { sides: 1, shallow: 1, deep: 2 },
-  }
+  },
 ];
 
-/**
- * Generate paver positions with fixed world orientation.
- *
- * @param startX - Starting X coordinate in mm
- * @param startY - Starting Y coordinate in mm
- * @param axisPlan - Axis plan containing tile layout along the edge
- * @param tileWidth - Tile width in world X-axis (mm)
- * @param tileHeight - Tile height in world Y-axis (mm)
- * @param isHorizontal - true for horizontal edges (top/bottom), false for vertical edges (left/right)
- * @param rows - Number of rows to generate
- *
- * All tiles maintain fixed world orientation (tileWidth × tileHeight):
- * - Horizontal edges: tiles placed along X, rows stack in Y
- * - Vertical edges: tiles placed along Y, rows stack in X
- * - Dimensions are always width × height regardless of edge
- */
-const generatePaverPositions = (
-  startX: number,
-  startY: number,
-  axisPlan: AxisPlan,
-  tileWidth: number,
-  tileHeight: number,
-  isHorizontal: boolean,
-  rows: number
-): CopingPaver[] => {
-  const positions: CopingPaver[] = [];
-  const alongDim = axisPlan.along;
-  const G = axisPlan.grout;
-  const U = alongDim + G;
-  const p = axisPlan.paversPerCorner;
+// Convert legacy config to simple config
+export function legacyToSimpleConfig(legacy: LegacyCopingConfig): SimpleCopingConfig {
+  const along = legacy.tile.along;
 
-  // Row depth depends on edge orientation
-  const rowDepth = isHorizontal ? tileHeight : tileWidth;
+  // 400x600 has 600mm along the edge
+  const tileSize: SimpleCopingConfig['tileSize'] = along === 600 ? '400x600' : '400x400';
 
-  for (let row = 0; row < rows; row++) {
-    // Place pavers from LEFT/TOP corner
-    for (let i = 0; i < p; i++) {
-      const offset = i * U;
-      const rowOffset = row * (rowDepth + GROUT_MM);
-      positions.push({
-        x: startX + (isHorizontal ? offset : rowOffset),
-        y: startY + (isHorizontal ? rowOffset : offset),
-        width: tileWidth,
-        height: tileHeight,
-        isPartial: false,
-      });
-    }
+  return { tileSize, rowsPerSide: legacy.rows.sides };
+}
 
-    // Place pavers from RIGHT/BOTTOM corner
-    for (let i = 0; i < p; i++) {
-      const offset = axisPlan.edgeLength - (i + 1) * U + G;
-      const rowOffset = row * (rowDepth + GROUT_MM);
-      positions.push({
-        x: startX + (isHorizontal ? offset : rowOffset),
-        y: startY + (isHorizontal ? rowOffset : offset),
-        width: tileWidth,
-        height: tileHeight,
-        isPartial: false,
-      });
-    }
+// Get tile depth from legacy config
+export function getTileDepthFromConfig(config: any): number {
+  if (!config) return 400;
 
-    // Place centre cuts based on strategy
-    const centreStart = p * U;
-
-    if (axisPlan.centreMode === 'single_cut') {
-      const cutSize = axisPlan.cutSizes[0];
-      const cutPosition = centreStart; // g0 already includes grout on left
-      const rowOffset = row * (rowDepth + GROUT_MM);
-      positions.push({
-        x: startX + (isHorizontal ? cutPosition : rowOffset),
-        y: startY + (isHorizontal ? rowOffset : cutPosition),
-        width: isHorizontal ? cutSize : tileWidth,
-        height: isHorizontal ? tileHeight : cutSize,
-        isPartial: true,
-      });
-    } else if (axisPlan.centreMode === 'double_cut') {
-      const [cLeft, cRight] = axisPlan.cutSizes;
-      const rowOffset = row * (rowDepth + GROUT_MM);
-
-      // First cut (left/top)
-      const leftCutPosition = centreStart; // g0 already includes grout on left
-      positions.push({
-        x: startX + (isHorizontal ? leftCutPosition : rowOffset),
-        y: startY + (isHorizontal ? rowOffset : leftCutPosition),
-        width: isHorizontal ? cLeft : tileWidth,
-        height: isHorizontal ? tileHeight : cLeft,
-        isPartial: true,
-      });
-
-      // Second cut (right/bottom) with grout line between
-      const rightCutPosition = leftCutPosition + cLeft + G;
-      positions.push({
-        x: startX + (isHorizontal ? rightCutPosition : rowOffset),
-        y: startY + (isHorizontal ? rowOffset : rightCutPosition),
-        width: isHorizontal ? cRight : tileWidth,
-        height: isHorizontal ? tileHeight : cRight,
-        isPartial: true,
-      });
-    }
-    // If centreMode === 'perfect', no cuts needed
+  // New simple config
+  if ('tileSize' in config) {
+    return TILE_DEPTHS[config.tileSize] || 400;
   }
 
-  return positions;
-};
-
-/**
- * Legacy API for PoolComponent - wraps the new algorithm
- * Accepts both legacy (along/inward) and new (width/height) config formats
- */
-export const calculatePoolCoping = (pool: Pool, config?: LegacyCopingConfig | CopingConfig): CopingCalculation => {
-  const copingConfig = config || DEFAULT_COPING_OPTIONS[0];
-
-  // Detect if this is a legacy or new config
-  const isLegacy = 'along' in (copingConfig.tile as any);
-
-  let globalConfig: CopingConfig;
-
-  if (isLegacy) {
-    const legacyConfig = copingConfig as LegacyCopingConfig;
-    // Convert legacy config to world orientation (width/height)
-    globalConfig = {
-      id: legacyConfig.id,
-      name: legacyConfig.name,
-      tile: { width: legacyConfig.tile.along, height: legacyConfig.tile.inward },
-      rows: legacyConfig.rows,
-    };
-  } else {
-    globalConfig = copingConfig as CopingConfig;
+  // Legacy config
+  if ('tile' in config && 'inward' in config.tile) {
+    return config.tile.inward;
   }
 
-  // Use new algorithm
-  const plan = planPoolCopingGlobal(pool, globalConfig);
-
-  // Tile depths per edge type (pure tile size, no grout)
-  const sideRowDepth = globalConfig.tile.height;  // horizontal edges extend in Y
-  const endRowDepth  = globalConfig.tile.width;     // vertical edges extend in X
-
-  // Corner extension for end tile positioning
-  const cornerExtension = globalConfig.rows.sides * (sideRowDepth + GROUT_MM);
-
-  // Generate positions for each side with fixed world orientation
-  const deepEnd: CopingSide = {
-    rows: globalConfig.rows.deep,
-    depth: endRowDepth,  // vertical edge uses tile.width
-    width: endRowDepth * globalConfig.rows.deep,
-    length: plan.widthAxis.edgeLength,
-    fullPavers: plan.deepEnd.fullPavers,
-    partialPaver: plan.widthAxis.cutSizes.length > 0 ? plan.widthAxis.gapBeforeCentre : null,
-    paverPositions: generatePaverPositions(
-      pool.length + GROUT_MM, // offset from pool edge
-      -cornerExtension,  // start earlier to cover corner
-      plan.widthAxis,
-      globalConfig.tile.width,
-      globalConfig.tile.height,
-      false, // vertical edge
-      globalConfig.rows.deep
-    ),
-  };
-
-  const shallowEnd: CopingSide = {
-    rows: globalConfig.rows.shallow,
-    depth: endRowDepth,  // vertical edge uses tile.width
-    width: endRowDepth * globalConfig.rows.shallow,
-    length: plan.widthAxis.edgeLength,
-    fullPavers: plan.shallowEnd.fullPavers,
-    partialPaver: plan.widthAxis.cutSizes.length > 0 ? plan.widthAxis.gapBeforeCentre : null,
-    paverPositions: generatePaverPositions(
-      -(endRowDepth + GROUT_MM) * globalConfig.rows.shallow, // offset from pool edge
-      -cornerExtension,  // start earlier to cover corner
-      plan.widthAxis,
-      globalConfig.tile.width,
-      globalConfig.tile.height,
-      false, // vertical edge
-      globalConfig.rows.shallow
-    ),
-  };
-
-  const leftSide: CopingSide = {
-    rows: globalConfig.rows.sides,
-    depth: sideRowDepth,  // horizontal edge uses tile.height
-    width: sideRowDepth * globalConfig.rows.sides,
-    length: pool.length,  // no extension - just pool length
-    fullPavers: plan.leftSide.fullPavers,
-    partialPaver: plan.lengthAxis.cutSizes.length > 0 ? plan.lengthAxis.gapBeforeCentre : null,
-    paverPositions: generatePaverPositions(
-      0,  // start at corner
-      -(sideRowDepth + GROUT_MM) * globalConfig.rows.sides,  // offset from pool edge
-      plan.lengthAxis,
-      globalConfig.tile.width,
-      globalConfig.tile.height,
-      true, // horizontal edge
-      globalConfig.rows.sides
-    ),
-  };
-
-  const rightSide: CopingSide = {
-    rows: globalConfig.rows.sides,
-    depth: sideRowDepth,  // horizontal edge uses tile.height
-    width: sideRowDepth * globalConfig.rows.sides,
-    length: pool.length,  // no extension - just pool length
-    fullPavers: plan.rightSide.fullPavers,
-    partialPaver: plan.lengthAxis.cutSizes.length > 0 ? plan.lengthAxis.gapBeforeCentre : null,
-    paverPositions: generatePaverPositions(
-      0,  // start at corner
-      pool.width + GROUT_MM,  // offset from pool edge
-      plan.lengthAxis,
-      globalConfig.tile.width,
-      globalConfig.tile.height,
-      true, // horizontal edge
-      globalConfig.rows.sides
-    ),
-  };
-
-  const totalArea = (
-    (plan.widthAxis.edgeLength * endRowDepth * globalConfig.rows.deep) +
-    (plan.widthAxis.edgeLength * endRowDepth * globalConfig.rows.shallow) +
-    (pool.length * sideRowDepth * globalConfig.rows.sides) +
-    (pool.length * sideRowDepth * globalConfig.rows.sides)
-  ) / 1000000;
-
-  return {
-    deepEnd,
-    shallowEnd,
-    leftSide,
-    rightSide,
-    totalFullPavers: plan.totalFullPavers,
-    totalPartialPavers: plan.totalPartialPavers,
-    totalPavers: plan.totalPavers,
-    totalArea,
-    lengthAxis: plan.lengthAxis,
-    widthAxis: plan.widthAxis,
-  };
-};
+  return 400;
+}

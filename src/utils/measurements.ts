@@ -1,7 +1,6 @@
-import { Component, Summary } from '@/types';
+import { Component, Summary, SimpleCopingStats } from '@/types';
 import { PAVER_SIZES, DRAINAGE_TYPES, FENCE_TYPES, WALL_MATERIALS } from '@/constants/components';
 import { POOL_LIBRARY } from '@/constants/pools';
-import { calculatePoolCoping } from '@/utils/copingCalculation';
 
 export const calculateMeasurements = (components: Component[]): Summary => {
   const summary: Summary = {
@@ -19,23 +18,18 @@ export const calculateMeasurements = (components: Component[]): Summary => {
         const pool = POOL_LIBRARY.find(p => p.id === poolId) || (component.properties as any).pool;
         if (pool) {
           const copingConfig = component.properties.copingConfig;
-          const paverSize = copingConfig 
-            ? `${copingConfig.tile.along}×${copingConfig.tile.inward}mm`
-            : '400×400mm';
-          
-          // Calculate live coping if showCoping is enabled
+          const paverSize = copingConfig?.tileSize || '400x400';
+
+          // Use stored coping statistics (simplified system)
           let copingData = undefined;
           if (component.properties.showCoping) {
-            const calc = calculatePoolCoping(pool, copingConfig);
+            const stats = component.properties.copingStatistics as SimpleCopingStats | undefined;
             copingData = {
-              totalPavers: calc.totalPavers,
-              fullPavers: calc.totalFullPavers,
-              partialPavers: calc.totalPartialPavers,
-              area: calc.totalArea,
+              area: stats?.areaM2 || 0,
               paverSize,
             };
           }
-          
+
           summary.pools.push({
             type: pool.name,
             dimensions: `${pool.length}×${pool.width}mm`,

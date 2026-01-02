@@ -1,7 +1,7 @@
 import { Group, Line, Rect, Circle, Text } from 'react-konva';
 import { Component } from '@/types';
 import { FENCE_TYPES } from '@/constants/components';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
 import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
@@ -107,6 +107,32 @@ export const FenceComponent = ({
       window.removeEventListener('keyup', up);
     };
   }, []);
+
+  // Calculate live total LM (uses ghostLocal during drag for real-time updates)
+  const liveTotalLM = useMemo(() => {
+    const pts = ghostLocal
+      ? ghostLocal.map((p) => ({ x: p.x + component.position.x, y: p.y + component.position.y }))
+      : polyPoints;
+    if (pts.length < 2) return 0;
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      total += Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2) * 10 / 1000; // px to LM
+    }
+    return total;
+  }, [ghostLocal, polyPoints, component.position.x, component.position.y]);
+
+  // Update component properties with live stats during drag
+  useEffect(() => {
+    if (!isPolyline) return;
+    const current = component.properties.totalLM as number | undefined;
+    if (current === undefined || Math.abs(current - liveTotalLM) > 0.001) {
+      updateComponent(component.id, {
+        properties: { ...component.properties, totalLM: liveTotalLM },
+      });
+    }
+  }, [liveTotalLM, isPolyline, component.id, component.properties, updateComponent]);
 
   // Helpers for offsetting a polyline by a constant distance
   const len = (v: { x: number; y: number }) => Math.hypot(v.x, v.y);
@@ -514,7 +540,6 @@ export const FenceComponent = ({
           const perpX = -dy / lineLength;
           const perpY = dx / lineLength;
           const offset = getAnnotationOffsetPx(component.id, component.position);
-          const fenceLabel = `Fence${fenceType === 'glass' ? ' (Glass)' : fenceType === 'metal' ? ' (Metal)' : ''}`;
 
           const midX = (a.x + b.x) / 2;
           const midY = (a.y + b.y) / 2;
@@ -528,7 +553,7 @@ export const FenceComponent = ({
               key={`measurement-${idx}`}
               x={midX + perpX * offset}
               y={midY + perpY * offset}
-              text={`${fenceLabel}: ${lengthInMM}mm`}
+              text={`${lengthInMM}mm`}
               fontSize={11}
               fill={color}
               align="center"
@@ -538,6 +563,30 @@ export const FenceComponent = ({
             />
           );
         })}
+
+        {/* Total LM label - updates live during drag */}
+        {(annotationsVisible || isSelected) && (() => {
+          let totalLM = 0;
+          for (let i = 1; i < localPts.length; i++) {
+            const a = localPts[i - 1];
+            const b = localPts[i];
+            totalLM += Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2) * 10 / 1000; // px to LM
+          }
+          const labelOffset = getAnnotationOffsetPx(component.id, component.position) + 15;
+          const typeLabel = fenceType === 'glass' ? 'Glass Fence' : 'Metal Fence';
+          return (
+            <Text
+              x={(minX + maxX) / 2}
+              y={minY - labelOffset}
+              text={`${typeLabel}: ${totalLM.toFixed(2)} LM`}
+              fontSize={10}
+              fill={color}
+              align="center"
+              offsetX={40}
+              listening={false}
+            />
+          );
+        })()}
 
         {isSelected && (
           <Rect

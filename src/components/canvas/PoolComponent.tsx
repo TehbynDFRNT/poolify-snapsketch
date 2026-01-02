@@ -2,14 +2,18 @@ import { useRef, useMemo, useState, useEffect } from 'react';
 import { Group, Line, Text, Circle, Rect } from 'react-konva';
 import type Konva from 'konva';
 import type { Vector2d } from 'konva/lib/types';
-import { Component } from '@/types';
+import { Component, SimpleCopingConfig } from '@/types';
 import { POOL_LIBRARY } from '@/constants/pools';
-import { calculatePoolCoping } from '@/utils/copingCalculation';
+import {
+  calculateCopingStats,
+  expandPolygon,
+  expandPolygonPerEdge,
+  getTileDepthFromConfig,
+} from '@/utils/copingCalculation';
 import { useDesignStore } from '@/store/designStore';
 import { snapPoolToPaverGrid } from '@/utils/snap';
-import { snapRectPx, roundHalf } from '@/utils/canvasSnap';
 import { TILE_COLORS, TILE_GAP } from '@/constants/tileConfig';
-import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
+import { getAnnotationOffsetPx } from '@/utils/annotations';
 import { GRID_CONFIG } from '@/constants/grid';
 import { useClipMask } from '@/hooks/useClipMask';
 
@@ -167,27 +171,73 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
   const scaledOutline = poolData.outline.map(p => ({ x: p.x * scale, y: p.y * scale }));
   const points = scaledOutline.flatMap(p => [p.x, p.y]);
 
-  // Calculate coping if enabled
+  // Calculate coping if enabled (simplified - no tile arrays)
   const showCoping = component.properties.showCoping ?? false;
-  const copingConfig = component.properties.copingConfig;
-  const copingCalc = showCoping && poolData
-    ? calculatePoolCoping(poolData, copingConfig)
-    : null;
+  const copingConfig = component.properties.copingConfig as SimpleCopingConfig | undefined;
 
-  // Default boundary: rectangle around current coping extents (base ring only)
+  // Get tile depth for band width calculation
+  const tileDepthMm = useMemo(() => {
+    if (!copingConfig) return 400;
+    return getTileDepthFromConfig(copingConfig);
+  }, [copingConfig]);
+
+  // Coping band width in stage units (for sides and shallow end)
+  const copingBandWidth = useMemo(() => {
+    if (!showCoping || !copingConfig) return 0;
+    const rows = copingConfig.rowsPerSide || 1;
+    return (tileDepthMm * rows + TILE_GAP.size) * scale;
+  }, [showCoping, copingConfig, tileDepthMm, scale]);
+
+  // Deep end gets extra rows (default 2 rows vs 1 for sides)
+  const deepEndBandWidth = useMemo(() => {
+    if (!showCoping || !copingConfig) return 0;
+    const deepRows = copingConfig.rowsDeepEnd ?? 2;
+    return (tileDepthMm * deepRows + TILE_GAP.size) * scale;
+  }, [showCoping, copingConfig, tileDepthMm, scale]);
+
+  // Identify which edge is the deep end based on deepEnd position
+  // Deep end is the edge closest to the deepEnd label position
+  // Works with any polygon shape (rectangles, T-shapes, etc.)
+  const deepEndEdgeIndex = useMemo(() => {
+    if (!poolData.deepEnd || !scaledOutline || scaledOutline.length < 3) return -1;
+    const de = { x: poolData.deepEnd.x * scale, y: poolData.deepEnd.y * scale };
+
+    // Helper: calculate distance from point to line segment
+    const pointToSegmentDist = (p: Pt, a: Pt, b: Pt): number => {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const lenSq = dx * dx + dy * dy;
+      if (lenSq === 0) return Math.hypot(p.x - a.x, p.y - a.y); // a === b
+
+      // Project point onto line, clamped to segment
+      const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq));
+      const proj = { x: a.x + t * dx, y: a.y + t * dy };
+      return Math.hypot(p.x - proj.x, p.y - proj.y);
+    };
+
+    // Find the edge closest to the deep end position
+    const n = scaledOutline.length;
+    let bestEdge = -1;
+    let bestDist = Infinity;
+
+    for (let i = 0; i < n; i++) {
+      const a = scaledOutline[i];
+      const b = scaledOutline[(i + 1) % n];
+      const dist = pointToSegmentDist(de, a, b);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestEdge = i;
+      }
+    }
+
+    return bestEdge;
+  }, [poolData.deepEnd, scaledOutline, scale]);
+
+  // Default boundary: use the unified copingOuterEdge (includes deep end width)
+  // This is computed AFTER copingOuterEdge to avoid circular dependency
   const defaultBoundary: Pt[] = useMemo(() => {
-    // Use calculated coping tiles (base ring only) to get extents (stage units)
-    const base: Array<{ x: number; y: number; width: number; height: number }> = [
-      ...(copingCalc?.leftSide?.paverPositions || []),
-      ...(copingCalc?.rightSide?.paverPositions || []),
-      ...(copingCalc?.shallowEnd?.paverPositions || []),
-      ...(copingCalc?.deepEnd?.paverPositions || [])
-    ].map(p => ({
-      x: p.x * scale, y: p.y * scale, width: p.width * scale, height: p.height * scale
-    }));
-
-    // Fallback to pool rect if no coping
-    if (base.length === 0) {
+    if (!showCoping || copingBandWidth <= 0) {
+      // No coping - use pool rectangle
       const minX = 0, minY = 0, maxX = poolData.length * scale, maxY = poolData.width * scale;
       return [
         { x: minX, y: minY },
@@ -197,21 +247,29 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
       ];
     }
 
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    base.forEach(r => {
-      minX = Math.min(minX, r.x);
-      minY = Math.min(minY, r.y);
-      maxX = Math.max(maxX, r.x + r.width);
-      maxY = Math.max(maxY, r.y + r.height);
-    });
-    // No padding - align exactly with outer edges of base coping
-    return [
-      { x: minX, y: minY },
-      { x: maxX, y: minY },
-      { x: maxX, y: maxY },
-      { x: minX, y: maxY },
-    ];
-  }, [copingCalc, poolData.length, poolData.width, scale]);
+    // Use unified outer edge (includes deep end extra width)
+    // Note: copingOuterEdge is defined after this, so we need to compute it here
+    if (deepEndEdgeIndex < 0 || deepEndBandWidth <= copingBandWidth) {
+      return expandPolygon(scaledOutline, copingBandWidth);
+    }
+
+    let cleanOutline = scaledOutline;
+    if (scaledOutline.length > 3) {
+      const first = scaledOutline[0];
+      const last = scaledOutline[scaledOutline.length - 1];
+      if (Math.abs(first.x - last.x) < 0.1 && Math.abs(first.y - last.y) < 0.1) {
+        cleanOutline = scaledOutline.slice(0, -1);
+      }
+    }
+
+    const n = cleanOutline.length;
+    const edgeDistances: number[] = [];
+    for (let i = 0; i < n; i++) {
+      edgeDistances.push(i === deepEndEdgeIndex ? deepEndBandWidth : copingBandWidth);
+    }
+
+    return expandPolygonPerEdge(scaledOutline, edgeDistances);
+  }, [showCoping, copingBandWidth, deepEndBandWidth, deepEndEdgeIndex, scaledOutline, poolData.length, poolData.width, scale]);
 
   // Persisted outer boundary (stage-space, group-local)
   const copingBoundary: Pt[] = (component.properties.copingBoundary as Pt[]) || defaultBoundary;
@@ -445,447 +503,77 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     setGhostLocal(null);
   }, [boundaryLocal, ghostLocal]);
 
-  // Build side-indexed tile lists (in mm, pool-local) - all tiles are atomic, no base/extended distinction
-  type Side = 'top'|'bottom'|'left'|'right';
-  type Tile = { x:number; y:number; width:number; height:number; isPartial:boolean; side: Side; key: string };
+  // ============================================================================
+  // SIMPLIFIED COPING - Solid band rendering, no tile arrays
+  // ============================================================================
 
-  const copingTiles = useMemo(() => (
-    (component.properties.copingTiles || []) as Array<{x:number;y:number;width:number;height:number;isPartial:boolean;side:Side}>
-  ), [component.properties.copingTiles]);
+  // Coping outer edge (base coping ring expanded from pool)
+  // Uses per-edge expansion to give deep end edge more width (no seam)
+  const copingOuterEdge: Pt[] = useMemo(() => {
+    if (!showCoping || copingBandWidth <= 0) return scaledOutline;
 
-  const sideTiles = useMemo(() => {
-    const result: Record<Side, Tile[]> = { top: [], bottom: [], left: [], right: [] };
-    if (copingCalc) {
-      // Map calculated tiles to sides
-      // top: leftSide (y < 0), bottom: rightSide (y >= pool.width), left: shallowEnd (x < 0), right: deepEnd (x >= pool.length)
-      (copingCalc.leftSide?.paverPositions || []).forEach((p, i) => {
-        result.top.push({ ...p, side: 'top', key: `top:${i}` });
-      });
-      (copingCalc.rightSide?.paverPositions || []).forEach((p, i) => {
-        result.bottom.push({ ...p, side: 'bottom', key: `bottom:${i}` });
-      });
-      (copingCalc.shallowEnd?.paverPositions || []).forEach((p, i) => {
-        result.left.push({ ...p, side: 'left', key: `left:${i}` });
-      });
-      (copingCalc.deepEnd?.paverPositions || []).forEach((p, i) => {
-        result.right.push({ ...p, side: 'right', key: `right:${i}` });
-      });
+    // If deep end has same width as sides, use uniform expansion
+    if (deepEndEdgeIndex < 0 || deepEndBandWidth <= copingBandWidth) {
+      return expandPolygon(scaledOutline, copingBandWidth);
     }
-    // Append user-added tiles (no distinction from calculated tiles)
-    copingTiles.forEach((p, i) => {
-      const key = `${p.side}:user:${i}`;
-      (result[p.side] as Tile[]).push({ ...p, key, side: p.side });
-    });
-    return result;
-  }, [copingCalc, copingTiles]);
 
-  // Tile depths (mm) - different for horizontal vs vertical edges with fixed tile orientation
-  const tileDepthMm = useMemo(() => {
-    if (!copingCalc) return { horizontal: 400, vertical: 400 };
-    // Horizontal edges (top/bottom = leftSide/rightSide in calc)
-    const horizontal = copingCalc.leftSide.depth || 400;
-    // Vertical edges (left/right = shallowEnd/deepEnd in calc)
-    const vertical = copingCalc.shallowEnd.depth || 400;
-    return { horizontal, vertical };
-  }, [copingCalc]);
-
-  // (moved tile-edge snapping definitions below autoTilesMM to avoid TDZ)
-
-  // --- Auto-tile generation helpers ---
-  type MMTile = { x: number; y: number; width: number; height: number; isPartial: boolean; side: Side };
-  type StageRect = { x: number; y: number; w: number; h: number };
-
-  // Convert mm tile -> stage rect
-  const mmToStageRect = (t: { x: number; y: number; width: number; height: number }): StageRect => ({
-    x: roundHalf(t.x * scale),
-    y: roundHalf(t.y * scale),
-    w: Math.max(1, roundHalf(t.width * scale)),
-    h: Math.max(1, roundHalf(t.height * scale)),
-  });
-
-  // Existing tiles (base ring + user)
-  const userTilesMM = useMemo(() => (
-    (component.properties.copingTiles || []) as MMTile[]
-  ), [component.properties.copingTiles]);
-
-  // Build per-side base ring in MM (from coping calc)
-  const baseTilesMM: Record<Side, MMTile[]> = {
-    top: (copingCalc?.leftSide?.paverPositions || []).map((p) => ({ ...p, side: 'top' as const })),
-    bottom: (copingCalc?.rightSide?.paverPositions || []).map((p) => ({ ...p, side: 'bottom' as const })),
-    left: (copingCalc?.shallowEnd?.paverPositions || []).map((p) => ({ ...p, side: 'left' as const })),
-    right: (copingCalc?.deepEnd?.paverPositions || []).map((p) => ({ ...p, side: 'right' as const })),
-  };
-
-  // Union existing tiles (for overlap filtering)
-  const existingStageRects: StageRect[] = useMemo(() => {
-    const all: MMTile[] = ([] as MMTile[])
-      .concat(baseTilesMM.top, baseTilesMM.bottom, baseTilesMM.left, baseTilesMM.right)
-      .concat(userTilesMM);
-    return all.map(mmToStageRect);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [copingCalc, component.properties.copingTiles, scale]);
-
-  const stageOverlaps = (a: StageRect, b: StageRect, eps = 0.5) => {
-    const ax1 = a.x, ay1 = a.y, ax2 = a.x + a.w, ay2 = a.y + a.h;
-    const bx1 = b.x, by1 = b.y, bx2 = b.x + b.w, by2 = b.y + b.h;
-    return ax1 < bx2 - eps && ax2 > bx1 + eps && ay1 < by2 - eps && ay2 > by1 + eps;
-  };
-
-  // Determine the current outermost row coordinate per side in mm (pool-local)
-  // Note: outermostCoord (for manual handle extension) removed; auto boundary uses getOutermostRowTiles
-
-  // Tile row helpers for auto-extend boundary are handled via getOutermostRowTiles
-
-  // --- Auto-tile generation from boundary ---
-  const groutMm = TILE_GAP.size;
-  const depthMm = tileDepthMm; // { horizontal, vertical }
-
-  // Which axis & sign to grow per side
-  const sideAxis: Record<Side, { axis: 'x' | 'y'; sign: 1 | -1; stepMm: number }> = {
-    top:    { axis: 'y', sign: -1, stepMm: depthMm.horizontal + groutMm },
-    bottom: { axis: 'y', sign:  1, stepMm: depthMm.horizontal + groutMm },
-    left:   { axis: 'x', sign: -1, stepMm: depthMm.vertical   + groutMm },
-    right:  { axis: 'x', sign:  1, stepMm: depthMm.vertical   + groutMm },
-  };
-
-  // Find current outermost coordinate for a side (in MM, pool-local)
-  const getOutermostCoordMm = (side: Side): number => {
-    const mm = (t: MMTile) => (side === 'top' || side === 'bottom') ? t.y : t.x;
-    const base = baseTilesMM[side].map(mm);
-    const user = userTilesMM.filter(t => t.side === side).map(mm);
-    if ((base.length + user.length) === 0) {
-      // fallback to pool edge in mm
-      if (side === 'top') return 0;
-      if (side === 'left') return 0;
-      if (side === 'bottom') return poolData.width;
-      return poolData.length; // right
-    }
-    if (side === 'top' || side === 'left') return Math.min(...base, ...(user.length ? user : [Infinity]));
-    return Math.max(...base, ...(user.length ? user : [-Infinity]));
-  };
-
-  // Outermost row tiles (in MM) used as seeds for replication
-  const getOutermostRowTiles = (side: Side): MMTile[] => {
-    const all = ([] as MMTile[]).concat(baseTilesMM[side], userTilesMM.filter(t => t.side === side));
-    if (all.length === 0) return [];
-    const coord = getOutermostCoordMm(side);
-    const EPS = 0.25; // mm tolerance
-    return all.filter(t => {
-      const v = (side === 'top' || side === 'bottom') ? t.y : t.x;
-      return Math.abs(v - coord) <= EPS;
-    });
-  };
-
-  // Auto tiles for current (or preview) boundary
-  // Use a stable key from boundary points to ensure recalculation
-  const boundaryKey = boundaryLive.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('|');
-
-  const autoTilesMM: MMTile[] = useMemo(() => {
-    if (!showCoping || !copingCalc) return [];
-
-    const outer: Pt[] = boundaryLive;
-
-    // Use precomputed projectClipLocal (pool-local)
-
-    // Build visible region for area-based checks
-    const visibleRegionForGen: Pt[] | null = (() => {
-      if (!outer || outer.length < 3) return null;
-      if (projectClipLocal && projectClipLocal.length >= 3) {
-        const clipped = clipPolygon(outer, projectClipLocal);
-        return clipped.length >= 3 ? clipped : null;
-      }
-      return outer;
-    })();
-
-    const MIN_VISIBLE_PX2 = 40;  // 1/40 of 400x400mm tile area (4,000 mm² = 40 px²) - allows smaller cut tiles
-    const AREA_EPS_PX2    = 40;  // full vs partial tolerance
-
-    const rectHasPositiveOverlap = (sr: StageRect, region: Pt[] | null): boolean => {
-      if (!region) return true; // no clipping ⇒ treat as visible
-      return intersectAreaRectPoly(sr, region) >= MIN_VISIBLE_PX2;
-    };
-    const rectFullyInside = (sr: StageRect, region: Pt[] | null): boolean => {
-      if (!region) return true;
-      const vis = intersectAreaRectPoly(sr, region);
-      return (sr.w * sr.h - vis) <= AREA_EPS_PX2;
-    };
-
-    // Use area-based checks instead of point-distance checks
-    const rectIntersectsBoth = (sr: StageRect) =>
-      rectHasPositiveOverlap(sr, outer) &&
-      (projectClipLocal ? rectHasPositiveOverlap(sr, projectClipLocal) : true);
-
-    const rectInsideBoth = (sr: StageRect) =>
-      rectFullyInside(sr, outer) &&
-      (projectClipLocal ? rectFullyInside(sr, projectClipLocal) : true);
-
-    // Check if boundary has been edited beyond default (compare with tolerance)
-    const isDefaultBoundary = outer.length === defaultBoundary.length &&
-      outer.every((p, i) => {
-        const def = defaultBoundary[i];
-        return Math.abs(p.x - def.x) < 0.1 && Math.abs(p.y - def.y) < 0.1;
-      });
-
-    // Don't generate auto-tiles if boundary hasn't been edited
-    if (isDefaultBoundary) {
-      return [];
-    }
-    // Build a fast overlap list (existing + will-add)
-    const addedStage: StageRect[] = [];
-    const overlapsExistingOrAdded = (sr: StageRect) => {
-      const hitExisting = existingStageRects.some(r => stageOverlaps(sr, r));
-      if (hitExisting) return true;
-      const hitAdded = addedStage.some(r => stageOverlaps(sr, r));
-      return hitAdded;
-    };
-
-    const produced: MMTile[] = [];
-    // Pool interior (non-tilable) in stage units
-    const poolStageRect: StageRect = {
-      x: 0,
-      y: 0,
-      w: poolData.length * scale,
-      h: poolData.width * scale,
-    };
-
-    (['top','bottom','left','right'] as Side[]).forEach(side => {
-      const seeds = getOutermostRowTiles(side);
-      if (seeds.length === 0) return;
-
-      const { axis, sign, stepMm } = sideAxis[side];
-
-      // For each tile in the outermost row, step outward until it no longer intersects the boundary
-      seeds.forEach(seed => {
-        // First check if this seed tile is near the extended boundary area
-        // Only generate auto-tiles for seeds that are actually affected by the boundary extension
-        const seedStageRect: StageRect = {
-          x: roundHalf(seed.x * scale),
-          y: roundHalf(seed.y * scale),
-          w: Math.max(1, roundHalf(seed.width * scale)),
-          h: Math.max(1, roundHalf(seed.height * scale)),
-        };
-
-        // Check if the next potential tile position would be within the extended boundary
-        // This prevents generating tiles for the entire perimeter when only a small area is extended
-        const firstStepMm = stepMm * sign;
-        const testXMm = axis === 'x' ? (seed.x + firstStepMm) : seed.x;
-        const testYMm = axis === 'y' ? (seed.y + firstStepMm) : seed.y;
-        const testRect: StageRect = {
-          x: roundHalf(testXMm * scale),
-          y: roundHalf(testYMm * scale),
-          w: Math.max(1, roundHalf(seed.width * scale)),
-          h: Math.max(1, roundHalf(seed.height * scale)),
-        };
-
-        // Skip this seed if the first extension doesn't intersect the boundary
-        // This means the boundary wasn't extended in this area
-        if (!rectIntersectsPolygon(testRect, outer)) return;
-
-        let s = 1;
-        // conservative max steps bound using bbox of (outer ∩ projectClip), approximated by bbox intersection if available
-        const bx = outer.map(p => p.x), by = outer.map(p => p.y);
-        let minX = Math.min(...bx), maxX = Math.max(...bx);
-        let minY = Math.min(...by), maxY = Math.max(...by);
-        if (projectClipLocal && projectClipLocal.length >= 3) {
-          const gx = projectClipLocal.map(p => p.x), gy = projectClipLocal.map(p => p.y);
-          const gminX = Math.min(...gx), gmaxX = Math.max(...gx);
-          const gminY = Math.min(...gy), gmaxY = Math.max(...gy);
-          // bbox intersection
-          minX = Math.max(minX, gminX);
-          maxX = Math.min(maxX, gmaxX);
-          minY = Math.max(minY, gminY);
-          maxY = Math.min(maxY, gmaxY);
-        }
-        const maxTravelPx = (axis === 'x' ? Math.max(Math.abs((seed.x * scale) - minX), Math.abs((seed.x * scale) - maxX))
-                                          : Math.max(Math.abs((seed.y * scale) - minY), Math.abs((seed.y * scale) - maxY)));
-        const maxSteps = Math.max(1, Math.ceil((maxTravelPx / scale) / Math.max(1, stepMm)));
-
-        while (s <= maxSteps) {
-          const offMm = s * stepMm * sign;
-          const rxMm = axis === 'x' ? (seed.x + offMm) : seed.x;
-          const ryMm = axis === 'y' ? (seed.y + offMm) : seed.y;
-
-          const stageRect: StageRect = {
-            x: roundHalf(rxMm * scale),
-            y: roundHalf(ryMm * scale),
-            w: Math.max(1, roundHalf(seed.width * scale)),
-            h: Math.max(1, roundHalf(seed.height * scale)),
-          };
-
-          // Outside either polygon? stop for this column
-          if (!rectIntersectsBoth(stageRect)) break;
-          // Never place tiles inside pool interior
-          if (stageOverlaps(stageRect, poolStageRect)) { s++; continue; }
-
-          // Skip overlaps with base/user or already-added
-          if (!overlapsExistingOrAdded(stageRect)) {
-            addedStage.push(stageRect);
-
-            const isPartialOuter = !rectInsideBoth(stageRect);
-            produced.push({
-              x: rxMm,
-              y: ryMm,
-              width: seed.width,
-              height: seed.height,
-              isPartial: seed.isPartial || isPartialOuter, // respect center-cut then allow edge to cut again
-              side
-            });
-          }
-          s++;
-        }
-      });
-    });
-
-    // Corner infill: scan aligned grids in both orientations to catch triangular gaps near corners
-    const bx = outer.map(p => p.x), by = outer.map(p => p.y);
-    const minXpx = Math.min(...bx), maxXpx = Math.max(...bx);
-    const minYpx = Math.min(...by), maxYpx = Math.max(...by);
-    const minXmm = minXpx / scale, maxXmm = maxXpx / scale;
-    const minYmm = minYpx / scale, maxYmm = maxYpx / scale;
-
-    const sampleH = baseTilesMM.top[0] || baseTilesMM.bottom[0] || userTilesMM.find(t => t.side === 'top' || t.side === 'bottom');
-    const sampleV = baseTilesMM.left[0] || baseTilesMM.right[0] || userTilesMM.find(t => t.side === 'left' || t.side === 'right');
-    const hW = sampleH?.width || 600; // fallback reasonable length
-    const hH = sampleH?.height || depthMm.horizontal;
-    const vW = sampleV?.width || depthMm.vertical;
-    const vH = sampleV?.height || 600; // fallback reasonable length
-    const hRefX = sampleH?.x || 0;
-    const hRefY = sampleH?.y || 0;
-    const vRefX = sampleV?.x || 0;
-    const vRefY = sampleV?.y || 0;
-
-    const alignStart = (min: number, ref: number, step: number) => {
-      if (step <= 0) return min;
-      const k = Math.floor((min - ref) / step) - 1;
-      return ref + k * step;
-    };
-
-    const tryAdd = (xmm: number, ymm: number, w: number, h: number, side: Side) => {
-      const sr: StageRect = {
-        x: roundHalf(xmm * scale),
-        y: roundHalf(ymm * scale),
-        w: Math.max(1, roundHalf(w * scale)),
-        h: Math.max(1, roundHalf(h * scale)),
-      };
-      if (!rectIntersectsBoth(sr)) return;
-      // Exclude pool interior
-      if (stageOverlaps(sr, poolStageRect)) return;
-      if (overlapsExistingOrAdded(sr)) return;
-      addedStage.push(sr);
-      produced.push({
-        x: xmm,
-        y: ymm,
-        width: w,
-        height: h,
-        isPartial: !rectInsideBoth(sr),
-        side,
-      });
-    };
-
-    // Corner-anchored infill using rectangular step (tileWidth x tileHeight) to align grout
-    const grout = TILE_GAP.size || 0;
-    const tileW = (sampleH?.width || sampleV?.width || hW || vW || 400);
-    const tileH = (sampleH?.height || sampleV?.height || hH || vH || 400);
-    const stepX = tileW + grout;       // spacing along X
-    const stepY = tileH + grout;       // spacing along Y
-
-    const firstAtLeast = (th: number, ref: number, step: number) => ref + Math.ceil((th - ref) / step) * step;
-    const lastAtMost   = (th: number, ref: number, step: number) => ref + Math.floor((th - ref) / step) * step;
-
-    if (stepX > 0 && stepY > 0) {
-      // Anchor to pool edges + grout so the first outboard gridline touches the grout band
-      const rightAnchorX = poolData.length + grout;  // first gridline to the right of pool
-      const leftAnchorX  = -stepX;                   // first gridline to the left of pool
-      const topAnchorY   = -stepY;                   // first gridline above pool
-      const botAnchorY   = poolData.width + grout;   // first gridline below pool
-
-      // Top-Right corner: x → +, y → -
-      for (let y = topAnchorY; y >= minYmm - stepY; y -= stepY) {
-        for (let x = rightAnchorX; x <= maxXmm + stepX; x += stepX) {
-          tryAdd(x, y, tileW, tileH, 'top');
-        }
-      }
-
-      // Top-Left corner: x → -, y → -
-      for (let y = topAnchorY; y >= minYmm - stepY; y -= stepY) {
-        for (let x = leftAnchorX; x >= minXmm - stepX; x -= stepX) {
-          tryAdd(x, y, tileW, tileH, 'top');
-        }
-      }
-
-      // Bottom-Right corner: x → +, y → +
-      for (let y = botAnchorY; y <= maxYmm + stepY; y += stepY) {
-        for (let x = rightAnchorX; x <= maxXmm + stepX; x += stepX) {
-          tryAdd(x, y, tileW, tileH, 'top');
-        }
-      }
-
-      // Bottom-Left corner: x → -, y → +
-      for (let y = botAnchorY; y <= maxYmm + stepY; y += stepY) {
-        for (let x = leftAnchorX; x >= minXmm - stepX; x -= stepX) {
-          tryAdd(x, y, tileW, tileH, 'top');
-        }
+    // Build per-edge distances array with deep end getting extra width
+    // Clean the outline first to get correct edge count
+    let cleanOutline = scaledOutline;
+    if (scaledOutline.length > 3) {
+      const first = scaledOutline[0];
+      const last = scaledOutline[scaledOutline.length - 1];
+      if (Math.abs(first.x - last.x) < 0.1 && Math.abs(first.y - last.y) < 0.1) {
+        cleanOutline = scaledOutline.slice(0, -1);
       }
     }
 
-    return produced;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boundaryKey, defaultBoundary, copingCalc, component.properties.copingTiles, showCoping, scale, tileDepthMm.horizontal, tileDepthMm.vertical, projectClipStage, component.position.x, component.position.y, component.rotation]);
+    const n = cleanOutline.length;
+    const edgeDistances: number[] = [];
+    for (let i = 0; i < n; i++) {
+      edgeDistances.push(i === deepEndEdgeIndex ? deepEndBandWidth : copingBandWidth);
+    }
 
-  // Secondary snap-to-tile edges (in pool-local/stage units)
-  const tileEdgeLines = useMemo(() => {
-    const xs = new Set<number>();
-    const ys = new Set<number>();
-    const addRectMm = (xmm: number, ymm: number, wmm: number, hmm: number) => {
-      const lx = roundHalf(xmm * scale);
-      const rx = roundHalf((xmm + wmm) * scale);
-      const ty = roundHalf(ymm * scale);
-      const by = roundHalf((ymm + hmm) * scale);
-      xs.add(lx); xs.add(rx);
-      ys.add(ty); ys.add(by);
-    };
-    // Base ring
-    (copingCalc?.leftSide?.paverPositions || []).forEach(p => addRectMm(p.x, p.y, p.width, p.height));
-    (copingCalc?.rightSide?.paverPositions || []).forEach(p => addRectMm(p.x, p.y, p.width, p.height));
-    (copingCalc?.shallowEnd?.paverPositions || []).forEach(p => addRectMm(p.x, p.y, p.width, p.height));
-    (copingCalc?.deepEnd?.paverPositions || []).forEach(p => addRectMm(p.x, p.y, p.width, p.height));
-    // User tiles
-    (component.properties.copingTiles || []).forEach((t: any) => addRectMm(t.x, t.y, t.width, t.height));
-    // Auto tiles
-    (autoTilesMM || []).forEach(t => addRectMm(t.x, t.y, t.width, t.height));
-    const xArr = Array.from(xs.values()).sort((a, b) => a - b);
-    const yArr = Array.from(ys.values()).sort((a, b) => a - b);
-    return { xArr, yArr };
-  }, [copingCalc, component.properties.copingTiles, autoTilesMM, scale]);
+    return expandPolygonPerEdge(scaledOutline, edgeDistances);
+  }, [showCoping, copingBandWidth, deepEndBandWidth, deepEndEdgeIndex, scaledOutline]);
 
-  const snapWithSecondaryTileEdges = (local: Pt, gridPt: Pt): Pt => {
-    const tol = Math.min(8, GRID_CONFIG.spacing * 0.35); // px tolerance
-    let bestTilePt: Pt | null = null;
-    let bestTileDist = Infinity;
-    // Nearest vertical edge
-    for (const x of tileEdgeLines.xArr) {
-      const dx = Math.abs(local.x - x);
-      if (dx <= tol && dx < bestTileDist) {
-        bestTileDist = dx;
-        bestTilePt = { x, y: local.y };
-      } else if (dx > tol && x > local.x + tol) break;
+  // Check if boundary has been extended beyond default
+  const hasExtension = useMemo(() => {
+    if (!showCoping) return false;
+    const boundary = boundaryLive;
+    const outer = copingOuterEdge;
+    if (boundary.length !== outer.length) return true;
+    const EPS = 1; // 1 pixel tolerance
+    return boundary.some((p, i) =>
+      Math.abs(p.x - outer[i].x) > EPS || Math.abs(p.y - outer[i].y) > EPS
+    );
+  }, [showCoping, boundaryLive, copingOuterEdge]);
+
+  // Calculate coping statistics
+  const copingStats = useMemo(() => {
+    if (!showCoping || !copingConfig) return null;
+    return calculateCopingStats(
+      poolData.outline,
+      copingConfig,
+      boundaryLive,
+      scale
+    );
+  }, [showCoping, copingConfig, poolData.outline, boundaryLive, scale]);
+
+  // Update component properties when stats change
+  useEffect(() => {
+    if (!copingStats) return;
+    const prev = component.properties.copingStatistics as SimpleCopingStats | undefined;
+    if (!prev ||
+        Math.abs((prev.areaM2 || 0) - copingStats.areaM2) > 0.001 ||
+        Math.abs((prev.baseCopingAreaM2 || 0) - copingStats.baseCopingAreaM2) > 0.001 ||
+        Math.abs((prev.extensionAreaM2 || 0) - copingStats.extensionAreaM2) > 0.001) {
+      updateComponent(component.id, {
+        properties: { ...component.properties, copingStatistics: copingStats }
+      });
     }
-    // Nearest horizontal edge
-    for (const y of tileEdgeLines.yArr) {
-      const dy = Math.abs(local.y - y);
-      if (dy <= tol && dy < bestTileDist) {
-        bestTileDist = dy;
-        bestTilePt = { x: local.x, y };
-      } else if (dy > tol && y > local.y + tol) break;
-    }
-    const gridDist = Math.hypot(local.x - gridPt.x, local.y - gridPt.y);
-    if (bestTilePt) {
-      const tileDist = Math.hypot(local.x - bestTilePt.x, local.y - bestTilePt.y);
-      // Only use tile snap if clearly intended (closer than grid and within tol)
-      if (tileDist + 1e-6 < gridDist && bestTileDist <= tol) return bestTilePt;
-    }
-    return gridPt;
-  };
+  }, [copingStats, component.id, component.properties, updateComponent]);
+
 
   // Pattern is pre-rendered at exact pool size, so use 1:1 scale and (0,0) offset
   const patternConfig = useMemo(() => {
@@ -895,58 +583,38 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     };
   }, []);
 
-  // Calculate bounding box for pool (includes coping and extensions when enabled)
+  // Calculate clickable bounds based on coping boundary AND copingOuterEdge
+  // copingOuterEdge includes deep end extra width, boundary may extend beyond that
   const clickableBounds = useMemo(() => {
-    // If no coping, just use pool dimensions
-    if (!showCoping || !copingCalc) {
+    if (!showCoping || copingBandWidth <= 0) {
+      // No coping - use pool dimensions with padding
       const width = Math.max(20, poolData.length * scale + 20);
       const height = Math.max(20, poolData.width * scale + 20);
-      return {
-        x: -10,
-        y: -10,
-        width,
-        height,
-      };
+      return { x: -10, y: -10, width, height };
     }
 
-    // Calculate bounds from all coping pavers + any extensions
-    let minX = 0;
-    let minY = 0;
-    let maxX = poolData.length * scale;
-    let maxY = poolData.width * scale;
-
-    const allCopingPavers = [
-      ...(copingCalc.deepEnd?.paverPositions || []),
-      ...(copingCalc.shallowEnd?.paverPositions || []),
-      ...(copingCalc.leftSide?.paverPositions || []),
-      ...(copingCalc.rightSide?.paverPositions || []),
-      ...(copingTiles || []),
-      ...(autoTilesMM || []),
-    ];
-
-    allCopingPavers.forEach(paver => {
-      const paverMinX = paver.x * scale;
-      const paverMinY = paver.y * scale;
-      const paverMaxX = paverMinX + paver.width * scale;
-      const paverMaxY = paverMinY + paver.height * scale;
-
-      minX = Math.min(minX, paverMinX);
-      minY = Math.min(minY, paverMinY);
-      maxX = Math.max(maxX, paverMaxX);
-      maxY = Math.max(maxY, paverMaxY);
-    });
-
-    // Add padding for easier clicking
-    const width = Math.max(20, maxX - minX + 20);
-    const height = Math.max(20, maxY - minY + 20);
+    // Combine boundary and coping outer edge to get full extent
+    const allPoints = [...boundaryLive, ...copingOuterEdge];
+    const xs = allPoints.map(p => p.x);
+    const ys = allPoints.map(p => p.y);
+    const minX = Math.min(...xs, 0);
+    const maxX = Math.max(...xs, poolData.length * scale);
+    const minY = Math.min(...ys, 0);
+    const maxY = Math.max(...ys, poolData.width * scale);
 
     return {
       x: minX - 10,
       y: minY - 10,
-      width,
-      height,
+      width: Math.max(20, maxX - minX + 20),
+      height: Math.max(20, maxY - minY + 20),
     };
-  }, [showCoping, copingCalc, poolData.length, poolData.width, scale, autoTilesMM, copingTiles]);
+  }, [showCoping, copingBandWidth, boundaryLive, copingOuterEdge, poolData.length, poolData.width, scale]);
+
+  // Simplified snap function (no tile-edge snapping)
+  const snapWithSecondaryTileEdges = (local: Pt, gridPt: Pt): Pt => {
+    // Just return grid point - no tile edge snapping in simplified system
+    return gridPt;
+  };
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
     const newPos = { x: e.target.x(), y: e.target.y() };
@@ -1020,85 +688,6 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     insertNodeAt(local);
   };
 
-  // Visible-only coping statistics (m², full/partial counts) and persist
-  useEffect(() => {
-    // Build the visible region in stage space: coping boundary ∩ project clip (if any)
-    const visibleRegion: Pt[] | null = (() => {
-      if (!boundaryLive || boundaryLive.length < 3) return null;
-      if (projectClipLocal && projectClipLocal.length >= 3) {
-        const clipped = clipPolygon(boundaryLive, projectClipLocal);
-        return clipped.length >= 3 ? clipped : null;
-      }
-      return boundaryLive;
-    })();
-
-    // Collect all tiles in MM (base ring + user + auto)
-    type MMTile = { x: number; y: number; width: number; height: number; isPartial: boolean; side: 'top'|'bottom'|'left'|'right' };
-    const mmAll: MMTile[] = ([] as MMTile[])
-      .concat(baseTilesMM.top, baseTilesMM.bottom, baseTilesMM.left, baseTilesMM.right)
-      .concat(userTilesMM)
-      .concat(autoTilesMM);
-
-    // Convert to stage rect (px) for overlap math
-    const toStageRect = (t: MMTile) => ({
-      x: roundHalf(t.x * scale),
-      y: roundHalf(t.y * scale),
-      w: Math.max(1, roundHalf(t.width  * scale)),
-      h: Math.max(1, roundHalf(t.height * scale)),
-      cut: t.isPartial,
-    });
-
-    // Thresholds: ignore pure "touch" (no area). Evaluate in stage units.
-    const MIN_VISIBLE_PX2 = 40;  // 1/40 of 400x400mm tile area (4,000 mm² = 40 px²) - allows smaller cut tiles
-    const AREA_EPS_PX2    = 40;  // full vs partial tolerance
-
-    let full = 0;
-    let partial = 0;
-    let visibleAreaPx2Sum = 0;
-
-    for (const t of mmAll) {
-      const sr = toStageRect(t);
-      const rectAreaPx2 = sr.w * sr.h;
-
-      // If there is no meaningful visible region, nothing is visible
-      if (!visibleRegion) continue;
-
-      // Compute visible overlap area (stage)
-      const visPx2 = intersectAreaRectPoly(sr, visibleRegion);
-
-      // Exclude tiles with no visible area (fixes grout-only extension "touch" case)
-      if (visPx2 < MIN_VISIBLE_PX2) continue;
-
-      visibleAreaPx2Sum += visPx2;
-
-      // Full if essentially the whole rect is visible; else partial
-      const clippedByBoundary = (rectAreaPx2 - visPx2) > AREA_EPS_PX2;
-      const isPartialByGeometry = clippedByBoundary;
-      const isPartialFinal = sr.cut || isPartialByGeometry;
-
-      if (isPartialFinal) partial++; else full++;
-    }
-
-    // Convert visible area to m²
-    const areaM2 = (visibleAreaPx2Sum / (scale * scale)) / 1_000_000;
-
-    type CopingStats = { full?: number; partial?: number; total?: number; areaM2?: number };
-    const prev = (component.properties.copingStatistics as unknown as CopingStats) || {};
-    const total = full + partial;
-    if (prev.full !== full || prev.partial !== partial || prev.total !== total || Math.abs((prev.areaM2 || 0) - areaM2) > 1e-6) {
-      updateComponent(component.id, {
-        properties: {
-          ...component.properties,
-          copingStatistics: { full, partial, total, areaM2 }
-        }
-      });
-    }
-  }, [
-    // deps that affect visibility or tiles
-    boundaryLive, projectClipLocal,
-    autoTilesMM, baseTilesMM.top, baseTilesMM.bottom, baseTilesMM.left, baseTilesMM.right, userTilesMM,
-    component.id, component.properties, updateComponent, scale
-  ]);
 
   // Load and pre-render pattern image for pool fill (rotated 180° and sized to pool)
   useEffect(() => {
@@ -1139,249 +728,137 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
   }, [poolData.length, poolData.width, scale]);
 
   // Build the list of tiles for rendering (base + extensions) with selection overlays
-  const renderCopingTiles = () => {
-    // AFTER: include auto tiles (as additional atomic tiles) + keep keys distinct
-    const autoTiles: Array<{ x:number;y:number;width:number;height:number;isPartial:boolean;side:Side; key:string }> =
-      autoTilesMM.map((p, i) => ({ ...p, key: `${p.side}:auto:${i}` }));
+  // ============================================================================
+  // SIMPLIFIED COPING RENDERER - Solid band instead of individual tiles
+  // ============================================================================
+  const renderCoping = () => {
+    if (!showCoping || copingBandWidth <= 0) return null;
 
-    const tiles: Tile[] = ([] as Tile[])
-      .concat(sideTiles.top)
-      .concat(sideTiles.bottom)
-      .concat(sideTiles.left)
-      .concat(sideTiles.right)
-      .concat(
-        autoTiles.map(p => ({
-          x: p.x, y: p.y, width: p.width, height: p.height, isPartial: p.isPartial, side: p.side, key: p.key
-        }))
-      );
+    const tileFill = TILE_COLORS.baseTile; // sandstone color
+    const extensionFill = '#F3EBD9'; // lighter shade for extensions
+    const groutColor = TILE_COLORS.groutColor;
+    const groutWidth = Math.max(1, TILE_GAP.size * scale); // grout band width in pixels
 
-    // Tile selection removed: no candidate highlight
+    // Clip to coping boundary (donut shape: boundary minus pool)
+    const clipDonut = (ctx: CanvasRenderingContext2D) => {
+      const boundary = boundaryLive;
+      const inner = scaledOutline;
+      if (!boundary || boundary.length < 3 || !inner || inner.length < 3) return;
 
-    // Grout gaps from centralized config
-    const gapMm = TILE_GAP.size; // 5mm from config
-    const scissorsColor = TILE_COLORS.cutIndicator;
-    const scissorsSize = 11;
-    const scissorsMargin = 3;
-    const tileFill = TILE_COLORS.baseTile; // sandstone color for all tiles
-
-    // --- EDGE-ONLY GROUT (uniform band between pool and the adjacent coping row) ---
-    const G = gapMm;
-    const groutRects: JSX.Element[] = [];
-    // Use precomputed projectClipLocal (pool-local) for grout checks
-    if (TILE_GAP.renderGap && G > 0) {
-      const seen = new Set<string>();
-
-      const addRectMm = (x: number, y: number, w: number, h: number) => {
-        if (w <= 0 || h <= 0 || !isFinite(w) || !isFinite(h)) return;
-        const key = [x, y, w, h].map(v => Math.round(v * 10) / 10).join(':');
-        if (seen.has(key)) return;
-        // Skip grout outside the project clip (if present)
-        if (projectClipLocal) {
-          const rr = { x: roundHalf(x * scale), y: roundHalf(y * scale), w: Math.max(1, roundHalf(w * scale)), h: Math.max(1, roundHalf(h * scale)) };
-          if (!rectIntersectsPolygon(rr, projectClipLocal)) return;
-        }
-        seen.add(key);
-        const r = snapRectPx(x, y, w, h, scale);
-        groutRects.push(
-          <Rect
-            key={`grout-${key}`}
-            x={r.x}
-            y={r.y}
-            width={Math.max(1, r.width)}   // clamp so 5mm @ 0.1 scale doesn't disappear
-            height={Math.max(1, r.height)}
-            fill={TILE_COLORS.groutColor}
-            listening={false}
-          />
-        );
-      };
-
-      // Helper: pick tiles that belong to the coping row NEXT TO the pool for a side
-      const firstRowFor = (side: Side): Tile[] => {
-        const list = sideTiles[side];
-        if (list.length === 0) return [];
-
-        // Correct mapping: 'top' = TOP horizontal edge (y near 0),
-        // 'bottom' = BOTTOM horizontal edge (y near pool.width),
-        // 'left' = LEFT vertical edge (x near 0),
-        // 'right' = RIGHT vertical edge (x near pool.length)
-
-        // We compute a metric that increases towards the pool so "max" is the row adjacent to the pool
-        const metric = (t: Tile) => {
-          switch (side) {
-            case 'top':    return t.y + t.height; // bottom edge toward y=0
-            case 'bottom': return -t.y;           // top edge toward y=pool.width
-            case 'left':   return t.x + t.width;  // rightmost edge toward x=0
-            case 'right':  return -t.x;           // leftmost edge toward x=pool.length
-          }
-        };
-        const best = Math.max(...list.map(metric));
-        const EPS = 0.5; // mm tolerance
-        return list.filter(t => Math.abs(metric(t) - best) <= EPS);
-      };
-
-      // Draw the single band along the pool edge for each side, only for tiles in that first row
-      (['top','bottom','left','right'] as Side[]).forEach(side => {
-        const row = firstRowFor(side);
-        row.forEach(t => {
-          switch (side) {
-            case 'top':
-              // top horizontal pool edge → band immediately BELOW tile
-              addRectMm(t.x, t.y + t.height, t.width, G);
-              break;
-            case 'bottom':
-              // bottom horizontal pool edge → band immediately ABOVE tile
-              addRectMm(t.x, t.y - G, t.width, G);
-              break;
-            case 'left':
-              // left vertical pool edge → band immediately to the RIGHT of tile
-              addRectMm(t.x + t.width, t.y, G, t.height);
-              break;
-            case 'right':
-              // right vertical pool edge → band immediately to the LEFT of tile
-              addRectMm(t.x - G, t.y, G, t.height);
-              break;
-          }
-        });
-      });
-
-      // Draw grout between all adjacent tiles (dimension-based, no classification needed)
-      // For each pair of tiles, check if they're adjacent and draw grout between them
-      const allCopingTiles = ([] as Array<{x:number;y:number;width:number;height:number}>)
-        .concat(sideTiles.top, sideTiles.bottom, sideTiles.left, sideTiles.right)
-        .concat(autoTiles.map(a => ({ x: a.x, y: a.y, width: a.width, height: a.height }))); // include auto
-      const EPS = 0.01; // mm tolerance for floating-point comparison
-
-      for (let i = 0; i < allCopingTiles.length; i++) {
-        const t1 = allCopingTiles[i];
-        for (let j = i + 1; j < allCopingTiles.length; j++) {
-          const t2 = allCopingTiles[j];
-
-          const t1x1 = t1.x;
-          const t1x2 = t1.x + t1.width;
-          const t1y1 = t1.y;
-          const t1y2 = t1.y + t1.height;
-
-          const t2x1 = t2.x;
-          const t2x2 = t2.x + t2.width;
-          const t2y1 = t2.y;
-          const t2y2 = t2.y + t2.height;
-
-          // Check for horizontal adjacency (tiles side-by-side in X direction)
-          // t1 on left, t2 on right: gap between t1's right edge and t2's left edge
-          const gapX1 = t2x1 - t1x2;
-          if (gapX1 > -EPS && gapX1 <= G + 1 + EPS) {
-            // Check Y overlap
-            const overlapY1 = Math.max(t1y1, t2y1);
-            const overlapY2 = Math.min(t1y2, t2y2);
-            if (overlapY2 > overlapY1) {
-              addRectMm(t1x2, overlapY1, gapX1, overlapY2 - overlapY1);
-            }
-          }
-
-          // t2 on left, t1 on right
-          const gapX2 = t1x1 - t2x2;
-          if (gapX2 > -EPS && gapX2 <= G + 1 + EPS) {
-            const overlapY1 = Math.max(t1y1, t2y1);
-            const overlapY2 = Math.min(t1y2, t2y2);
-            if (overlapY2 > overlapY1) {
-              addRectMm(t2x2, overlapY1, gapX2, overlapY2 - overlapY1);
-            }
-          }
-
-          // Check for vertical adjacency (tiles stacked in Y direction)
-          // t1 on top, t2 on bottom: gap between t1's bottom edge and t2's top edge
-          const gapY1 = t2y1 - t1y2;
-          if (gapY1 > -EPS && gapY1 <= G + 1 + EPS) {
-            // Check X overlap
-            const overlapX1 = Math.max(t1x1, t2x1);
-            const overlapX2 = Math.min(t1x2, t2x2);
-            if (overlapX2 > overlapX1) {
-              addRectMm(overlapX1, t1y2, overlapX2 - overlapX1, gapY1);
-            }
-          }
-
-          // t2 on top, t1 on bottom
-          const gapY2 = t1y1 - t2y2;
-          if (gapY2 > -EPS && gapY2 <= G + 1 + EPS) {
-            const overlapX1 = Math.max(t1x1, t2x1);
-            const overlapX2 = Math.min(t1x2, t2x2);
-            if (overlapX2 > overlapX1) {
-              addRectMm(overlapX1, t2y2, overlapX2 - overlapX1, gapY2);
-            }
-          }
-        }
-      }
-    }
-
-    // Build tile fill
-    const fills: JSX.Element[] = [];
-    tiles
-      .filter((t) => {
-        const w = t.width * scale;
-        const h = t.height * scale;
-        return w > 0 && h > 0 && isFinite(w) && isFinite(h);
-      })
-      .forEach((t) => {
-        // Use snapRectPx to ensure both edges are snapped to 0.5px
-        const r = snapRectPx(t.x, t.y, t.width, t.height, scale);
-        const isPartial = t.isPartial;
-
-        fills.push(
-          <Group key={`coping-${t.key}`}>
-            <Rect
-              x={r.x}
-              y={r.y}
-              width={Math.max(0, r.width)}
-              height={Math.max(0, r.height)}
-              fill={isPartial ? TILE_COLORS.cutTile : tileFill}
-              onContextMenu={(e: Konva.KonvaEventObject<MouseEvent>) => {
-                if (!t.key.includes(':user:')) return; // only show context menu for user-added tiles
-                e.cancelBubble = true; e.evt.preventDefault();
-                onTileContextMenu?.(component, t.key, { x: e.evt.clientX, y: e.evt.clientY });
-              }}
-            />
-            {/* Cut indicator at bottom-right for partial tiles */}
-            {isPartial && (
-              <Text
-                x={r.x + r.width - scissorsSize - scissorsMargin}
-                y={r.y + r.height - scissorsSize - scissorsMargin}
-                text="✂"
-                fontSize={scissorsSize}
-                fill={scissorsColor}
-                listening={false}
-              />
-            )}
-          </Group>
-        );
-      });
-
-    // Return clipped grout, pool, and clipped tiles (boundary polygon mask)
-    const clip = (ctx: CanvasRenderingContext2D) => {
-      if (!boundaryLive || boundaryLive.length === 0) return;
+      // Draw outer boundary clockwise
       ctx.beginPath();
-      ctx.moveTo(boundaryLive[0].x, boundaryLive[0].y);
-      for (let i = 1; i < boundaryLive.length; i++) {
-        ctx.lineTo(boundaryLive[i].x, boundaryLive[i].y);
+      ctx.moveTo(boundary[0].x, boundary[0].y);
+      for (let i = 1; i < boundary.length; i++) {
+        ctx.lineTo(boundary[i].x, boundary[i].y);
+      }
+      ctx.closePath();
+
+      // Draw inner pool counter-clockwise (creates hole)
+      ctx.moveTo(inner[inner.length - 1].x, inner[inner.length - 1].y);
+      for (let i = inner.length - 2; i >= 0; i--) {
+        ctx.lineTo(inner[i].x, inner[i].y);
       }
       ctx.closePath();
     };
 
-    // Optional outer clip for project boundary to visually cut tiles when pool moves beyond it
+    // Clip for base coping only (outer edge of base ring minus pool)
+    const clipBaseCoping = (ctx: CanvasRenderingContext2D) => {
+      const outer = copingOuterEdge;
+      const inner = scaledOutline;
+      if (!outer || outer.length < 3 || !inner || inner.length < 3) return;
+
+      ctx.beginPath();
+      ctx.moveTo(outer[0].x, outer[0].y);
+      for (let i = 1; i < outer.length; i++) {
+        ctx.lineTo(outer[i].x, outer[i].y);
+      }
+      ctx.closePath();
+
+      ctx.moveTo(inner[inner.length - 1].x, inner[inner.length - 1].y);
+      for (let i = inner.length - 2; i >= 0; i--) {
+        ctx.lineTo(inner[i].x, inner[i].y);
+      }
+      ctx.closePath();
+    };
+
+    // Clip for extension only (boundary minus outer edge of base ring)
+    const clipExtension = (ctx: CanvasRenderingContext2D) => {
+      const boundary = boundaryLive;
+      const inner = copingOuterEdge;
+      if (!boundary || boundary.length < 3 || !inner || inner.length < 3) return;
+
+      ctx.beginPath();
+      ctx.moveTo(boundary[0].x, boundary[0].y);
+      for (let i = 1; i < boundary.length; i++) {
+        ctx.lineTo(boundary[i].x, boundary[i].y);
+      }
+      ctx.closePath();
+
+      ctx.moveTo(inner[inner.length - 1].x, inner[inner.length - 1].y);
+      for (let i = inner.length - 2; i >= 0; i--) {
+        ctx.lineTo(inner[i].x, inner[i].y);
+      }
+      ctx.closePath();
+    };
+
+    // Optional project boundary clip
     const projectClip = (ctx: CanvasRenderingContext2D) => {
       if (!projectClipLocal || projectClipLocal.length === 0) return;
       ctx.beginPath();
       ctx.moveTo(projectClipLocal[0].x, projectClipLocal[0].y);
-      for (let i = 1; i < projectClipLocal.length; i++) ctx.lineTo(projectClipLocal[i].x, projectClipLocal[i].y);
+      for (let i = 1; i < projectClipLocal.length; i++) {
+        ctx.lineTo(projectClipLocal[i].x, projectClipLocal[i].y);
+      }
       ctx.closePath();
     };
 
-    const tilesAndGrout = (
+    // Calculate bounds for fill rectangles
+    const allPoints = [...boundaryLive, ...scaledOutline];
+    const xs = allPoints.map(p => p.x);
+    const ys = allPoints.map(p => p.y);
+    const minX = Math.min(...xs) - 10;
+    const maxX = Math.max(...xs) + 10;
+    const minY = Math.min(...ys) - 10;
+    const maxY = Math.max(...ys) + 10;
+
+    const content = (
       <>
-        {/* Grout clipped to coping boundary */}
-        <Group listening={false} clipFunc={clip}>
-          {groutRects}
+        {/* Grout band around pool edge */}
+        <Line
+          points={scaledOutline.flatMap(p => [p.x, p.y])}
+          stroke={groutColor}
+          strokeWidth={groutWidth}
+          closed
+          listening={false}
+        />
+
+        {/* Base coping band (sandstone color) - includes deep end extra width */}
+        <Group clipFunc={clipBaseCoping}>
+          <Rect
+            x={minX}
+            y={minY}
+            width={maxX - minX}
+            height={maxY - minY}
+            fill={tileFill}
+            listening={false}
+          />
         </Group>
-        {/* Pool above grout, under tiles (not clipped by outer boundary) */}
+
+        {/* Extension area (lighter shade) - only if boundary extends beyond base */}
+        {hasExtension && (
+          <Group clipFunc={clipExtension}>
+            <Rect
+              x={minX}
+              y={minY}
+              width={maxX - minX}
+              height={maxY - minY}
+              fill={extensionFill}
+              listening={false}
+            />
+          </Group>
+        )}
+
+        {/* Pool on top */}
         <Line
           points={points}
           fill={patternImage ? undefined : "rgba(59, 130, 246, 0.3)"}
@@ -1394,132 +871,165 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
           closed
           listening={false}
         />
-        {/* Tiles clipped to coping boundary */}
-        <Group clipFunc={clip}>
-          {fills}
-        </Group>
       </>
     );
 
+    // Apply project clip if present
     return projectClipLocal && projectClipLocal.length >= 3
-      ? (<Group listening={false} clipFunc={projectClip}>{tilesAndGrout}</Group>)
-      : tilesAndGrout;
+      ? (<Group listening={false} clipFunc={projectClip}>{content}</Group>)
+      : content;
   };
 
   // Extension handles removed; only boundary polygon editing remains for auto-extend
 
   // Tile selection bounding box removed
 
-  // Render measurements around the exterior edge of the coping
-  const renderCopingMeasurements = () => {
-    if (!(annotationsVisible || isSelected) || !showCoping || !copingCalc) return null;
-
-    const allTiles: Tile[] = ([] as Tile[])
-      .concat(sideTiles.top, sideTiles.bottom, sideTiles.left, sideTiles.right);
-
-    if (allTiles.length === 0) return null;
-
-    // Calculate bounding box of all tiles (in mm)
-    const minX = Math.min(...allTiles.map(t => t.x));
-    const maxX = Math.max(...allTiles.map(t => t.x + t.width));
-    const minY = Math.min(...allTiles.map(t => t.y));
-    const maxY = Math.max(...allTiles.map(t => t.y + t.height));
+  // Render pool edge measurements and coping edge measurements when selected
+  const renderPoolMeasurements = () => {
+    if (!(annotationsVisible || isSelected)) return null;
 
     const measurements: JSX.Element[] = [];
-    // Increase offset for coping labels to sit further from edge
-    const extra = 12;
-    const offset = getAnnotationOffsetPx(component.id, component.position) + extra;
 
-    // Top edge (direction -> +X, perp -> -Y)
-    {
-      const topWidthMm = Math.round(maxX - minX);
-      const midX = ((minX + maxX) / 2) * scale;
-      const y = minY * scale;
-      const angle = 0;
-      const perpX = 0, perpY = -1;
-      measurements.push(
-        <Text
-          key="measure-top"
-          x={midX + perpX * offset}
-          y={y + perpY * offset}
-          text={`Coping: ${topWidthMm}mm`}
-          fontSize={11}
-          fill="#3B82F6"
-          align="center"
-          rotation={normalizeLabelAngle(angle)}
-          offsetX={20}
-          listening={false}
-        />
-      );
-    }
+    // Helper to render edge measurements for a polygon
+    const renderEdgeMeasurements = (
+      pts: Pt[],
+      keyPrefix: string,
+      textColor: string,
+      strokeColor: string,
+      offsetDirection: 'inward' | 'outward',
+      offsetAmount: number
+    ) => {
+      const n = pts.length;
 
-    // Bottom edge (direction -> +X, perp -> +Y)
-    {
-      const bottomWidthMm = Math.round(maxX - minX);
-      const midX = ((minX + maxX) / 2) * scale;
-      const y = maxY * scale;
-      const angle = 0;
-      const perpX = 0, perpY = 1;
-      measurements.push(
-        <Text
-          key="measure-bottom"
-          x={midX + perpX * offset}
-          y={y + perpY * offset}
-          text={`Coping: ${bottomWidthMm}mm`}
-          fontSize={11}
-          fill="#3B82F6"
-          align="center"
-          rotation={normalizeLabelAngle(angle)}
-          offsetX={20}
-          listening={false}
-        />
-      );
-    }
+      // Calculate centroid for inward/outward direction
+      const centroid = { x: 0, y: 0 };
+      for (const p of pts) {
+        centroid.x += p.x;
+        centroid.y += p.y;
+      }
+      centroid.x /= n;
+      centroid.y /= n;
 
-    // Left edge (direction -> +Y, perp -> -X)
-    {
-      const leftHeightMm = Math.round(maxY - minY);
-      const x = minX * scale;
-      const midY = ((minY + maxY) / 2) * scale;
-      const angle = 90;
-      const perpX = -1, perpY = 0;
-      measurements.push(
-        <Text
-          key="measure-left"
-          x={x + perpX * offset}
-          y={midY + perpY * offset}
-          text={`Coping: ${leftHeightMm}mm`}
-          fontSize={11}
-          fill="#3B82F6"
-          align="center"
-          rotation={normalizeLabelAngle(angle)}
-          offsetX={20}
-          listening={false}
-        />
-      );
-    }
+      for (let i = 0; i < n; i++) {
+        const a = pts[i];
+        const b = pts[(i + 1) % n];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const edgeLengthPx = Math.sqrt(dx * dx + dy * dy);
 
-    // Right edge (direction -> +Y, perp -> +X)
-    {
-      const rightHeightMm = Math.round(maxY - minY);
-      const x = maxX * scale;
-      const midY = ((minY + maxY) / 2) * scale;
-      const angle = 90;
-      const perpX = 1, perpY = 0;
-      measurements.push(
-        <Text
-          key="measure-right"
-          x={x + perpX * offset}
-          y={midY + perpY * offset}
-          text={`Coping: ${rightHeightMm}mm`}
-          fontSize={11}
-          fill="#3B82F6"
-          align="center"
-          rotation={normalizeLabelAngle(angle)}
-          offsetX={20}
-          listening={false}
-        />
+        // Skip very short edges
+        if (edgeLengthPx < 10) continue;
+
+        // Convert to mm (scale is 0.1, so 1px = 10mm)
+        const lengthMm = Math.round(edgeLengthPx * 10);
+
+        // Midpoint of edge
+        const midX = (a.x + b.x) / 2;
+        const midY = (a.y + b.y) / 2;
+
+        // Perpendicular direction
+        let perpX = -dy / edgeLengthPx;
+        let perpY = dx / edgeLengthPx;
+
+        // Check if perpendicular points toward or away from centroid
+        const towardCentroidX = centroid.x - midX;
+        const towardCentroidY = centroid.y - midY;
+        const dot = perpX * towardCentroidX + perpY * towardCentroidY;
+
+        // If dot > 0, perp points toward centroid (inward)
+        // Flip if we want opposite direction
+        if ((offsetDirection === 'outward' && dot > 0) || (offsetDirection === 'inward' && dot < 0)) {
+          perpX = -perpX;
+          perpY = -perpY;
+        }
+
+        // Format: show meters if >= 1m, otherwise mm
+        const text = lengthMm >= 1000
+          ? `${(lengthMm / 1000).toFixed(2)}m`
+          : `${lengthMm}mm`;
+
+        // Angle for text rotation (keep text readable)
+        let angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+        if (angleDeg > 90) angleDeg -= 180;
+        if (angleDeg < -90) angleDeg += 180;
+
+        measurements.push(
+          <Text
+            key={`${keyPrefix}-${i}`}
+            x={midX + perpX * offsetAmount}
+            y={midY + perpY * offsetAmount}
+            text={text}
+            fontSize={9}
+            fill={textColor}
+            stroke={strokeColor}
+            strokeWidth={0.2}
+            align="center"
+            offsetX={18}
+            offsetY={4}
+            rotation={angleDeg}
+            listening={false}
+          />
+        );
+      }
+    };
+
+    // 1. Pool edge measurements (inside the pool - white text)
+    renderEdgeMeasurements(
+      scaledOutline,
+      'pool-edge',
+      '#ffffff',
+      '#3B82F6',
+      'inward',
+      15
+    );
+
+    // 2. Coping outer edge measurements (if coping enabled)
+    if (showCoping && copingBandWidth > 0) {
+      const outer = copingOuterEdge;
+
+      // Render measurements on the coping outer edge (outward from coping)
+      renderEdgeMeasurements(
+        outer,
+        'coping-edge',
+        '#D4A574', // sandstone/tan color
+        '#8B7355',
+        'outward',
+        12
       );
+
+      // 3. Extension boundary measurements (only if boundary actually differs from outer edge)
+      const boundary = boundaryLive;
+
+      // Check if boundary actually extends beyond coping outer edge
+      const hasRealExtension = (() => {
+        if (!boundary || boundary.length < 3 || !outer || outer.length < 3) return false;
+        if (boundary.length !== outer.length) return true;
+
+        const EPS = 2; // 2px tolerance
+        for (let i = 0; i < boundary.length; i++) {
+          const bPt = boundary[i];
+          // Check if this boundary point is significantly outside the outer edge
+          let minDist = Infinity;
+          for (const oPt of outer) {
+            const d = Math.sqrt((bPt.x - oPt.x) ** 2 + (bPt.y - oPt.y) ** 2);
+            minDist = Math.min(minDist, d);
+          }
+          if (minDist > EPS) return true;
+        }
+        return false;
+      })();
+
+      if (hasRealExtension) {
+        // Render measurements on the extension boundary (outward)
+        renderEdgeMeasurements(
+          boundary,
+          'extension-edge',
+          '#10B981', // green to match boundary color
+          '#047857',
+          'outward',
+          12
+        );
+      }
     }
 
     return <>{measurements}</>;
@@ -1539,8 +1049,8 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
         onTap={onSelect}
         onDragEnd={handleDragEnd}
       >
-        {/* Pool outline - render here only when coping is disabled; otherwise pool is drawn inside coping render between grout and tiles */}
-        {!showCoping || !copingCalc ? (
+        {/* Pool outline - render here only when coping is disabled; otherwise pool is drawn inside coping render */}
+        {(!showCoping || copingBandWidth <= 0) && (
           <Line
             points={points}
             fill={patternImage ? undefined : "rgba(59, 130, 246, 0.3)"}
@@ -1553,55 +1063,53 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
             closed
             listening={false}
           />
-        ) : null}
-
-        {/* Invisible hit area covering pool + coping - enables clicking pool water */}
-      <Rect
-        x={clickableBounds.x}
-        y={clickableBounds.y}
-        width={clickableBounds.width}
-        height={clickableBounds.height}
-        fill="transparent"
-      />
-
-        {/* Render coping pavers (interactive for selection) - AFTER pool outline so they're clickable */}
-        {showCoping && copingCalc && (
-          <Group>
-            {renderCopingTiles()}
-          </Group>
         )}
 
-
-        {/* Deep End label (150mm inset) */}
-        <Text
-          x={poolData.deepEnd.x * scale}
-          y={poolData.deepEnd.y * scale}
-          text="DE"
-          fontSize={10}
-          fontStyle="bold"
-          fill="#ffffff"
-          align="center"
-          offsetX={10}
-          offsetY={5}
-          rotation={-component.rotation}
+        {/* Invisible hit area covering pool + coping - enables clicking pool water */}
+        <Rect
+          x={clickableBounds.x}
+          y={clickableBounds.y}
+          width={clickableBounds.width}
+          height={clickableBounds.height}
+          fill="transparent"
         />
 
-        {/* Shallow End label (150mm inset) */}
-        <Text
-          x={poolData.shallowEnd.x * scale}
-          y={poolData.shallowEnd.y * scale}
-          text="SE"
-          fontSize={10}
-          fontStyle="bold"
-          fill="#ffffff"
-          align="center"
-          offsetX={10}
-          offsetY={5}
-          rotation={-component.rotation}
-        />
+        {/* Render coping (solid band) - includes pool on top */}
+        {showCoping && copingBandWidth > 0 && renderCoping()}
 
-        {/* Coping measurements when selected */}
-        {renderCopingMeasurements()}
+
+        {/* Deep End / Shallow End labels (only when annotations visible or selected) */}
+        {(annotationsVisible || isSelected) && (
+          <>
+            <Text
+              x={poolData.deepEnd.x * scale}
+              y={poolData.deepEnd.y * scale}
+              text="DE"
+              fontSize={10}
+              fontStyle="bold"
+              fill="#ffffff"
+              align="center"
+              offsetX={10}
+              offsetY={5}
+              rotation={-component.rotation}
+            />
+            <Text
+              x={poolData.shallowEnd.x * scale}
+              y={poolData.shallowEnd.y * scale}
+              text="SE"
+              fontSize={10}
+              fontStyle="bold"
+              fill="#ffffff"
+              align="center"
+              offsetX={10}
+              offsetY={5}
+              rotation={-component.rotation}
+            />
+          </>
+        )}
+
+        {/* Pool edge measurements and coping area when selected */}
+        {renderPoolMeasurements()}
 
 
         {/* Boundary polygon for auto extension (visible when selected) */}

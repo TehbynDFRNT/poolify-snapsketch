@@ -17,9 +17,7 @@ import { GateComponent } from './canvas/GateComponent';
 import { DecorationComponent, getDecorationDimensions } from './canvas/DecorationComponent';
 import { HeightComponent } from './canvas/HeightComponent';
 import { SatelliteLayer } from './canvas/SatelliteLayer';
-import { PavingAreaDialog, PavingConfig } from './PavingAreaDialog';
-import { fillAreaWithPavers, calculateStatistics, validateBoundary } from '@/utils/pavingFill';
-import { TILE_GAP, getTileDimensions } from '@/constants/tileConfig';
+import { validateBoundary } from '@/utils/pavingFill';
 import { snapToGrid, smartSnap } from '@/utils/snap';
 import { toast } from 'sonner';
 import { PAVER_SIZES } from '@/constants/components';
@@ -74,9 +72,6 @@ export const Canvas = ({
   const [ghostPoint, setGhostPoint] = useState<{ x: number; y: number } | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   
-  // Paving area dialog state
-  const [showPavingDialog, setShowPavingDialog] = useState(false);
-  const [pavingBoundary, setPavingBoundary] = useState<Array<{ x: number; y: number }>>([]);
   // Removed extend-from-pool right-click mode and context menu
   
   // Measurement tool states
@@ -311,28 +306,7 @@ export const Canvas = ({
           isNearFirstPoint(pointToAdd)
         ) {
           // Close the shape
-          if (activeTool === 'paving_area') {
-            // Show paving dialog instead of creating component directly
-            if (selectedAreaType === 'pavers') {
-              const validation = validateBoundary(drawingPoints);
-              if (!validation.valid) {
-                toast.error(validation.error || 'Invalid boundary');
-                setDrawingPoints([]);
-                setIsDrawing(false);
-                setGhostPoint(null);
-                return;
-              }
-              setPavingBoundary(drawingPoints);
-              setShowPavingDialog(true);
-              setDrawingPoints([]);
-              setIsDrawing(false);
-              setGhostPoint(null);
-            } else {
-              finishDrawing(true);
-            }
-          } else {
-            finishDrawing(true);
-          }
+          finishDrawing(true);
           return;
         }
 
@@ -433,149 +407,6 @@ export const Canvas = ({
       handleBackgroundPrimaryClick(canvasX, canvasY);
     }
   };
-  // Handle paving area configuration
-  const handlePavingConfig = (config: PavingConfig) => {
-    if (pavingBoundary.length < 3) return;
-
-    // Initial tiling frame (square) anchored to the drawn boundary
-    const xs = pavingBoundary.map(p => p.x);
-    const ys = pavingBoundary.map(p => p.y);
-    const minX = Math.min(...xs), maxX = Math.max(...xs);
-    const minY = Math.min(...ys), maxY = Math.max(...ys);
-    const w = maxX - minX, h = maxY - minY;
-    const baseSize = Math.max(w, h);
-    const bufferMultiplier = 1.5;
-    const side = baseSize * bufferMultiplier;
-    const bufferOffset = (side - baseSize) / 2;
-    const tilingFrame = { x: minX - bufferOffset, y: minY - bufferOffset, side };
-
-    // Snap the drawn boundary to the frame-anchored tile grid so first render
-    // matches node-edit behavior (default half-tile resolution).
-    const pxPerMm = GRID_CONFIG.spacing / 100;
-    const dims = getTileDimensions(config.paverSize as any, config.paverOrientation);
-    const tileWpx = dims.width * pxPerMm;
-    const tileHpx = dims.height * pxPerMm;
-    const groutPx = TILE_GAP.size * pxPerMm;
-    const stepX = tileWpx + groutPx;
-    const stepY = tileHpx + groutPx;
-    const snapX = stepX / 2;
-    const snapY = stepY / 2;
-    const phase = (TILE_GAP.size * pxPerMm) / 2;
-    const snappedBoundary = pavingBoundary.map((p) => {
-      const lx = p.x - tilingFrame.x;
-      const ly = p.y - tilingFrame.y;
-      const sx = Math.round((lx + phase) / snapX) * snapX - phase;
-      const sy = Math.round((ly + phase) / snapY) * snapY - phase;
-      return { x: tilingFrame.x + sx, y: tilingFrame.y + sy };
-    });
-
-    // Classify initial snap meta (edge vs inbetween)
-    const classify = (x: number, y: number): 'edge' | 'inbetween' => {
-      const rx = Math.abs(((x - tilingFrame.x + phase) % stepX + stepX) % stepX);
-      const ry = Math.abs(((y - tilingFrame.y + phase) % stepY + stepY) % stepY);
-      const edgeX = rx < 0.01 || Math.abs(stepX - rx) < 0.01;
-      const edgeY = ry < 0.01 || Math.abs(stepY - ry) < 0.01;
-      return edgeX || edgeY ? 'edge' : 'inbetween';
-    };
-    const snapMeta = snappedBoundary.map(p => classify(p.x, p.y));
-    const classifyAxis = (p: {x:number;y:number}): 'edge-x' | 'edge-y' | 'corner' | 'inbetween' => {
-      const lx = p.x - tilingFrame.x;
-      const ly = p.y - tilingFrame.y;
-      const rx = Math.abs(((lx + phase) % stepX + stepX) % stepX);
-      const ry = Math.abs(((ly + phase) % stepY + stepY) % stepY);
-      const onX = rx < 0.01 || Math.abs(stepX - rx) < 0.01;
-      const onY = ry < 0.01 || Math.abs(stepY - ry) < 0.01;
-      if (onX && onY) return 'corner';
-      if (onX) return 'edge-x';
-      if (onY) return 'edge-y';
-      return 'inbetween';
-    };
-    const vertexAxisMeta = snappedBoundary.map(p => classifyAxis(p));
-    // Edge orientation meta on initial create
-    const edgeMeta: Array<'horizontal' | 'vertical' | 'angled'> = [];
-    const eps = 1e-2;
-    for (let i = 0; i < snappedBoundary.length; i++) {
-      const a = snappedBoundary[i];
-      const b = snappedBoundary[(i + 1) % snappedBoundary.length];
-      const dx = Math.abs(b.x - a.x);
-      const dy = Math.abs(b.y - a.y);
-      if (dx <= eps && dy > eps) edgeMeta.push('vertical');
-      else if (dy <= eps && dx > eps) edgeMeta.push('horizontal');
-      else edgeMeta.push('angled');
-    }
-    const isYEdge = (m: 'edge-x' | 'edge-y' | 'corner' | 'inbetween') => m === 'edge-y' || m === 'corner';
-    const isXEdge = (m: 'edge-x' | 'edge-y' | 'corner' | 'inbetween') => m === 'edge-x' || m === 'corner';
-    const groutEdge: boolean[] = [];
-    for (let i = 0; i < snappedBoundary.length; i++) {
-      const m1 = vertexAxisMeta[i];
-      const m2 = vertexAxisMeta[(i + 1) % vertexAxisMeta.length];
-      const e = edgeMeta[i];
-      if (e === 'vertical') groutEdge.push(isYEdge(m1) && isYEdge(m2));
-      else if (e === 'horizontal') groutEdge.push(isXEdge(m1) && isXEdge(m2));
-      else groutEdge.push(false);
-    }
-
-    // Fill the area with pavers (for initial stats only)
-    const pavers = fillAreaWithPavers(
-      snappedBoundary,
-      config.paverSize,
-      config.paverOrientation,
-      config.showEdgePavers
-    );
-
-    // Warn if no pavers were generated
-    if (pavers.length === 0) {
-      toast.error('Area is too small to fit any pavers. Please draw a larger area.');
-      setPavingBoundary([]);
-      return;
-    }
-
-    // Calculate statistics
-    const statistics = calculateStatistics(pavers, config.wastagePercentage);
-    
-    // Debug info
-    const edgePavers = pavers.filter(p => p.isEdgePaver);
-    const fullPavers = pavers.filter(p => !p.isEdgePaver);
-    console.log('Paving config:', {
-      showEdgePavers: config.showEdgePavers,
-      totalPavers: pavers.length,
-      edgePavers: edgePavers.length,
-      fullPavers: fullPavers.length,
-      boundary: snappedBoundary
-    });
-    
-    // Create the paving area component
-    // Note: pavers will be recalculated dynamically in PavingAreaComponent based on pool positions
-    addComponent({
-      type: 'paving_area',
-      position: { x: 0, y: 0 },
-      rotation: 0,
-      dimensions: { width: 0, height: 0 },
-      properties: {
-        boundary: snappedBoundary,
-        paverSize: config.paverSize,
-        paverOrientation: config.paverOrientation,
-        showEdgePavers: config.showEdgePavers,
-        wastagePercentage: config.wastagePercentage,
-        tilingFrame,
-        tileSnapDivision: 4,
-        boundarySnapMeta: snapMeta,
-        boundaryVertexAxisMeta: vertexAxisMeta,
-        boundaryEdgeMeta: edgeMeta,
-        boundaryGroutEdge: groutEdge,
-        statistics, // Initial statistics, will be updated when pools change
-      },
-    });
-    
-    setPavingBoundary([]);
-    
-    if (edgePavers.length > 0) {
-      toast.success(`Paving created: ${fullPavers.length} full + ${edgePavers.length} edge pavers`);
-    } else {
-      toast.success(`Paving created: ${pavers.length} full pavers (no cuts needed)`);
-    }
-    onToolChange?.('select');
-  };
 
   // Finish drawing and create component(s)
   const finishDrawing = (closed: boolean) => {
@@ -585,7 +416,8 @@ export const Canvas = ({
       return;
     }
 
-    if (activeTool === 'paving_area' && selectedAreaType !== 'pavers') {
+    if (activeTool === 'paving_area') {
+      // Simplified area-based system - no tile calculation needed
       addComponent({
         type: 'paving_area',
         position: { x: 0, y: 0 },
@@ -593,10 +425,18 @@ export const Canvas = ({
         dimensions: { width: 0, height: 0 },
         properties: {
           boundary: drawingPoints,
-          areaSurface: selectedAreaType,
+          areaSurface: selectedAreaType, // 'pavers', 'concrete', or 'grass'
         },
       });
-    } else if (activeTool === 'boundary' || activeTool === 'house') {
+      setDrawingPoints([]);
+      setIsDrawing(false);
+      setGhostPoint(null);
+      toast.success('Area created');
+      onToolChange?.('select');
+      return;
+    }
+
+    if (activeTool === 'boundary' || activeTool === 'house') {
       // Enforce closed polygons for both house and boundary
       if (!closed) {
         const what = activeTool === 'house' ? 'House' : 'Boundary';
@@ -747,28 +587,12 @@ export const Canvas = ({
             }
             return;
           }
-          if (activeTool === 'paving_area' && drawingPoints.length >= 3) {
-            if (selectedAreaType === 'pavers') {
-              // Show paving dialog
-              const validation = validateBoundary(drawingPoints);
-              if (!validation.valid) {
-                toast.error(validation.error || 'Invalid boundary');
-                setDrawingPoints([]);
-                setIsDrawing(false);
-                setGhostPoint(null);
-                return;
-              }
-              setPavingBoundary(drawingPoints);
-              setShowPavingDialog(true);
-              setDrawingPoints([]);
-              setIsDrawing(false);
-              setGhostPoint(null);
-            } else {
-              finishDrawing(false);
-            }
-          } else {
-            finishDrawing(false);
+          // For paving areas, require minimum 3 points
+          if (activeTool === 'paving_area' && drawingPoints.length < 3) {
+            toast.error('Paving area requires at least 3 points');
+            return;
           }
+          finishDrawing(true);
         } else if (e.key === 'Escape') {
           setDrawingPoints([]);
           setIsDrawing(false);
@@ -1690,16 +1514,6 @@ export const Canvas = ({
             setShowPoolSelector(false);
             setPendingPoolPosition(null);
           }}
-        />
-      )}
-      
-      {/* Paving Area Dialog */}
-      {showPavingDialog && (
-        <PavingAreaDialog
-          open={showPavingDialog}
-          onOpenChange={setShowPavingDialog}
-          boundary={pavingBoundary}
-          onConfirm={handlePavingConfig}
         />
       )}
 
