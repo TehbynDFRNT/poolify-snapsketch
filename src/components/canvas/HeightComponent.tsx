@@ -1,6 +1,7 @@
 import { Group, Line, Text, Rect } from 'react-konva';
 import { Component } from '@/types';
 import { useDesignStore } from '@/store/designStore';
+import { BLUEPRINT_COLORS } from '@/constants/blueprintColors';
 
 interface HeightComponentProps {
   component: Component;
@@ -18,6 +19,7 @@ export const HeightComponent = ({
   onDragEnd,
 }: HeightComponentProps) => {
   const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
+  const blueprintMode = useDesignStore((s) => s.blueprintMode);
   // Use stored value if present; otherwise render default 100mm
   const rawValue = component.properties.heightValue;
   const heightValue = typeof rawValue === 'number' && !isNaN(rawValue) ? rawValue : 100; // Default 100mm
@@ -30,7 +32,7 @@ export const HeightComponent = ({
   const topCapWidth = 14; // Width of top horizontal cap (70% of original 20)
   const slashLength = 12; // Length of diagonal slash at bottom
   const lineExtension = 10; // Visual extension past slash (in pixels)
-  const lineColor = '#EF4444'; // Red color
+  const lineColor = blueprintMode ? BLUEPRINT_COLORS.secondary : '#EF4444'; // Red normally, blue in blueprint
   const lineWidth = 2;
 
   // Display height in millimeters (mm implied)

@@ -15,7 +15,7 @@ import { snapPoolToPaverGrid } from '@/utils/snap';
 import { TILE_COLORS, TILE_GAP } from '@/constants/tileConfig';
 import { getAnnotationOffsetPx } from '@/utils/annotations';
 import { GRID_CONFIG } from '@/constants/grid';
-import { useClipMask } from '@/hooks/useClipMask';
+import { BLUEPRINT_COLORS } from '@/constants/blueprintColors';
 
 type Pt = { x: number; y: number };
 
@@ -113,31 +113,6 @@ function rectIntersectsPolygon(rect: { x: number; y: number; w: number; h: numbe
   return false;
 }
 
-// Closest point on segment AB to point P
-function closestPointOnSegment(p: Pt, a: Pt, b: Pt): Pt {
-  const abx = b.x - a.x, aby = b.y - a.y;
-  const apx = p.x - a.x, apy = p.y - a.y;
-  const ab2 = abx * abx + aby * aby || 1;
-  let t = (apx * abx + apy * aby) / ab2;
-  t = Math.max(0, Math.min(1, t));
-  return { x: a.x + t * abx, y: a.y + t * aby };
-}
-
-// If point is outside polygon, clamp to nearest point on polygon boundary
-function clampPointToPolygon(p: Pt, poly: Pt[]): Pt {
-  if (!poly || poly.length < 3) return p;
-  if (pointInPolygon(p, poly) || isPointNearPolygonBoundary(p, poly, 0.01)) return p;
-  let best: Pt | null = null;
-  let bestD2 = Infinity;
-  for (let i = 0; i < poly.length; i++) {
-    const a = poly[i], b = poly[(i + 1) % poly.length];
-    const q = closestPointOnSegment(p, a, b);
-    const dx = p.x - q.x, dy = p.y - q.y;
-    const d2 = dx * dx + dy * dy;
-    if (d2 < bestD2) { bestD2 = d2; best = q; }
-  }
-  return best || p;
-}
 
 interface PoolComponentProps {
   component: Component;
@@ -150,9 +125,8 @@ interface PoolComponentProps {
 
 export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onDragEnd, onTileContextMenu }: PoolComponentProps) => {
   const groupRef = useRef<Konva.Group | null>(null);
-  const { components: allComponents, updateComponent, zoom, annotationsVisible } = useDesignStore();
+  const { components: allComponents, updateComponent, updateComponentSilent, zoom, annotationsVisible, blueprintMode } = useDesignStore();
   const [patternImage, setPatternImage] = useState<CanvasImageSource | null>(null);
-  const { polygon: projectClipStage } = useClipMask();
 
   // --- Boundary (outer limit) for auto-extensions ---
 
@@ -300,39 +274,6 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     return tr.point(local);
   };
 
-  // Deterministic stage->local transform using component position/rotation (avoids ref timing issues)
-  const stageToLocalSimple = (p: Pt): Pt => {
-    const dx = p.x - component.position.x;
-    const dy = p.y - component.position.y;
-    const rad = (component.rotation * Math.PI) / 180;
-    const cos = Math.floor(Math.cos(rad) * 1e12) / 1e12; // minor stabilize
-    const sin = Math.floor(Math.sin(rad) * 1e12) / 1e12;
-    return {
-      x: dx * cos + dy * sin,
-      y: -dx * sin + dy * cos,
-    };
-  };
-
-  // Transform using an arbitrary position (used for group-drag preview commit)
-  const stageToLocalAt = (p: Pt, pos: { x: number; y: number }): Pt => {
-    const dx = p.x - pos.x;
-    const dy = p.y - pos.y;
-    const rad = (component.rotation * Math.PI) / 180;
-    const cos = Math.floor(Math.cos(rad) * 1e12) / 1e12;
-    const sin = Math.floor(Math.sin(rad) * 1e12) / 1e12;
-    return {
-      x: dx * cos + dy * sin,
-      y: -dx * sin + dy * cos,
-    };
-  };
-
-  // Project boundary (stage-space) converted to pool-local once per render
-  const projectClipLocal: Pt[] | null = useMemo(() => {
-    return projectClipStage ? projectClipStage.map(stageToLocalSimple) : null;
-  }, [projectClipStage, component.position.x, component.position.y, component.rotation]);
-
-  
-
   // Node editing state - ghost state in local coordinates (like HouseComponent)
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [ghostLocal, setGhostLocal] = useState<Pt[] | null>(null);
@@ -468,24 +409,6 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
   };
 
   const setBoundaryClipped = (localPts: Pt[]) => {
-    if (projectClipLocal && projectClipLocal.length >= 3) {
-      const clipped = simplifyPolygon(clipPolygon(localPts, projectClipLocal));
-      if (clipped && clipped.length >= 3) {
-        // keep UI in sync immediately while store updates
-        setGhostLocal(clipped);
-        setBoundary(clipped);
-        return;
-      }
-      // fallback: clamp last vertex to boundary if clip fully eliminates polygon
-      const last = localPts[localPts.length - 1];
-      const clamped = clampPointToPolygon(last, projectClipLocal);
-      const copy = localPts.slice();
-      copy[copy.length - 1] = clamped;
-      const simple = simplifyPolygon(copy);
-      setGhostLocal(simple);
-      setBoundary(simple);
-      return;
-    }
     const simple = simplifyPolygon(localPts);
     setGhostLocal(simple);
     setBoundary(simple);
@@ -561,6 +484,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
   }, [showCoping, copingConfig, poolData.outline, boundaryLive, scale]);
 
   // Update component properties when stats change
+  // Use silent update to avoid polluting undo/redo history with derived data
   useEffect(() => {
     if (!copingStats) return;
     const prev = component.properties.copingStatistics as SimpleCopingStats | undefined;
@@ -568,11 +492,11 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
         Math.abs((prev.areaM2 || 0) - copingStats.areaM2) > 0.001 ||
         Math.abs((prev.baseCopingAreaM2 || 0) - copingStats.baseCopingAreaM2) > 0.001 ||
         Math.abs((prev.extensionAreaM2 || 0) - copingStats.extensionAreaM2) > 0.001) {
-      updateComponent(component.id, {
-        properties: { ...component.properties, copingStatistics: copingStats }
+      updateComponentSilent(component.id, {
+        properties: { copingStatistics: copingStats }
       });
     }
-  }, [copingStats, component.id, component.properties, updateComponent]);
+  }, [copingStats, component.id, component.properties.copingStatistics, updateComponentSilent]);
 
 
   // Pattern is pre-rendered at exact pool size, so use 1:1 scale and (0,0) offset
@@ -629,21 +553,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     // Update the position on the Konva node for immediate visual feedback
     e.target.x(snappedPos.x);
     e.target.y(snappedPos.y);
-    // Recompute clipped boundary at the new position and persist
-    if (projectClipStage && projectClipStage.length >= 3) {
-      const projLocalAt = projectClipStage.map((p) => stageToLocalAt(p, snappedPos));
-      const clipped = clipPolygon(boundaryLocal, projLocalAt);
-      if (clipped && clipped.length >= 3) {
-        updateComponent(component.id, {
-          position: snappedPos,
-          properties: { ...component.properties, copingBoundary: clipped }
-        });
-      } else {
-        updateComponent(component.id, { position: snappedPos });
-      }
-    } else {
-      updateComponent(component.id, { position: snappedPos });
-    }
+    updateComponent(component.id, { position: snappedPos });
     // Also notify parent if needed (safe redundancy)
     onDragEnd(snappedPos);
   };
@@ -681,10 +591,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
     const stage = e.target.getStage();
     const pr = stage?.getPointerPosition();
     if (!pr) return;
-    let local = toLocalFromAbs(pr);
-    if (projectClipLocal && projectClipLocal.length >= 3) {
-      local = clampPointToPolygon(local, projectClipLocal);
-    }
+    const local = toLocalFromAbs(pr);
     insertNodeAt(local);
   };
 
@@ -734,9 +641,9 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
   const renderCoping = () => {
     if (!showCoping || copingBandWidth <= 0) return null;
 
-    const tileFill = TILE_COLORS.baseTile; // sandstone color
-    const extensionFill = '#F3EBD9'; // lighter shade for extensions
-    const groutColor = TILE_COLORS.groutColor;
+    const tileFill = blueprintMode ? BLUEPRINT_COLORS.fillMedium : TILE_COLORS.baseTile; // sandstone color
+    const extensionFill = blueprintMode ? BLUEPRINT_COLORS.fillLight : '#F3EBD9'; // lighter shade for extensions
+    const groutColor = blueprintMode ? BLUEPRINT_COLORS.tertiary : TILE_COLORS.groutColor;
     const groutWidth = Math.max(1, TILE_GAP.size * scale); // grout band width in pixels
 
     // Clip to coping boundary (donut shape: boundary minus pool)
@@ -801,17 +708,6 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
       ctx.closePath();
     };
 
-    // Optional project boundary clip
-    const projectClip = (ctx: CanvasRenderingContext2D) => {
-      if (!projectClipLocal || projectClipLocal.length === 0) return;
-      ctx.beginPath();
-      ctx.moveTo(projectClipLocal[0].x, projectClipLocal[0].y);
-      for (let i = 1; i < projectClipLocal.length; i++) {
-        ctx.lineTo(projectClipLocal[i].x, projectClipLocal[i].y);
-      }
-      ctx.closePath();
-    };
-
     // Calculate bounds for fill rectangles
     const allPoints = [...boundaryLive, ...scaledOutline];
     const xs = allPoints.map(p => p.x);
@@ -861,11 +757,11 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
         {/* Pool on top */}
         <Line
           points={points}
-          fill={patternImage ? undefined : "rgba(59, 130, 246, 0.3)"}
-          fillPatternImage={patternImage || undefined}
+          fill={blueprintMode ? BLUEPRINT_COLORS.fillLight : (patternImage ? undefined : "rgba(59, 130, 246, 0.3)")}
+          fillPatternImage={blueprintMode ? undefined : patternImage || undefined}
           fillPatternScale={patternConfig.scale}
           fillPatternOffset={patternConfig.offset}
-          stroke="#3B82F6"
+          stroke={blueprintMode ? BLUEPRINT_COLORS.primary : "#3B82F6"}
           strokeWidth={2}
           strokeScaleEnabled={false}
           closed
@@ -874,10 +770,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
       </>
     );
 
-    // Apply project clip if present
-    return projectClipLocal && projectClipLocal.length >= 3
-      ? (<Group listening={false} clipFunc={projectClip}>{content}</Group>)
-      : content;
+    return content;
   };
 
   // Extension handles removed; only boundary polygon editing remains for auto-extend
@@ -973,12 +866,12 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
       }
     };
 
-    // 1. Pool edge measurements (inside the pool - white text)
+    // 1. Pool edge measurements (inside the pool - white text, or black in blueprint mode)
     renderEdgeMeasurements(
       scaledOutline,
       'pool-edge',
-      '#ffffff',
-      '#3B82F6',
+      blueprintMode ? BLUEPRINT_COLORS.text : '#ffffff',
+      blueprintMode ? BLUEPRINT_COLORS.secondary : '#3B82F6',
       'inward',
       15
     );
@@ -991,8 +884,8 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
       renderEdgeMeasurements(
         outer,
         'coping-edge',
-        '#D4A574', // sandstone/tan color
-        '#8B7355',
+        blueprintMode ? BLUEPRINT_COLORS.text : '#D4A574', // sandstone/tan color
+        blueprintMode ? BLUEPRINT_COLORS.secondary : '#8B7355',
         'outward',
         12
       );
@@ -1024,8 +917,8 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
         renderEdgeMeasurements(
           boundary,
           'extension-edge',
-          '#10B981', // green to match boundary color
-          '#047857',
+          blueprintMode ? BLUEPRINT_COLORS.text : '#10B981', // green to match boundary color
+          blueprintMode ? BLUEPRINT_COLORS.secondary : '#047857',
           'outward',
           12
         );
@@ -1053,11 +946,11 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
         {(!showCoping || copingBandWidth <= 0) && (
           <Line
             points={points}
-            fill={patternImage ? undefined : "rgba(59, 130, 246, 0.3)"}
-            fillPatternImage={patternImage || undefined}
+            fill={blueprintMode ? BLUEPRINT_COLORS.fillLight : (patternImage ? undefined : "rgba(59, 130, 246, 0.3)")}
+            fillPatternImage={blueprintMode ? undefined : patternImage || undefined}
             fillPatternScale={patternConfig.scale}
             fillPatternOffset={patternConfig.offset}
-            stroke="#3B82F6"
+            stroke={blueprintMode ? BLUEPRINT_COLORS.primary : "#3B82F6"}
             strokeWidth={2}
             strokeScaleEnabled={false}
             closed
@@ -1087,7 +980,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
               text="DE"
               fontSize={10}
               fontStyle="bold"
-              fill="#ffffff"
+              fill={blueprintMode ? BLUEPRINT_COLORS.text : "#ffffff"}
               align="center"
               offsetX={10}
               offsetY={5}
@@ -1099,7 +992,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
               text="SE"
               fontSize={10}
               fontStyle="bold"
-              fill="#ffffff"
+              fill={blueprintMode ? BLUEPRINT_COLORS.text : "#ffffff"}
               align="center"
               offsetX={10}
               offsetY={5}
@@ -1181,15 +1074,6 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
                 ))}
               </>
             );
-            if (projectClipLocal && projectClipLocal.length >= 3) {
-              const clipOverlay = (ctx: CanvasRenderingContext2D) => {
-                ctx.beginPath();
-                ctx.moveTo(projectClipLocal![0].x, projectClipLocal![0].y);
-                for (let i = 1; i < projectClipLocal!.length; i++) ctx.lineTo(projectClipLocal![i].x, projectClipLocal![i].y);
-                ctx.closePath();
-              };
-              return <Group clipFunc={clipOverlay}>{overlay}</Group>;
-            }
             return overlay;
           })()
         )}

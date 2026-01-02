@@ -1,8 +1,7 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
-import { Stage, Layer } from 'react-konva';
+import { Stage, Layer, Line } from 'react-konva';
 import { supabase } from '@/integrations/supabase/client';
-import { useDesignStore } from '@/store/designStore';
 import { PublicProjectResponse } from '@/types/publicLinks';
 import { Component } from '@/types';
 import { sortComponentsByRenderOrder } from '@/constants/renderOrder';
@@ -21,8 +20,9 @@ import { PavingAreaComponent } from './canvas/PavingAreaComponent';
 
 // Import UI components
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Home } from 'lucide-react';
+
+const INITIAL_SCALE = 0.7;
 
 export const PublicProjectView: React.FC = () => {
   const { token } = useParams<{ token: string }>();
@@ -31,20 +31,48 @@ export const PublicProjectView: React.FC = () => {
   const [projectData, setProjectData] = useState<PublicProjectResponse | null>(null);
   const stageRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
-  const [stageScale, setStageScale] = useState(1);
-  const [initialOffset, setInitialOffset] = useState({ x: 0, y: 0 });
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+
+  // Pan and zoom state - will be initialized properly once we have data
+  const [zoom, setZoom] = useState(INITIAL_SCALE);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
     loadPublicProject();
   }, [token]);
+
+  // Track container dimensions
+  useEffect(() => {
+    const updateDimensions = () => {
+      if (containerRef.current) {
+        const { offsetWidth, offsetHeight } = containerRef.current;
+        if (offsetWidth > 0 && offsetHeight > 0) {
+          setDimensions({ width: offsetWidth, height: offsetHeight });
+        }
+      }
+    };
+
+    // Use ResizeObserver for more reliable dimension tracking
+    const observer = new ResizeObserver(updateDimensions);
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    // Also call once after a short delay to ensure layout is complete
+    const timeoutId = setTimeout(updateDimensions, 50);
+
+    return () => {
+      observer.disconnect();
+      clearTimeout(timeoutId);
+    };
+  }, [loading]);
 
   const loadPublicProject = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Use the RPC function to get the project
       const { data, error } = await supabase.rpc('get_public_project', {
         p_token: token,
       });
@@ -61,13 +89,6 @@ export const PublicProjectView: React.FC = () => {
       }
 
       setProjectData(data as PublicProjectResponse);
-
-      // Set initial offset after data loads
-      setTimeout(() => {
-        const offset = getViewOffset();
-        setInitialOffset(offset);
-        setStagePos(offset);
-      }, 100);
     } catch (err) {
       console.error('Error loading public project:', err);
       setError('An unexpected error occurred.');
@@ -76,29 +97,32 @@ export const PublicProjectView: React.FC = () => {
     }
   };
 
-
-  // Calculate view offset to center on pool
-  const getViewOffset = () => {
-    if (!projectData || !containerRef.current) return { x: 0, y: 0 };
+  // Calculate and set initial camera position when data and dimensions are ready
+  useEffect(() => {
+    if (!projectData || initialized || dimensions.width === 0 || dimensions.height === 0) return;
 
     // Find the pool component
     const pool = projectData.project.components.find((c: Component) => c.type === 'pool');
-    if (!pool) return { x: 0, y: 0 };
+    if (!pool || !pool.dimensions) {
+      setInitialized(true);
+      return;
+    }
 
-    // Calculate pool center
-    const poolCenterX = pool.position.x + pool.width / 2;
-    const poolCenterY = pool.position.y + pool.height / 2;
+    // Calculate pool center - dimensions are in mm, convert to pixels (10px = 100mm, so divide by 10)
+    const mmToPx = 0.1; // 1mm = 0.1px (10px = 100mm)
+    const poolWidthPx = pool.dimensions.width * mmToPx;
+    const poolHeightPx = pool.dimensions.height * mmToPx;
+    const poolCenterX = pool.position.x + poolWidthPx / 2;
+    const poolCenterY = pool.position.y + poolHeightPx / 2;
 
-    // Calculate canvas center (no header now)
-    const canvasWidth = containerRef.current.offsetWidth || window.innerWidth;
-    const canvasHeight = containerRef.current.offsetHeight || window.innerHeight;
+    // Calculate offset to center pool at initial scale
+    const offsetX = dimensions.width / 2 - poolCenterX * INITIAL_SCALE;
+    const offsetY = dimensions.height / 2 - poolCenterY * INITIAL_SCALE;
 
-    // Return offset to center pool at 100% zoom
-    return {
-      x: canvasWidth / 2 - poolCenterX,
-      y: canvasHeight / 2 - poolCenterY,
-    };
-  };
+    setPan({ x: offsetX, y: offsetY });
+    setZoom(INITIAL_SCALE);
+    setInitialized(true);
+  }, [projectData, dimensions, initialized]);
 
   const handleWheel = (e: any) => {
     e.evt.preventDefault();
@@ -106,61 +130,62 @@ export const PublicProjectView: React.FC = () => {
     const stage = stageRef.current;
     if (!stage) return;
 
-    const oldScale = stageScale;
+    const oldScale = stage.scaleX();
     const pointer = stage.getPointerPosition();
 
     const mousePointTo = {
-      x: (pointer.x - stagePos.x) / oldScale,
-      y: (pointer.y - stagePos.y) / oldScale,
+      x: (pointer.x - stage.x()) / oldScale,
+      y: (pointer.y - stage.y()) / oldScale,
     };
 
-    // Determine zoom direction and amount
     const scaleBy = 1.05;
-    const newScale = e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
-
-    // Clamp scale between 0.1x and 5x
+    const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
     const clampedScale = Math.max(0.1, Math.min(5, newScale));
 
-    setStageScale(clampedScale);
-    setStagePos({
+    const newPos = {
       x: pointer.x - mousePointTo.x * clampedScale,
       y: pointer.y - mousePointTo.y * clampedScale,
+    };
+
+    setZoom(clampedScale);
+    setPan(newPos);
+  };
+
+  const handleDragEnd = (e: any) => {
+    setPan({
+      x: e.target.x(),
+      y: e.target.y(),
     });
   };
 
   const renderComponent = (component: Component) => {
     const commonProps = {
-      key: component.id,
-      id: component.id,
       component,
       isSelected: false,
-      onSelect: () => {}, // No selection in public view
-      onUpdate: () => {}, // No updates in public view
-      onDragEnd: () => {}, // No dragging in public view
-      showMeasurements: true, // Always show measurements
-      isPreview: false,
-      activeTool: 'hand', // Set to 'hand' to disable dragging (draggable={activeTool !== 'hand'})
+      onSelect: () => {},
+      onDragEnd: () => {},
+      activeTool: 'hand' as const,
     };
 
     switch (component.type) {
       case 'pool':
-        return <PoolComponent {...commonProps} />;
+        return <PoolComponent key={component.id} {...commonProps} />;
       case 'paver':
-        return <PaverComponent {...commonProps} />;
+        return <PaverComponent key={component.id} {...commonProps} />;
       case 'drainage':
-        return <DrainageComponent {...commonProps} />;
+        return <DrainageComponent key={component.id} {...commonProps} />;
       case 'fence':
-        return <FenceComponent {...commonProps} />;
+        return <FenceComponent key={component.id} {...commonProps} />;
       case 'wall':
-        return <WallComponent {...commonProps} />;
+        return <WallComponent key={component.id} {...commonProps} />;
       case 'boundary':
-        return <BoundaryComponent {...commonProps} />;
+        return <BoundaryComponent key={component.id} {...commonProps} />;
       case 'house':
-        return <HouseComponent {...commonProps} />;
+        return <HouseComponent key={component.id} {...commonProps} />;
       case 'reference_line':
-        return <ReferenceLineComponent {...commonProps} />;
+        return <ReferenceLineComponent key={component.id} {...commonProps} />;
       case 'paving_area':
-        return <PavingAreaComponent {...commonProps} />;
+        return <PavingAreaComponent key={component.id} {...commonProps} />;
       default:
         return null;
     }
@@ -204,65 +229,53 @@ export const PublicProjectView: React.FC = () => {
   const sortedComponents = sortComponentsByRenderOrder(projectData.project.components);
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50" ref={containerRef}>
-      {/* Canvas */}
-      <div className="flex-1 relative overflow-hidden" style={{ cursor: 'grab' }}>
-        <Stage
-          ref={stageRef}
-          width={containerRef.current?.offsetWidth || window.innerWidth}
-          height={containerRef.current?.offsetHeight || window.innerHeight}
-          scaleX={stageScale}
-          scaleY={stageScale}
-          x={stagePos.x}
-          y={stagePos.y}
-          draggable={true}
-          onDragEnd={(e) => {
-            setStagePos({
-              x: e.target.x(),
-              y: e.target.y(),
-            });
-          }}
-          onWheel={handleWheel}
-        >
-          <Layer>
-            {/* Grid */}
-            {(
-              <>
-                {Array.from(
-                  { length: Math.ceil(10000 / GRID_CONFIG.MAJOR_SPACING) },
-                  (_, i) => {
-                    const pos = i * GRID_CONFIG.MAJOR_SPACING;
-                    return (
-                      <React.Fragment key={`grid-${i}`}>
-                        <line
-                          x1={pos}
-                          y1={0}
-                          x2={pos}
-                          y2={10000}
-                          stroke={GRID_CONFIG.MAJOR_COLOR}
-                          strokeWidth={1}
-                          opacity={0.3}
-                        />
-                        <line
-                          x1={0}
-                          y1={pos}
-                          x2={10000}
-                          y2={pos}
-                          stroke={GRID_CONFIG.MAJOR_COLOR}
-                          strokeWidth={1}
-                          opacity={0.3}
-                        />
-                      </React.Fragment>
-                    );
-                  }
-                )}
-              </>
-            )}
+    <div className="h-screen flex flex-col bg-gray-50">
+      <div ref={containerRef} className="flex-1 relative overflow-hidden" style={{ cursor: 'grab' }}>
+        {dimensions.width > 0 && dimensions.height > 0 && (
+          <Stage
+            ref={stageRef}
+            width={dimensions.width}
+            height={dimensions.height}
+            scaleX={zoom}
+            scaleY={zoom}
+            x={pan.x}
+            y={pan.y}
+            draggable={true}
+            onDragEnd={handleDragEnd}
+            onWheel={handleWheel}
+          >
+            <Layer>
+              {/* Grid */}
+              {Array.from(
+                { length: Math.ceil(10000 / GRID_CONFIG.MAJOR_SPACING) },
+                (_, i) => {
+                  const pos = i * GRID_CONFIG.MAJOR_SPACING;
+                  return (
+                    <React.Fragment key={`grid-${i}`}>
+                      <Line
+                        points={[pos, 0, pos, 10000]}
+                        stroke={GRID_CONFIG.MAJOR_COLOR}
+                        strokeWidth={1}
+                        opacity={0.3}
+                        listening={false}
+                      />
+                      <Line
+                        points={[0, pos, 10000, pos]}
+                        stroke={GRID_CONFIG.MAJOR_COLOR}
+                        strokeWidth={1}
+                        opacity={0.3}
+                        listening={false}
+                      />
+                    </React.Fragment>
+                  );
+                }
+              )}
 
-            {/* Components */}
-            {sortedComponents.map(renderComponent)}
-          </Layer>
-        </Stage>
+              {/* Components */}
+              {sortedComponents.map(renderComponent)}
+            </Layer>
+          </Stage>
+        )}
       </div>
     </div>
   );

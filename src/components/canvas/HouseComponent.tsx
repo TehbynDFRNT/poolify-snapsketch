@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
 import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
+import { BLUEPRINT_COLORS } from '@/constants/blueprintColors';
 
 interface HouseComponentProps {
   component: Component;
@@ -24,7 +25,11 @@ export const HouseComponent = ({
 }: HouseComponentProps) => {
   const updateComponent = useDesignStore((s) => s.updateComponent);
   const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
+  const blueprintMode = useDesignStore((s) => s.blueprintMode);
   const pointsAbs = component.properties.points || [];
+
+  // Colors - house already uses black, but fill changes in blueprint mode
+  const fillColor = blueprintMode ? BLUEPRINT_COLORS.fillMedium : '#D1D5DB';
   const closed = component.properties.closed || false;
 
   const groupRef = useRef<any>(null);
@@ -201,7 +206,7 @@ export const HouseComponent = ({
       {closed && (
         <Line
           points={flatLocalPoints}
-          fill="#D1D5DB"
+          fill={fillColor}
           opacity={1}
           closed={true}
         />

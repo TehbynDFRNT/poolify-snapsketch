@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Component, Project, Summary } from '@/types';
 import { calculateMeasurements } from '@/utils/measurements';
-import { saveProject, loadProject, saveGridVisibility, loadGridVisibility, saveAnnotationsVisibility, loadAnnotationsVisibility, saveProjectViewState, loadProjectViewState } from '@/utils/storage';
+import { saveProject, loadProject, saveGridVisibility, loadGridVisibility, saveAnnotationsVisibility, loadAnnotationsVisibility, saveProjectViewState, loadProjectViewState, saveProjectHistory, loadProjectHistory } from '@/utils/storage';
 import { v4 as uuidv4 } from 'uuid';
 
 interface DesignStore {
@@ -21,6 +21,7 @@ interface DesignStore {
   satelliteVisible: boolean;
   satelliteRotation: number; // Rotation in degrees
   annotationsVisible: boolean;
+  blueprintMode: boolean; // Technical/construction style rendering
   snapEnabled: boolean;
   zoomLocked: boolean;
   
@@ -42,6 +43,7 @@ interface DesignStore {
   // Actions
   addComponent: (component: Omit<Component, 'id'>) => void;
   updateComponent: (id: string, updates: Partial<Component>) => void;
+  updateComponentSilent: (id: string, updates: Partial<Component>) => void; // No history entry
   deleteComponent: (id: string) => void;
   selectComponent: (id: string | null) => void;
   selectFenceSegment: (sel: { componentId: string; run: number; seg: number } | null) => void;
@@ -57,6 +59,7 @@ interface DesignStore {
   toggleSatellite: () => void;
   setSatelliteRotation: (rotation: number) => void;
   toggleAnnotations: () => void;
+  toggleBlueprintMode: () => void;
   toggleSnap: () => void;
   toggleZoomLock: () => void;
   
@@ -80,6 +83,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   satelliteVisible: false,
   satelliteRotation: 0,
   annotationsVisible: loadAnnotationsVisibility(),
+  blueprintMode: false, // Session-only, defaults to off
   snapEnabled: true,
   zoomLocked: false,
   
@@ -94,25 +98,40 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
       // Default view state
       let nextZoom = state.zoom;
       let nextPan = state.pan;
-      // If switching to a new/different project, try load session view state
+      // Default components and history
+      let nextComponents = project?.components || [];
+      let nextHistory: Component[][] = [nextComponents];
+      let nextHistoryIndex = 0;
+
+      // If switching to a new/different project, try load saved state
       if (switchingProject && project?.id) {
+        // Load view state
         const view = loadProjectViewState(project.id);
         if (view) {
           nextZoom = view.zoom;
           nextPan = view.pan;
         } else {
-          // Fallback defaults when no saved state for this project in this session
+          // Fallback defaults when no saved state for this project
           nextZoom = 1;
           nextPan = { x: 0, y: 0 };
+        }
+
+        // Load undo/redo history
+        const savedHistory = loadProjectHistory(project.id);
+        if (savedHistory && savedHistory.history.length > 0) {
+          nextHistory = savedHistory.history;
+          nextHistoryIndex = Math.min(savedHistory.historyIndex, savedHistory.history.length - 1);
+          // Use the components from the current history position, not the saved project
+          nextComponents = nextHistory[nextHistoryIndex] || nextComponents;
         }
       }
 
       return {
         currentProject: project,
-        components: project?.components || [],
+        components: nextComponents,
         selectedComponentId: null,
-        history: [project?.components || []],
-        historyIndex: 0,
+        history: nextHistory,
+        historyIndex: nextHistoryIndex,
         // Apply possibly-restored view state
         zoom: nextZoom,
         pan: nextPan,
@@ -125,16 +144,30 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
       ...component,
       id: uuidv4(),
     };
-    
+
     set((state) => {
       const newComponents = [...state.components, newComponent];
       const newHistory = state.history.slice(0, state.historyIndex + 1);
       newHistory.push(newComponents);
-      
+      const trimmedHistory = newHistory.slice(-50);
+      const newHistoryIndex = Math.min(newHistory.length - 1, 49);
+
+      // Persist history to localStorage (async)
+      const projectId = state.currentProject?.id;
+      if (projectId) {
+        setTimeout(() => {
+          try {
+            saveProjectHistory(projectId, { history: trimmedHistory, historyIndex: newHistoryIndex });
+          } catch (e) {
+            console.error('Failed to save history:', e);
+          }
+        }, 0);
+      }
+
       return {
         components: newComponents,
-        history: newHistory.slice(-50), // Keep last 50 states
-        historyIndex: Math.min(newHistory.length - 1, 49),
+        history: trimmedHistory,
+        historyIndex: newHistoryIndex,
         selectedComponentId: newComponent.id,
       };
     });
@@ -142,30 +175,79 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   
   updateComponent: (id, updates) => {
     set((state) => {
-      const newComponents = state.components.map(c =>
-        c.id === id ? { ...c, ...updates } : c
-      );
+      const newComponents = state.components.map(c => {
+        if (c.id !== id) return c;
+        // Deep merge properties if both exist
+        const mergedProperties = updates.properties
+          ? { ...c.properties, ...updates.properties }
+          : c.properties;
+        return { ...c, ...updates, properties: mergedProperties };
+      });
       const newHistory = state.history.slice(0, state.historyIndex + 1);
       newHistory.push(newComponents);
-      
+      const trimmedHistory = newHistory.slice(-50);
+      const newHistoryIndex = Math.min(newHistory.length - 1, 49);
+
+      // Persist history to localStorage (async to avoid blocking)
+      const projectId = state.currentProject?.id;
+      if (projectId) {
+        setTimeout(() => {
+          try {
+            saveProjectHistory(projectId, { history: trimmedHistory, historyIndex: newHistoryIndex });
+          } catch (e) {
+            console.error('Failed to save history:', e);
+          }
+        }, 0);
+      }
+
       return {
         components: newComponents,
-        history: newHistory.slice(-50),
-        historyIndex: Math.min(newHistory.length - 1, 49),
+        history: trimmedHistory,
+        historyIndex: newHistoryIndex,
       };
     });
   },
-  
+
+  // Silent update - no history entry, for derived data like statistics
+  updateComponentSilent: (id, updates) => {
+    set((state) => {
+      const newComponents = state.components.map(c => {
+        if (c.id !== id) return c;
+        // Deep merge properties if both exist
+        const mergedProperties = updates.properties
+          ? { ...c.properties, ...updates.properties }
+          : c.properties;
+        return { ...c, ...updates, properties: mergedProperties };
+      });
+      // Update components but NOT history - preserves undo/redo stack
+      return { components: newComponents };
+    });
+  },
+
   deleteComponent: (id) => {
     set((state) => {
       const newComponents = state.components.filter(c => c.id !== id);
       const newHistory = state.history.slice(0, state.historyIndex + 1);
       newHistory.push(newComponents);
-      
+      const trimmedHistory = newHistory.slice(-50);
+      const newHistoryIndex = Math.min(newHistory.length - 1, 49);
+
+      // Persist history to localStorage (async)
+      const projectId = state.currentProject?.id;
+      if (projectId) {
+        setTimeout(() => {
+          try {
+            saveProjectHistory(projectId, { history: trimmedHistory, historyIndex: newHistoryIndex });
+          } catch (e) {
+            console.error('Failed to save history:', e);
+          }
+        }, 0);
+      }
+
       return {
         components: newComponents,
-        history: newHistory.slice(-50),
-        historyIndex: Math.min(newHistory.length - 1, 49),
+        history: trimmedHistory,
+        historyIndex: newHistoryIndex,
         selectedComponentId: state.selectedComponentId === id ? null : state.selectedComponentId,
       };
     });
@@ -200,6 +282,20 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     set((state) => {
       if (state.historyIndex > 0) {
         const newIndex = state.historyIndex - 1;
+
+        // Persist history index to localStorage (async)
+        const projectId = state.currentProject?.id;
+        const history = state.history;
+        if (projectId) {
+          setTimeout(() => {
+            try {
+              saveProjectHistory(projectId, { history, historyIndex: newIndex });
+            } catch (e) {
+              console.error('Failed to save history:', e);
+            }
+          }, 0);
+        }
+
         return {
           components: state.history[newIndex],
           historyIndex: newIndex,
@@ -208,11 +304,25 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
       return state;
     });
   },
-  
+
   redo: () => {
     set((state) => {
       if (state.historyIndex < state.history.length - 1) {
         const newIndex = state.historyIndex + 1;
+
+        // Persist history index to localStorage (async)
+        const projectId = state.currentProject?.id;
+        const history = state.history;
+        if (projectId) {
+          setTimeout(() => {
+            try {
+              saveProjectHistory(projectId, { history, historyIndex: newIndex });
+            } catch (e) {
+              console.error('Failed to save history:', e);
+            }
+          }, 0);
+        }
+
         return {
           components: state.history[newIndex],
           historyIndex: newIndex,
@@ -243,6 +353,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   }),
   toggleSatellite: () => set((state) => ({ satelliteVisible: !state.satelliteVisible })),
   setSatelliteRotation: (rotation: number) => set({ satelliteRotation: rotation }),
+  toggleBlueprintMode: () => set((state) => ({ blueprintMode: !state.blueprintMode })),
   toggleAnnotations: () => set((state) => {
     const newAnnotationsVisible = !state.annotationsVisible;
     saveAnnotationsVisibility(newAnnotationsVisible);
@@ -312,11 +423,25 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     set((state) => {
       const newHistory = state.history.slice(0, state.historyIndex + 1);
       newHistory.push([]);
-      
+      const trimmedHistory = newHistory.slice(-50);
+      const newHistoryIndex = Math.min(newHistory.length - 1, 49);
+
+      // Persist history to localStorage (async)
+      const projectId = state.currentProject?.id;
+      if (projectId) {
+        setTimeout(() => {
+          try {
+            saveProjectHistory(projectId, { history: trimmedHistory, historyIndex: newHistoryIndex });
+          } catch (e) {
+            console.error('Failed to save history:', e);
+          }
+        }, 0);
+      }
+
       return {
         components: [],
-        history: newHistory.slice(-50),
-        historyIndex: Math.min(newHistory.length - 1, 49),
+        history: trimmedHistory,
+        historyIndex: newHistoryIndex,
         selectedComponentId: null,
       };
     });

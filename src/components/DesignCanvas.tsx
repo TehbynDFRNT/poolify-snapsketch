@@ -127,9 +127,11 @@ export const DesignCanvas = () => {
     gridVisible,
     satelliteVisible,
     annotationsVisible,
+    blueprintMode,
     toggleGrid,
     toggleSatellite,
     toggleAnnotations,
+    toggleBlueprintMode,
     selectedComponentId,
     components,
   } = useDesignStore();
@@ -531,9 +533,11 @@ export const DesignCanvas = () => {
         gridVisible={gridVisible}
         satelliteVisible={satelliteVisible}
         annotationsVisible={annotationsVisible}
+        blueprintMode={blueprintMode}
         onGridToggle={toggleGrid}
         onSatelliteToggle={toggleSatellite}
         onAnnotationsToggle={toggleAnnotations}
+        onBlueprintToggle={toggleBlueprintMode}
         onSave={handleSave}
         onShare={permission === 'owner' ? () => setShareDialogOpen(true) : undefined}
         onExport={() => setExportDialogOpen(true)}

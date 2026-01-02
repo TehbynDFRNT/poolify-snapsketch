@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
 import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
+import { BLUEPRINT_COLORS } from '@/constants/blueprintColors';
 
 interface BoundaryComponentProps {
   component: Component;
@@ -27,17 +28,24 @@ export const BoundaryComponent = ({
 
   const groupRef = useRef<any>(null);
   const updateComponent = useDesignStore((s) => s.updateComponent);
+  const updateComponentSilent = useDesignStore((s) => s.updateComponentSilent);
   const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
+  const blueprintMode = useDesignStore((s) => s.blueprintMode);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+
+  // Color based on blueprint mode
+  const lineColor = blueprintMode ? BLUEPRINT_COLORS.primary : '#1e3a8a';
+  const textColor = blueprintMode ? BLUEPRINT_COLORS.text : '#1e3a8a';
   const [ghostLocal, setGhostLocal] = useState<Array<{ x: number; y: number }> | null>(null);
 
   // Calculate and persist the center of mass (centroid) of the boundary
+  // Use silent update to avoid polluting undo/redo history with derived data
   useEffect(() => {
     if (!closed || points.length < 3) {
       // Only calculate for closed boundaries
       if (component.properties.centerOfMass) {
-        updateComponent(component.id, {
-          properties: { ...component.properties, centerOfMass: undefined }
+        updateComponentSilent(component.id, {
+          properties: { centerOfMass: undefined }
         });
       }
       return;
@@ -69,14 +77,13 @@ export const BoundaryComponent = ({
     // Only update if changed
     const current = component.properties.centerOfMass;
     if (!current || current.x !== snappedCx || current.y !== snappedCy) {
-      updateComponent(component.id, {
+      updateComponentSilent(component.id, {
         properties: {
-          ...component.properties,
           centerOfMass: { x: snappedCx, y: snappedCy }
         }
       });
     }
-  }, [points, closed, component.id, component.properties, updateComponent]);
+  }, [points, closed, component.id, component.properties.centerOfMass, updateComponentSilent]);
   const [shiftPressed, setShiftPressed] = useState(false);
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
 
@@ -163,7 +170,7 @@ export const BoundaryComponent = ({
           y={midY + perpY * offset}
           text={`Boundary: ${lengthInMM}mm`}
           fontSize={11}
-          fill="#1e3a8a"
+          fill={textColor}
           align="center"
           rotation={normalizeLabelAngle(angleDeg)}
           offsetX={20}
@@ -197,7 +204,6 @@ export const BoundaryComponent = ({
   const renderGhostOverlay = () => {
     if (dragIndex == null || !ghostLocal) return null;
     const n = localPts.length;
-    const color = '#1e3a8a';
 
     const segs: Array<[number, number]> = [];
     if (n >= 2) {
@@ -228,14 +234,14 @@ export const BoundaryComponent = ({
           const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
           return (
             <Group key={`ghost-${k}`}>
-              <Line points={[a.x, a.y, b.x, b.y]} stroke={color} strokeWidth={3} dash={[8, 6]} opacity={0.8} />
+              <Line points={[a.x, a.y, b.x, b.y]} stroke={lineColor} strokeWidth={3} dash={[8, 6]} opacity={0.8} />
               {hasLength && (
                 <Text
                   x={midX + perpX * offset}
                   y={midY + perpY * offset}
                   text={`Boundary: ${mm}mm`}
                   fontSize={11}
-                  fill="#1e3a8a"
+                  fill={textColor}
                   align="center"
                   rotation={normalizeLabelAngle(angleDeg)}
                   offsetX={20}
@@ -276,7 +282,7 @@ export const BoundaryComponent = ({
       {/* Main boundary line (local coords) - click detection only on the line, not interior */}
       <Line
         points={flatLocalPoints}
-        stroke="#1e3a8a"
+        stroke={lineColor}
         strokeWidth={3}
         dash={[10, 5]}
         lineCap="round"
@@ -296,7 +302,7 @@ export const BoundaryComponent = ({
           x={point.x}
           y={point.y}
           radius={5}
-          fill="#1e3a8a"
+          fill={lineColor}
           stroke="#3b82f6"
           strokeWidth={2}
           draggable={shiftPressed || dragIndex === index}

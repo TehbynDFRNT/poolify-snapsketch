@@ -5,6 +5,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
 import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
+import { BLUEPRINT_COLORS } from '@/constants/blueprintColors';
 
 interface DrainageComponentProps {
   component: Component;
@@ -35,10 +36,13 @@ export const DrainageComponent = ({
   const length = (component.properties.length || 1000) * scale;
   const width = drainageData.width * scale;
 
-  // Color scheme based on type
+  // Color scheme based on type and blueprint mode
+  const blueprintMode = useDesignStore((s) => s.blueprintMode);
   const isRockDrain = drainageType === 'rock';
-  const color = isRockDrain ? '#B8AFA3' : '#C0C0C0'; // Light gray/beige for pea gravel, silver for ultradrain
-  const slotColor = '#2C2C2C'; // Dark gray for the slots
+  const normalColor = isRockDrain ? '#B8AFA3' : '#C0C0C0'; // Light gray/beige for pea gravel, silver for ultradrain
+  const color = blueprintMode ? BLUEPRINT_COLORS.secondary : normalColor;
+  const textColor = blueprintMode ? BLUEPRINT_COLORS.text : normalColor;
+  const slotColor = blueprintMode ? BLUEPRINT_COLORS.primary : '#2C2C2C'; // Dark gray for the slots
   const rockColors = ['#D4CEC6', '#C9C3BB', '#B8AFA3', '#A8A099', '#9B948C']; // Pea gravel tones - light gray/beige
 
   // Polyline mode
@@ -46,6 +50,7 @@ export const DrainageComponent = ({
   const isPolyline = Array.isArray(polyPoints) && polyPoints.length >= 2;
 
   const updateComponent = useDesignStore((s) => s.updateComponent);
+  const updateComponentSilent = useDesignStore((s) => s.updateComponentSilent);
   const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [ghostLocal, setGhostLocal] = useState<Array<{ x: number; y: number }> | null>(null);
@@ -83,15 +88,16 @@ export const DrainageComponent = ({
   }, [ghostLocal, polyPoints, component.position.x, component.position.y]);
 
   // Update component properties with live stats during drag
+  // Use silent update to avoid polluting undo/redo history with derived data
   useEffect(() => {
     if (!isPolyline) return;
     const current = component.properties.totalLM as number | undefined;
     if (current === undefined || Math.abs(current - liveTotalLM) > 0.001) {
-      updateComponent(component.id, {
-        properties: { ...component.properties, totalLM: liveTotalLM },
+      updateComponentSilent(component.id, {
+        properties: { totalLM: liveTotalLM },
       });
     }
-  }, [liveTotalLM, isPolyline, component.id, component.properties, updateComponent]);
+  }, [liveTotalLM, isPolyline, component.id, component.properties.totalLM, updateComponentSilent]);
 
   if (isPolyline) {
     const localPts = ghostLocal
@@ -171,7 +177,8 @@ export const DrainageComponent = ({
                 opacity={ghostLocal ? 0.5 : 0.9}
               />
 
-              {isRockDrain ? (
+              {/* In blueprint mode, skip decorative patterns */}
+              {!blueprintMode && isRockDrain ? (
                 /* Rock/gravel pattern - random circles to simulate rocks */
                 <>
                   {Array.from({ length: Math.floor(segLen / 3) }).map((_, idx) => {
@@ -192,7 +199,7 @@ export const DrainageComponent = ({
                     );
                   })}
                 </>
-              ) : (
+              ) : !blueprintMode ? (
                 /* Ultra drain - vertical slats (perpendicular to drain length) */
                 Array.from({ length: Math.max(1, numSlots) }).map((_, idx) => (
                   <Line
@@ -203,7 +210,7 @@ export const DrainageComponent = ({
                     opacity={0.7}
                   />
                 ))
-              )}
+              ) : null}
             </Group>
           );
         })}
@@ -240,7 +247,7 @@ export const DrainageComponent = ({
                       y={midY + perpY * offset}
                       text={`Drainage: ${Math.round(len * 10)}mm`}
                       fontSize={11}
-                      fill={color}
+                      fill={textColor}
                       align="center"
                       rotation={normalizeLabelAngle((Math.atan2(dy, dx) * 180) / Math.PI)}
                       offsetX={20}
@@ -283,7 +290,7 @@ export const DrainageComponent = ({
               y={midY + perpY * offset}
               text={`${lengthInMM}mm`}
               fontSize={11}
-              fill={color}
+              fill={textColor}
               align="center"
               rotation={normalizeLabelAngle(angleDeg)}
               offsetX={20}
@@ -308,7 +315,7 @@ export const DrainageComponent = ({
               y={minY - labelOffset}
               text={`${typeLabel}: ${totalLM.toFixed(2)} LM`}
               fontSize={10}
-              fill={color}
+              fill={textColor}
               align="center"
               offsetX={40}
               listening={false}
@@ -418,7 +425,8 @@ export const DrainageComponent = ({
         opacity={0.9}
       />
 
-      {isRockDrain ? (
+      {/* In blueprint mode, skip decorative patterns */}
+      {!blueprintMode && isRockDrain ? (
         /* Rock/gravel pattern - random circles to simulate rocks */
         <>
           {Array.from({ length: Math.floor(length / 3) }).map((_, i) => {
@@ -439,7 +447,7 @@ export const DrainageComponent = ({
             );
           })}
         </>
-      ) : (
+      ) : !blueprintMode ? (
         /* Ultra drain - vertical slats (perpendicular to drain length) - 2mm wide, 50mm long */
         (() => {
           const slotWidthPx = 0.2 * scale * 10; // 2mm in pixels
@@ -457,7 +465,7 @@ export const DrainageComponent = ({
             />
           ));
         })()
-      )}
+      ) : null}
 
       {/* Selection border and handle */}
       {isSelected && (

@@ -5,6 +5,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
 import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
+import { BLUEPRINT_COLORS } from '@/constants/blueprintColors';
 
 interface FenceComponentProps {
   component: Component;
@@ -48,8 +49,11 @@ export const FenceComponent = ({
   const fenceData = FENCE_TYPES[fenceType];
   const length = (component.dimensions.width || 2400);
 
-  const color = fenceData.color;
-  const metalColor = FENCE_TYPES.metal.color;
+  const blueprintMode = useDesignStore((s) => s.blueprintMode);
+  const normalColor = fenceData.color;
+  const color = blueprintMode ? BLUEPRINT_COLORS.primary : normalColor;
+  const textColor = blueprintMode ? BLUEPRINT_COLORS.text : normalColor;
+  const metalColor = blueprintMode ? BLUEPRINT_COLORS.secondary : FENCE_TYPES.metal.color;
   const strokeWidth = fenceType === 'glass' ? 2 : 4;
   const railGapPx = fenceType === 'glass' ? 8 : 5; // 80mm for glass, 50mm for flat-top metal
 
@@ -83,6 +87,7 @@ export const FenceComponent = ({
   const isPolyline = Array.isArray(polyPoints) && polyPoints.length >= 2;
 
   const updateComponent = useDesignStore((s) => s.updateComponent);
+  const updateComponentSilent = useDesignStore((s) => s.updateComponentSilent);
   const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [ghostLocal, setGhostLocal] = useState<Array<{ x: number; y: number }> | null>(null);
@@ -124,15 +129,16 @@ export const FenceComponent = ({
   }, [ghostLocal, polyPoints, component.position.x, component.position.y]);
 
   // Update component properties with live stats during drag
+  // Use silent update to avoid polluting undo/redo history with derived data
   useEffect(() => {
     if (!isPolyline) return;
     const current = component.properties.totalLM as number | undefined;
     if (current === undefined || Math.abs(current - liveTotalLM) > 0.001) {
-      updateComponent(component.id, {
-        properties: { ...component.properties, totalLM: liveTotalLM },
+      updateComponentSilent(component.id, {
+        properties: { totalLM: liveTotalLM },
       });
     }
-  }, [liveTotalLM, isPolyline, component.id, component.properties, updateComponent]);
+  }, [liveTotalLM, isPolyline, component.id, component.properties.totalLM, updateComponentSilent]);
 
   // Helpers for offsetting a polyline by a constant distance
   const len = (v: { x: number; y: number }) => Math.hypot(v.x, v.y);
@@ -306,16 +312,63 @@ export const FenceComponent = ({
           dragStartPos.current = null;
         }}
       >
-        {/* Rails */}
-        {fenceType !== 'glass' && fenceType !== 'metal' && (
+        {/* Blueprint mode: simple construction plan fence style */}
+        {blueprintMode && (
+          <>
+            {/* Main fence line */}
+            <Line
+              points={flat(localPts)}
+              stroke={color}
+              strokeWidth={2}
+              lineCap="butt"
+              lineJoin="round"
+              hitStrokeWidth={20}
+              opacity={ghostLocal ? 0.6 : 1}
+            />
+            {/* Perpendicular tick marks at regular intervals */}
+            {(() => {
+              const ticks: JSX.Element[] = [];
+              const tickSpacing = 20; // px between ticks
+              const tickLength = 6; // px perpendicular length
+              for (let i = 1; i < localPts.length; i++) {
+                const a = localPts[i - 1];
+                const b = localPts[i];
+                const dx = b.x - a.x;
+                const dy = b.y - a.y;
+                const segLen = Math.hypot(dx, dy);
+                if (segLen < 1) continue;
+                const nx = -dy / segLen; // perpendicular
+                const ny = dx / segLen;
+                const numTicks = Math.floor(segLen / tickSpacing);
+                for (let t = 1; t <= numTicks; t++) {
+                  const ratio = t / (numTicks + 1);
+                  const px = a.x + dx * ratio;
+                  const py = a.y + dy * ratio;
+                  ticks.push(
+                    <Line
+                      key={`tick-${i}-${t}`}
+                      points={[px - nx * tickLength, py - ny * tickLength, px + nx * tickLength, py + ny * tickLength]}
+                      stroke={color}
+                      strokeWidth={1.5}
+                    />
+                  );
+                }
+              }
+              return ticks;
+            })()}
+          </>
+        )}
+
+        {/* Normal mode: Rails */}
+        {!blueprintMode && fenceType !== 'glass' && fenceType !== 'metal' && (
           <>
             <Line points={flat(topRail)} stroke={color} strokeWidth={strokeWidth} lineCap="butt" lineJoin="round" hitStrokeWidth={16} opacity={ghostLocal ? 0.6 : 1} />
             <Line points={flat(bottomRail)} stroke={color} strokeWidth={strokeWidth} lineCap="butt" lineJoin="round" hitStrokeWidth={16} opacity={ghostLocal ? 0.6 : 1} />
           </>
         )}
 
-        {/* Flat-top metal as a solid band (no mid-gap), scale-accurate thickness */}
-        {fenceType === 'metal' && (
+        {/* Normal mode: Flat-top metal as a solid band (no mid-gap), scale-accurate thickness */}
+        {!blueprintMode && fenceType === 'metal' && (
           <Line
             points={flat(localPts)}
             stroke={color}
@@ -327,7 +380,7 @@ export const FenceComponent = ({
           />
         )}
 
-        {fenceType === 'glass' && (
+        {!blueprintMode && fenceType === 'glass' && (
           <>
             {(() => {
               // Partition per straight run (node-to-node) using min/max/preferred.
@@ -412,7 +465,7 @@ export const FenceComponent = ({
         {/* (glass markers moved into segmented renderer above) */}
 
         {/* Metal: posts at per-run panel boundaries based on min/max/preferred */}
-        {fenceType === 'metal' && (
+        {!blueprintMode && fenceType === 'metal' && (
           <>
             {(() => {
               const elems: JSX.Element[] = [];
@@ -512,7 +565,7 @@ export const FenceComponent = ({
                       y={midY + perpY * offset}
                       text={`Fence${fenceType === 'glass' ? ' (Glass)' : fenceType === 'metal' ? ' (Metal)' : ''}: ${Math.round(len * 10)}mm`}
                       fontSize={11}
-                      fill={color}
+                      fill={textColor}
                       align="center"
                       rotation={normalizeLabelAngle((Math.atan2(dy, dx) * 180) / Math.PI)}
                       offsetX={20}
@@ -555,7 +608,7 @@ export const FenceComponent = ({
               y={midY + perpY * offset}
               text={`${lengthInMM}mm`}
               fontSize={11}
-              fill={color}
+              fill={textColor}
               align="center"
               rotation={normalizeLabelAngle(angleDeg)}
               offsetX={20}
@@ -580,7 +633,7 @@ export const FenceComponent = ({
               y={minY - labelOffset}
               text={`${typeLabel}: ${totalLM.toFixed(2)} LM`}
               fontSize={10}
-              fill={color}
+              fill={textColor}
               align="center"
               offsetX={40}
               listening={false}
@@ -673,10 +726,37 @@ export const FenceComponent = ({
       >
       {/* No broad hit area; rely on rails and hitStrokeWidth for interaction */}
 
-      {/* Base rendering */}
-      {fenceType === 'metal' ? (
+      {/* Blueprint mode: simple construction plan fence style (straight) */}
+      {blueprintMode && (
+        <>
+          <Line points={[0, 0, length, 0]} stroke={color} strokeWidth={2} lineCap="butt" hitStrokeWidth={20} />
+          {/* Perpendicular tick marks */}
+          {(() => {
+            const ticks: JSX.Element[] = [];
+            const tickSpacing = 20;
+            const tickLength = 6;
+            const numTicks = Math.floor(length / tickSpacing);
+            for (let t = 1; t <= numTicks; t++) {
+              const px = (t / (numTicks + 1)) * length;
+              ticks.push(
+                <Line
+                  key={`tick-s-${t}`}
+                  points={[px, -tickLength, px, tickLength]}
+                  stroke={color}
+                  strokeWidth={1.5}
+                />
+              );
+            }
+            return ticks;
+          })()}
+        </>
+      )}
+
+      {/* Normal mode: Base rendering */}
+      {!blueprintMode && fenceType === 'metal' && (
         <Line points={[0, 0, length, 0]} stroke={color} strokeWidth={metalBandStrokeWidth} lineCap="butt" hitStrokeWidth={20} />
-      ) : (
+      )}
+      {!blueprintMode && fenceType !== 'metal' && (
         <>
           {/* Glass straight segment as single pane centered, scale-accurate 40mm */}
           <Line points={[0, 0, length, 0]} stroke={color} strokeWidth={glassPaneStrokeWidth} lineCap="round" hitStrokeWidth={16} />
@@ -684,7 +764,7 @@ export const FenceComponent = ({
       )}
 
       {/* Metal posts (straight segment) using min/max/preferred */}
-      {fenceType === 'metal' && (() => {
+      {!blueprintMode && fenceType === 'metal' && (() => {
         const elems = [] as JSX.Element[];
         const cfg = METAL_CFG;
         const size = cfg.postSize;
@@ -706,7 +786,7 @@ export const FenceComponent = ({
         return elems;
       })()}
 
-      {fenceType === 'glass' && (() => {
+      {!blueprintMode && fenceType === 'glass' && (() => {
         const rails: JSX.Element[] = [];
         const posts: JSX.Element[] = [];
         const cfg = GLASS_CFG;

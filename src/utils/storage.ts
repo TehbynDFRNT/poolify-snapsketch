@@ -1,4 +1,4 @@
-import { Project } from '@/types';
+import { Project, Component } from '@/types';
 
 const PROJECTS_KEY = 'pool-design-projects';
 const PROJECTS_LIST_KEY = 'pool-design-projects-list';
@@ -122,7 +122,7 @@ export const loadAnnotationsVisibility = (): boolean => {
   }
 };
 
-// Per-project view state (session-only): zoom + pan
+// Per-project view state: zoom + pan (now localStorage for persistence)
 export interface ProjectViewState {
   zoom: number;
   pan: { x: number; y: number };
@@ -132,8 +132,7 @@ const viewStateKey = (projectId: string) => `${VIEW_STATE_PREFIX}${projectId}`;
 
 export const saveProjectViewState = (projectId: string, view: ProjectViewState): void => {
   try {
-    // sessionStorage so it resets per-tab session, not persisted permanently
-    sessionStorage.setItem(viewStateKey(projectId), JSON.stringify(view));
+    localStorage.setItem(viewStateKey(projectId), JSON.stringify(view));
   } catch (error) {
     console.error('Failed to save project view state:', error);
   }
@@ -141,7 +140,7 @@ export const saveProjectViewState = (projectId: string, view: ProjectViewState):
 
 export const loadProjectViewState = (projectId: string): ProjectViewState | null => {
   try {
-    const data = sessionStorage.getItem(viewStateKey(projectId));
+    const data = localStorage.getItem(viewStateKey(projectId));
     if (!data) return null;
     const parsed = JSON.parse(data);
     // Validate shape minimally
@@ -155,5 +154,64 @@ export const loadProjectViewState = (projectId: string): ProjectViewState | null
   } catch (error) {
     console.error('Failed to load project view state:', error);
     return null;
+  }
+};
+
+// Per-project undo/redo history (localStorage for persistence across reloads)
+const HISTORY_PREFIX = 'pool-design-history-';
+const historyKey = (projectId: string) => `${HISTORY_PREFIX}${projectId}`;
+
+export interface ProjectHistory {
+  history: Component[][];
+  historyIndex: number;
+}
+
+export const saveProjectHistory = (projectId: string, data: ProjectHistory): void => {
+  try {
+    // Limit to last 50 states to avoid storage limits
+    const trimmed = {
+      history: data.history.slice(-50),
+      historyIndex: Math.min(data.historyIndex, 49),
+    };
+    localStorage.setItem(historyKey(projectId), JSON.stringify(trimmed));
+  } catch (error) {
+    console.error('Failed to save project history:', error);
+    // If storage is full, try clearing old history entries
+    try {
+      const keys = Object.keys(localStorage).filter(k => k.startsWith(HISTORY_PREFIX));
+      if (keys.length > 5) {
+        // Remove oldest history entries (keep current project)
+        keys.filter(k => k !== historyKey(projectId)).slice(0, 3).forEach(k => {
+          localStorage.removeItem(k);
+        });
+        // Retry save
+        localStorage.setItem(historyKey(projectId), JSON.stringify(data));
+      }
+    } catch {
+      // Silently fail if still can't save
+    }
+  }
+};
+
+export const loadProjectHistory = (projectId: string): ProjectHistory | null => {
+  try {
+    const data = localStorage.getItem(historyKey(projectId));
+    if (!data) return null;
+    const parsed = JSON.parse(data);
+    if (Array.isArray(parsed?.history) && typeof parsed?.historyIndex === 'number') {
+      return parsed as ProjectHistory;
+    }
+    return null;
+  } catch (error) {
+    console.error('Failed to load project history:', error);
+    return null;
+  }
+};
+
+export const clearProjectHistory = (projectId: string): void => {
+  try {
+    localStorage.removeItem(historyKey(projectId));
+  } catch (error) {
+    console.error('Failed to clear project history:', error);
   }
 };

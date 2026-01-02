@@ -4,6 +4,7 @@ import { useDesignStore } from '@/store/designStore';
 import { FENCE_TYPES } from '@/constants/components';
 import { GRID_CONFIG } from '@/constants/grid';
 import { useRef, useEffect } from 'react';
+import { BLUEPRINT_COLORS } from '@/constants/blueprintColors';
 
 interface GateComponentProps {
   component: Component;
@@ -16,19 +17,21 @@ interface GateComponentProps {
 // Simple always-open gate: hinge at origin, leaf as a line with fixed width (mm)
 export const GateComponent = ({ component, isSelected, activeTool, onSelect, onDragEnd }: GateComponentProps) => {
   const updateComponent = useDesignStore(s => s.updateComponent);
+  const blueprintMode = useDesignStore(s => s.blueprintMode);
   const groupRef = useRef<any>(null);
   const trRef = useRef<any>(null);
   const scale = 0.1; // 1px = 10mm
   const mmToPx = (mm: number) => mm * scale;
   const widthMm = component.properties.length || 1000; // mm
   const gateType = (component.properties as any).gateType || 'glass';
-  const color = FENCE_TYPES[gateType]?.color || '#9CA3AF';
-  const leafThickness = gateType === 'glass' ? mmToPx(40) : mmToPx(30);
+  const normalColor = FENCE_TYPES[gateType]?.color || '#9CA3AF';
+  const color = blueprintMode ? BLUEPRINT_COLORS.secondary : normalColor;
+  const leafThickness = blueprintMode ? 2 : (gateType === 'glass' ? mmToPx(40) : mmToPx(30));
   const leafLen = Math.max(200, Number(widthMm) || 1000) * scale; // px
   const hitPad = 10; // px extra clickable padding
 
   // Hinge post visual size
-  const postSize = 10;
+  const postSize = blueprintMode ? 6 : 10;
 
   // Attach/detach transformer when selection changes
   useEffect(() => {
@@ -78,7 +81,7 @@ export const GateComponent = ({ component, isSelected, activeTool, onSelect, onD
       />
 
       {/* Hinge post */}
-      <Rect x={-postSize/2} y={-postSize/2} width={postSize} height={postSize} fill={gateType === 'metal' ? '#333' : '#374151'} />
+      <Rect x={-postSize/2} y={-postSize/2} width={postSize} height={postSize} fill={blueprintMode ? BLUEPRINT_COLORS.secondary : (gateType === 'metal' ? '#333' : '#374151')} />
 
       {/* Leaf - always open: drawn along +X */}
       <Line

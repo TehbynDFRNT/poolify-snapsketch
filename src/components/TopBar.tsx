@@ -20,9 +20,11 @@ interface TopBarProps {
   gridVisible: boolean;
   satelliteVisible: boolean;
   annotationsVisible: boolean;
+  blueprintMode: boolean;
   onGridToggle: () => void;
   onSatelliteToggle: () => void;
   onAnnotationsToggle: () => void;
+  onBlueprintToggle: () => void;
   onSave: () => void;
   onShare?: () => void;
   onExport: () => void;
@@ -39,9 +41,11 @@ export const TopBar = ({
   gridVisible,
   satelliteVisible,
   annotationsVisible,
+  blueprintMode,
   onGridToggle,
   onSatelliteToggle,
   onAnnotationsToggle,
+  onBlueprintToggle,
   onSave,
   onShare,
   onExport,
@@ -128,6 +132,16 @@ export const TopBar = ({
             className="w-4 h-4"
           />
           <span className="text-sm hidden md:inline">Annotations</span>
+        </label>
+
+        <label className="flex items-center gap-2 px-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={blueprintMode}
+            onChange={() => onBlueprintToggle()}
+            className="w-4 h-4"
+          />
+          <span className="text-sm hidden md:inline">Blueprint</span>
         </label>
 
         <Button

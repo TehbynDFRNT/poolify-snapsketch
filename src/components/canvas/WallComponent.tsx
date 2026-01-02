@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
 import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
+import { BLUEPRINT_COLORS } from '@/constants/blueprintColors';
 
 interface WallComponentProps {
   component: Component;
@@ -33,7 +34,10 @@ export const WallComponent = ({
   const wallData = WALL_MATERIALS[wallType as keyof typeof WALL_MATERIALS];
   const height = 15; // Wall height in pixels
 
-  const color = wallData?.color || WALL_MATERIALS.timber.color;
+  const blueprintMode = useDesignStore((s) => s.blueprintMode);
+  const materialColor = wallData?.color || WALL_MATERIALS.timber.color;
+  const color = blueprintMode ? BLUEPRINT_COLORS.secondary : materialColor;
+  const textColor = blueprintMode ? BLUEPRINT_COLORS.text : materialColor;
 
   // Polyline mode: render multiple segments as one element if points exist
   const polyPoints: Array<{ x: number; y: number }> = component.properties.points || [];
@@ -178,9 +182,9 @@ export const WallComponent = ({
                       key={`glbl-${k}`}
                       x={midX + perpX * offset}
                       y={midY + perpY * offset}
-                      text={`Wall: ${Math.round(len * 10)}mm`}
+                      text={`${wallData?.label || 'Timber'} Wall: ${Math.round(len * 10)}mm`}
                       fontSize={11}
-                      fill={color}
+                      fill={textColor}
                       align="center"
                       rotation={normalizeLabelAngle((Math.atan2(dy, dx) * 180) / Math.PI)}
                       offsetX={20}
@@ -286,9 +290,9 @@ export const WallComponent = ({
               key={`measurement-${idx}`}
               x={midX + perpX * offset}
               y={midY + perpY * offset}
-              text={`Wall: ${lengthInMM}mm`}
+              text={`${wallData?.label || 'Timber'} Wall: ${lengthInMM}mm`}
               fontSize={11}
-              fill={color}
+              fill={textColor}
               align="center"
               rotation={normalizeLabelAngle(angleDeg)}
               offsetX={20}
@@ -313,7 +317,7 @@ export const WallComponent = ({
               y={pt.y - 30}
               text={`${label}: ${height}`}
               fontSize={11}
-              fill="#6B7280"
+              fill={blueprintMode ? BLUEPRINT_COLORS.textSecondary : '#6B7280'}
               align="center"
               offsetX={20}
               listening={false}

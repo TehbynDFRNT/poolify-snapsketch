@@ -5,6 +5,7 @@ import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG, SNAP_CONFIG } from '@/constants/grid';
 import { TILE_COLORS } from '@/constants/tileConfig';
 import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
+import { BLUEPRINT_COLORS } from '@/constants/blueprintColors';
 
 interface PavingAreaComponentProps {
   component: Component;
@@ -40,7 +41,9 @@ export const PavingAreaComponent = ({
   onContextMenu,
 }: PavingAreaComponentProps) => {
   const updateComponent = useDesignStore((s) => s.updateComponent);
+  const updateComponentSilent = useDesignStore((s) => s.updateComponentSilent);
   const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
+  const blueprintMode = useDesignStore((s) => s.blueprintMode);
   const zoom = useDesignStore((s) => s.zoom);
   const allComponents = useDesignStore((s) => s.components);
 
@@ -99,17 +102,17 @@ export const PavingAreaComponent = ({
   }, [localPreview, boundaryLocal]);
 
   // Update component statistics when area changes (uses live values during drag)
+  // Use silent update to avoid polluting undo/redo history with derived data
   useEffect(() => {
     const current = component.properties.statistics;
     if (!current || Math.abs((current.totalArea || 0) - liveAreaM2) > 0.001 || Math.abs((current.perimeterLM || 0) - livePerimeterLM) > 0.001) {
-      updateComponent(component.id, {
+      updateComponentSilent(component.id, {
         properties: {
-          ...component.properties,
           statistics: { totalArea: liveAreaM2, perimeterLM: livePerimeterLM, fullPavers: 0, edgePavers: 0, orderQuantity: 0 },
         },
       });
     }
-  }, [liveAreaM2, livePerimeterLM, component.id, component.properties, updateComponent]);
+  }, [liveAreaM2, livePerimeterLM, component.id, component.properties.statistics, updateComponentSilent]);
 
   // Node selection
   const isNodeSelected = (i: number) => selectedNodes.includes(i);
@@ -165,7 +168,7 @@ export const PavingAreaComponent = ({
           y={midY + perpY * offset}
           text={`${lengthInMM}mm`}
           fontSize={11}
-          fill={TILE_COLORS.groutColor}
+          fill={blueprintMode ? BLUEPRINT_COLORS.text : TILE_COLORS.groutColor}
           align="center"
           rotation={normalizeLabelAngle(angleDeg)}
           offsetX={20}
@@ -186,6 +189,9 @@ export const PavingAreaComponent = ({
       : areaSurface === 'grass' ? 'Grass'
       : 'Paving';
 
+    const statsColor = blueprintMode
+      ? BLUEPRINT_COLORS.text
+      : areaSurface === 'grass' ? '#15803d' : areaSurface === 'concrete' ? '#64748b' : '#D4A574';
     measurements.push(
       <Text
         key="area-stats"
@@ -193,7 +199,7 @@ export const PavingAreaComponent = ({
         y={minY - labelOffset}
         text={`${surfaceLabel}: ${livePerimeterLM.toFixed(2)} LM · ${liveAreaM2.toFixed(2)} m²`}
         fontSize={10}
-        fill={areaSurface === 'grass' ? '#15803d' : areaSurface === 'concrete' ? '#64748b' : '#D4A574'}
+        fill={statsColor}
         align="center"
         offsetX={50}
         listening={false}
@@ -366,6 +372,7 @@ export const PavingAreaComponent = ({
   // Get fill color/pattern based on surface type
   // Use extendedTile color for pavers to match coping extension style
   const getFillColor = () => {
+    if (blueprintMode) return BLUEPRINT_COLORS.fillLight;
     if (areaSurface === 'concrete') return '#e5e7eb';
     if (areaSurface === 'grass') return '#15803d';
     return TILE_COLORS.extendedTile; // Lighter sandstone to match coping extension
@@ -389,8 +396,8 @@ export const PavingAreaComponent = ({
         points={displayBoundary.flatMap((p) => [p.x, p.y])}
         closed
         fill={getFillColor()}
-        fillPatternImage={areaPattern as any}
-        fillPatternRepeat={areaPattern ? 'repeat' : undefined}
+        fillPatternImage={blueprintMode ? undefined : areaPattern as any}
+        fillPatternRepeat={!blueprintMode && areaPattern ? 'repeat' : undefined}
         strokeEnabled={false}
         listening={false}
       />

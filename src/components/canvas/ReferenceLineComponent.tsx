@@ -3,6 +3,7 @@ import { Group, Line, Circle, Label, Tag, Text } from 'react-konva';
 import { Component } from '@/types';
 import { useDesignStore } from '@/store/designStore';
 import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
+import { BLUEPRINT_COLORS } from '@/constants/blueprintColors';
 
 interface Props {
   component: Component;
@@ -22,6 +23,7 @@ export const ReferenceLineComponent: React.FC<Props> = ({
   const updateComponent = useDesignStore((s) => s.updateComponent);
   const components = useDesignStore((s) => s.components);
   const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
+  const blueprintMode = useDesignStore((s) => s.blueprintMode);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [isDraggingNode, setIsDraggingNode] = useState(false);
   const points = component.properties.points || [];
@@ -39,12 +41,18 @@ export const ReferenceLineComponent: React.FC<Props> = ({
   const distance = Math.sqrt(dx * dx + dy * dy);
   const measurementMm = Math.round(distance * 10); // Convert to mm (1px = 10mm)
 
+  // Default colors based on component type
+  const defaultColor = component.type === 'quick_measure' ? '#eab308' : '#dc2626';
+
   const style = component.properties.style || {
-    color: component.type === 'quick_measure' ? '#eab308' : '#dc2626',
+    color: blueprintMode ? BLUEPRINT_COLORS.secondary : defaultColor,
     dashed: component.type === 'reference_line',
     lineWidth: 2,
     arrowEnds: true,
   };
+
+  // Override color in blueprint mode even if style exists
+  const effectiveColor = blueprintMode ? BLUEPRINT_COLORS.secondary : style.color;
 
   const slashLength = 12; // Length of diagonal slash at endpoints
   const lineExtension = 10; // Visual extension past slash (in pixels)
@@ -121,7 +129,7 @@ export const ReferenceLineComponent: React.FC<Props> = ({
       {/* Main line - extends 5mm past slashes, measurement points remain at start/end */}
       <Line
         points={[extendedStart.x, extendedStart.y, extendedEnd.x, extendedEnd.y]}
-        stroke={style.color}
+        stroke={effectiveColor}
         strokeWidth={selected ? style.lineWidth + 1 : style.lineWidth}
         dash={style.dashed ? [10, 5] : []}
         opacity={component.properties.temporary ? 0.8 : 1}
@@ -140,7 +148,7 @@ export const ReferenceLineComponent: React.FC<Props> = ({
               start.x + Math.cos(angle * Math.PI / 180 + Math.PI / 4) * slashLength / 2,
               start.y + Math.sin(angle * Math.PI / 180 + Math.PI / 4) * slashLength / 2,
             ]}
-            stroke={style.color}
+            stroke={effectiveColor}
             strokeWidth={style.lineWidth}
             lineCap="round"
             listening={false}
@@ -153,7 +161,7 @@ export const ReferenceLineComponent: React.FC<Props> = ({
               end.x + Math.cos(angle * Math.PI / 180 + Math.PI / 4) * slashLength / 2,
               end.y + Math.sin(angle * Math.PI / 180 + Math.PI / 4) * slashLength / 2,
             ]}
-            stroke={style.color}
+            stroke={effectiveColor}
             strokeWidth={style.lineWidth}
             lineCap="round"
             listening={false}
@@ -168,7 +176,7 @@ export const ReferenceLineComponent: React.FC<Props> = ({
           y={annotationY}
           text={annotation ? `${annotation}: ${measurementMm}mm` : `Measure: ${measurementMm}mm`}
           fontSize={11}
-          fill={style.color}
+          fill={effectiveColor}
           align="center"
           rotation={normalizeLabelAngle(angle)}
           offsetX={annotation ? (annotation.length * 3 + 15) : 15}
