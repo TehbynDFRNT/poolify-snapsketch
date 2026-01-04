@@ -310,8 +310,8 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
               </div>
               {/* Total Linear Meters - uses live totalLM from component properties */}
               {(component.properties.totalLM !== undefined || (component.properties.points && component.properties.points.length >= 2)) && (
-                <div className="bg-muted rounded-lg p-3">
-                  <div className="text-sm flex justify-between">
+                <div className="text-xs bg-muted p-2 rounded space-y-1">
+                  <div className="flex justify-between">
                     <span>Total Length:</span>
                     <span className="font-medium">
                       {(component.properties.totalLM as number)?.toFixed(2) ?? (() => {
@@ -401,8 +401,8 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
               </div>
               {/* Total Linear Meters - uses live totalLM from component properties */}
               {(component.properties.totalLM !== undefined || (component.properties.points && component.properties.points.length >= 2)) && (
-                <div className="bg-muted rounded-lg p-3">
-                  <div className="text-sm flex justify-between">
+                <div className="text-xs bg-muted p-2 rounded space-y-1">
+                  <div className="flex justify-between">
                     <span>Total Length:</span>
                     <span className="font-medium">
                       {(component.properties.totalLM as number)?.toFixed(2) ?? (() => {
@@ -564,14 +564,14 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
               </div>
 
               {/* Area Statistics - uses live values from component properties */}
-              <div className="bg-muted rounded-lg p-3 space-y-1">
-                <div className="text-sm flex justify-between">
+              <div className="text-xs bg-muted p-2 rounded space-y-1">
+                <div className="flex justify-between">
                   <span>Total area:</span>
                   <span className="font-medium">
                     {(component.properties.statistics?.totalArea || 0).toFixed(2)} m²
                   </span>
                 </div>
-                <div className="text-sm flex justify-between">
+                <div className="flex justify-between">
                   <span>Perimeter:</span>
                   <span className="font-medium">
                     {(component.properties.statistics?.perimeterLM || 0).toFixed(2)} LM
@@ -579,6 +579,84 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
                 </div>
               </div>
             </>
+          )}
+
+          {component.type === 'boundary' && component.properties.points && component.properties.points.length >= 3 && (
+            <div className="text-xs bg-muted p-2 rounded space-y-1">
+              {(() => {
+                const pts = component.properties.points;
+                // Calculate perimeter
+                let perimeter = 0;
+                for (let i = 0; i < pts.length; i++) {
+                  const next = (i + 1) % pts.length;
+                  const dx = pts[next].x - pts[i].x;
+                  const dy = pts[next].y - pts[i].y;
+                  perimeter += Math.sqrt(dx * dx + dy * dy);
+                }
+                const perimeterLM = (perimeter * 10) / 1000; // Convert to LM
+
+                // Calculate area using shoelace formula
+                let area = 0;
+                for (let i = 0; i < pts.length; i++) {
+                  const j = (i + 1) % pts.length;
+                  area += pts[i].x * pts[j].y;
+                  area -= pts[j].x * pts[i].y;
+                }
+                const areaM2 = Math.abs(area / 2) * 100 / 1_000_000; // Convert to m²
+
+                return (
+                  <>
+                    <div className="flex justify-between">
+                      <span>Perimeter:</span>
+                      <span className="font-medium">{perimeterLM.toFixed(2)} LM</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Area:</span>
+                      <span className="font-medium">{areaM2.toFixed(2)} m²</span>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {component.type === 'house' && component.properties.points && component.properties.points.length >= 3 && (
+            <div className="text-xs bg-muted p-2 rounded space-y-1">
+              {(() => {
+                const pts = component.properties.points;
+                // Calculate perimeter
+                let perimeter = 0;
+                for (let i = 0; i < pts.length; i++) {
+                  const next = (i + 1) % pts.length;
+                  const dx = pts[next].x - pts[i].x;
+                  const dy = pts[next].y - pts[i].y;
+                  perimeter += Math.sqrt(dx * dx + dy * dy);
+                }
+                const perimeterLM = (perimeter * 10) / 1000; // Convert to LM
+
+                // Calculate area using shoelace formula
+                let area = 0;
+                for (let i = 0; i < pts.length; i++) {
+                  const j = (i + 1) % pts.length;
+                  area += pts[i].x * pts[j].y;
+                  area -= pts[j].x * pts[i].y;
+                }
+                const areaM2 = Math.abs(area / 2) * 100 / 1_000_000; // Convert to m²
+
+                return (
+                  <>
+                    <div className="flex justify-between">
+                      <span>Perimeter:</span>
+                      <span className="font-medium">{perimeterLM.toFixed(2)} LM</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Footprint:</span>
+                      <span className="font-medium">{areaM2.toFixed(2)} m²</span>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
           )}
 
           <div className="flex gap-2 pt-2 border-t">
