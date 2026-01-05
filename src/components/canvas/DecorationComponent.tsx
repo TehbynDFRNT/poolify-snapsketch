@@ -61,9 +61,6 @@ export const DecorationComponent = ({
   const imageRef = useRef<any>(null);
   const blueprintMode = useDesignStore((s) => s.blueprintMode);
 
-  // Hide decorations in blueprint mode
-  if (blueprintMode) return null;
-
   const decorationType = component.properties.decorationType || 'bush';
   const config = DECORATION_CONFIG[decorationType];
 
@@ -79,6 +76,9 @@ export const DecorationComponent = ({
       setImage(img);
     };
   }, [config.path]);
+
+  // Hide decorations in blueprint mode (must be after all hooks)
+  if (blueprintMode) return null;
 
   const handleContextMenuLocal = (e: any) => {
     e.evt.preventDefault();
