@@ -6,6 +6,7 @@ import { PublicProjectResponse } from '@/types/publicLinks';
 import { Component } from '@/types';
 import { sortComponentsByRenderOrder } from '@/constants/renderOrder';
 import { GRID_CONFIG } from '@/constants/grid';
+import { useDesignStore } from '@/store/designStore';
 
 // Import all component renderers
 import { PoolComponent } from './canvas/PoolComponent';
@@ -20,7 +21,7 @@ import { PavingAreaComponent } from './canvas/PavingAreaComponent';
 
 // Import UI components
 import { Button } from '@/components/ui/button';
-import { Home } from 'lucide-react';
+import { Home, Grid3X3, Tag, FileText } from 'lucide-react';
 
 const INITIAL_SCALE = 0.7;
 
@@ -37,6 +38,14 @@ export const PublicProjectView: React.FC = () => {
   const [zoom, setZoom] = useState(INITIAL_SCALE);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [initialized, setInitialized] = useState(false);
+
+  // View options from store (components read these directly)
+  const gridVisible = useDesignStore((s) => s.gridVisible);
+  const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
+  const blueprintMode = useDesignStore((s) => s.blueprintMode);
+  const toggleGrid = useDesignStore((s) => s.toggleGrid);
+  const toggleAnnotations = useDesignStore((s) => s.toggleAnnotations);
+  const toggleBlueprintMode = useDesignStore((s) => s.toggleBlueprintMode);
 
   useEffect(() => {
     loadPublicProject();
@@ -231,6 +240,40 @@ export const PublicProjectView: React.FC = () => {
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       <div ref={containerRef} className="flex-1 relative overflow-hidden" style={{ cursor: 'grab' }}>
+        {/* Floating controls - top right */}
+        <div className="absolute top-4 right-4 z-10 flex items-center gap-2 bg-white/90 backdrop-blur-sm rounded-lg shadow-md px-3 py-2">
+          <button
+            onClick={toggleGrid}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded text-sm transition-colors ${
+              gridVisible ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            title="Toggle Grid"
+          >
+            <Grid3X3 className="h-4 w-4" />
+            <span className="hidden sm:inline">Grid</span>
+          </button>
+          <button
+            onClick={toggleAnnotations}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded text-sm transition-colors ${
+              annotationsVisible ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            title="Toggle Annotations"
+          >
+            <Tag className="h-4 w-4" />
+            <span className="hidden sm:inline">Annotations</span>
+          </button>
+          <button
+            onClick={toggleBlueprintMode}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded text-sm transition-colors ${
+              blueprintMode ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            title="Toggle Blueprint Mode"
+          >
+            <FileText className="h-4 w-4" />
+            <span className="hidden sm:inline">Blueprint</span>
+          </button>
+        </div>
+
         {dimensions.width > 0 && dimensions.height > 0 && (
           <Stage
             ref={stageRef}
@@ -245,8 +288,8 @@ export const PublicProjectView: React.FC = () => {
             onWheel={handleWheel}
           >
             <Layer>
-              {/* Grid */}
-              {Array.from(
+              {/* Grid - conditional */}
+              {gridVisible && Array.from(
                 { length: Math.ceil(10000 / GRID_CONFIG.MAJOR_SPACING) },
                 (_, i) => {
                   const pos = i * GRID_CONFIG.MAJOR_SPACING;
