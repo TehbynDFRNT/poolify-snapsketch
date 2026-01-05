@@ -314,33 +314,50 @@ export const PublicProjectView: React.FC = () => {
             onWheel={handleWheel}
           >
             <Layer>
-              {/* Grid - conditional */}
+              {/* Grid - conditional, viewport-based like main Canvas */}
               {gridVisible && (() => {
                 const lines: JSX.Element[] = [];
                 const gridSize = GRID_CONFIG.spacing;
                 const majorEvery = GRID_CONFIG.majorGridEvery;
-                const maxExtent = 10000;
 
-                for (let i = 0; i <= maxExtent / gridSize; i++) {
-                  const pos = i * gridSize;
-                  const isMajor = i % majorEvery === 0;
+                // Calculate visible area in content space
+                const viewW = dimensions.width / zoom;
+                const viewH = dimensions.height / zoom;
+                const offsetX = -pan.x / zoom;
+                const offsetY = -pan.y / zoom;
 
-                  // Vertical line
+                // Max grid extent (150m in each direction)
+                const MAX_GRID_EXTENT = 15000;
+
+                // Grid-aligned start/end positions
+                const startX = Math.max(Math.floor(offsetX / gridSize) * gridSize, -MAX_GRID_EXTENT);
+                const endX = Math.min(offsetX + viewW, MAX_GRID_EXTENT);
+                const startY = Math.max(Math.floor(offsetY / gridSize) * gridSize, -MAX_GRID_EXTENT);
+                const endY = Math.min(offsetY + viewH, MAX_GRID_EXTENT);
+
+                // Vertical lines
+                for (let x = startX; x <= endX; x += gridSize) {
+                  const index = Math.round(x / gridSize);
+                  const isMajor = ((index % majorEvery) + majorEvery) % majorEvery === 0;
                   lines.push(
                     <Line
-                      key={`v-${i}`}
-                      points={[pos, 0, pos, maxExtent]}
+                      key={`v-${x}`}
+                      points={[x, offsetY, x, offsetY + viewH]}
                       stroke={isMajor ? GRID_CONFIG.majorGridColor : GRID_CONFIG.color}
                       strokeWidth={isMajor ? 1 : 0.5}
                       listening={false}
                     />
                   );
+                }
 
-                  // Horizontal line
+                // Horizontal lines
+                for (let y = startY; y <= endY; y += gridSize) {
+                  const index = Math.round(y / gridSize);
+                  const isMajor = ((index % majorEvery) + majorEvery) % majorEvery === 0;
                   lines.push(
                     <Line
-                      key={`h-${i}`}
-                      points={[0, pos, maxExtent, pos]}
+                      key={`h-${y}`}
+                      points={[offsetX, y, offsetX + viewW, y]}
                       stroke={isMajor ? GRID_CONFIG.majorGridColor : GRID_CONFIG.color}
                       strokeWidth={isMajor ? 1 : 0.5}
                       listening={false}
