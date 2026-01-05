@@ -2,6 +2,7 @@ import { Group, Rect, Image as KonvaImage } from 'react-konva';
 import { Component } from '@/types';
 import { useEffect, useRef, useState } from 'react';
 import { GRID_CONFIG } from '@/constants/grid';
+import { useDesignStore } from '@/store/designStore';
 
 interface DecorationComponentProps {
   component: Component;
@@ -58,6 +59,10 @@ export const DecorationComponent = ({
 }: DecorationComponentProps) => {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const imageRef = useRef<any>(null);
+  const blueprintMode = useDesignStore((s) => s.blueprintMode);
+
+  // Hide decorations in blueprint mode
+  if (blueprintMode) return null;
 
   const decorationType = component.properties.decorationType || 'bush';
   const config = DECORATION_CONFIG[decorationType];
