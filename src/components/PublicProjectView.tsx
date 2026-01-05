@@ -315,30 +315,41 @@ export const PublicProjectView: React.FC = () => {
           >
             <Layer>
               {/* Grid - conditional */}
-              {gridVisible && Array.from(
-                { length: Math.ceil(10000 / GRID_CONFIG.MAJOR_SPACING) },
-                (_, i) => {
-                  const pos = i * GRID_CONFIG.MAJOR_SPACING;
-                  return (
-                    <React.Fragment key={`grid-${i}`}>
-                      <Line
-                        points={[pos, 0, pos, 10000]}
-                        stroke={GRID_CONFIG.MAJOR_COLOR}
-                        strokeWidth={1}
-                        opacity={0.3}
-                        listening={false}
-                      />
-                      <Line
-                        points={[0, pos, 10000, pos]}
-                        stroke={GRID_CONFIG.MAJOR_COLOR}
-                        strokeWidth={1}
-                        opacity={0.3}
-                        listening={false}
-                      />
-                    </React.Fragment>
+              {gridVisible && (() => {
+                const lines: JSX.Element[] = [];
+                const gridSize = GRID_CONFIG.spacing;
+                const majorEvery = GRID_CONFIG.majorGridEvery;
+                const maxExtent = 10000;
+
+                for (let i = 0; i <= maxExtent / gridSize; i++) {
+                  const pos = i * gridSize;
+                  const isMajor = i % majorEvery === 0;
+
+                  // Vertical line
+                  lines.push(
+                    <Line
+                      key={`v-${i}`}
+                      points={[pos, 0, pos, maxExtent]}
+                      stroke={isMajor ? GRID_CONFIG.majorGridColor : GRID_CONFIG.color}
+                      strokeWidth={isMajor ? 1 : 0.5}
+                      listening={false}
+                    />
+                  );
+
+                  // Horizontal line
+                  lines.push(
+                    <Line
+                      key={`h-${i}`}
+                      points={[0, pos, maxExtent, pos]}
+                      stroke={isMajor ? GRID_CONFIG.majorGridColor : GRID_CONFIG.color}
+                      strokeWidth={isMajor ? 1 : 0.5}
+                      listening={false}
+                    />
                   );
                 }
-              )}
+
+                return lines;
+              })()}
 
               {/* Components */}
               {sortedComponents.map(renderComponent)}
