@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Group, Line, Circle, Label, Tag, Text } from 'react-konva';
 import { Component } from '@/types';
 import { useDesignStore } from '@/store/designStore';
@@ -26,7 +26,24 @@ export const ReferenceLineComponent: React.FC<Props> = ({
   const blueprintMode = useDesignStore((s) => s.blueprintMode);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [isDraggingNode, setIsDraggingNode] = useState(false);
+  const [shiftPressed, setShiftPressed] = useState(false);
   const points = component.properties.points || [];
+
+  // Track shift key for hinge mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftPressed(true);
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftPressed(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
   if (points.length < 2) return null;
 
   const [start, end] = points;
@@ -217,18 +234,36 @@ export const ReferenceLineComponent: React.FC<Props> = ({
             onDragMove={(e) => {
               e.cancelBubble = true;
               const pos = e.target.position();
-              // Free movement - no snapping
 
-              // Update the start point
-              const newPoints = [...points];
-              newPoints[0] = { x: pos.x, y: pos.y };
+              if (shiftPressed) {
+                // Hinge mode: rotate around end point, maintain length
+                const pivot = end;
+                const angleToMouse = Math.atan2(pos.y - pivot.y, pos.x - pivot.x);
+                const newStart = {
+                  x: pivot.x + Math.cos(angleToMouse) * distance,
+                  y: pivot.y + Math.sin(angleToMouse) * distance
+                };
+                // Reposition the circle to the constrained position
+                e.target.position({ x: newStart.x, y: newStart.y });
 
-              updateComponent(component.id, {
-                properties: {
-                  ...component.properties,
-                  points: newPoints,
-                }
-              });
+                updateComponent(component.id, {
+                  properties: {
+                    ...component.properties,
+                    points: [newStart, end],
+                  }
+                });
+              } else {
+                // Free movement - extends the line
+                const newPoints = [...points];
+                newPoints[0] = { x: pos.x, y: pos.y };
+
+                updateComponent(component.id, {
+                  properties: {
+                    ...component.properties,
+                    points: newPoints,
+                  }
+                });
+              }
             }}
             onDragEnd={(e) => {
               e.cancelBubble = true;
@@ -252,18 +287,36 @@ export const ReferenceLineComponent: React.FC<Props> = ({
             onDragMove={(e) => {
               e.cancelBubble = true;
               const pos = e.target.position();
-              // Free movement - no snapping
 
-              // Update the end point
-              const newPoints = [...points];
-              newPoints[1] = { x: pos.x, y: pos.y };
+              if (shiftPressed) {
+                // Hinge mode: rotate around start point, maintain length
+                const pivot = start;
+                const angleToMouse = Math.atan2(pos.y - pivot.y, pos.x - pivot.x);
+                const newEnd = {
+                  x: pivot.x + Math.cos(angleToMouse) * distance,
+                  y: pivot.y + Math.sin(angleToMouse) * distance
+                };
+                // Reposition the circle to the constrained position
+                e.target.position({ x: newEnd.x, y: newEnd.y });
 
-              updateComponent(component.id, {
-                properties: {
-                  ...component.properties,
-                  points: newPoints,
-                }
-              });
+                updateComponent(component.id, {
+                  properties: {
+                    ...component.properties,
+                    points: [start, newEnd],
+                  }
+                });
+              } else {
+                // Free movement - extends the line
+                const newPoints = [...points];
+                newPoints[1] = { x: pos.x, y: pos.y };
+
+                updateComponent(component.id, {
+                  properties: {
+                    ...component.properties,
+                    points: newPoints,
+                  }
+                });
+              }
             }}
             onDragEnd={(e) => {
               e.cancelBubble = true;

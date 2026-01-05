@@ -424,24 +424,71 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
           )}
 
           {component.type === 'quick_measure' && (
-            <div>
-              <Label htmlFor="annotation" className="text-xs">Annotation</Label>
-              <Input
-                id="annotation"
-                type="text"
-                placeholder="Add annotation..."
-                value={component.properties.annotation || ''}
-                onChange={(e) => {
-                  updateComponent(component.id, {
-                    properties: {
-                      ...component.properties,
-                      annotation: e.target.value
-                    }
-                  });
-                }}
-                className="h-8"
-              />
-            </div>
+            <>
+              <div>
+                <Label htmlFor="measureLength" className="text-xs">Length (mm)</Label>
+                <Input
+                  id="measureLength"
+                  type="number"
+                  placeholder="Length in mm"
+                  value={(() => {
+                    const pts = component.properties.points;
+                    if (!pts || pts.length < 2) return '';
+                    const dx = pts[1].x - pts[0].x;
+                    const dy = pts[1].y - pts[0].y;
+                    return Math.round(Math.sqrt(dx * dx + dy * dy) * 10); // 1px = 10mm
+                  })()}
+                  onChange={(e) => {
+                    const newLengthMm = parseFloat(e.target.value);
+                    if (isNaN(newLengthMm) || newLengthMm <= 0) return;
+
+                    const pts = component.properties.points;
+                    if (!pts || pts.length < 2) return;
+
+                    const [start, end] = pts;
+                    const dx = end.x - start.x;
+                    const dy = end.y - start.y;
+                    const currentLength = Math.sqrt(dx * dx + dy * dy);
+
+                    if (currentLength === 0) return;
+
+                    // Calculate new end point maintaining same angle
+                    const angle = Math.atan2(dy, dx);
+                    const newLengthPx = newLengthMm / 10; // Convert mm to px
+                    const newEnd = {
+                      x: start.x + Math.cos(angle) * newLengthPx,
+                      y: start.y + Math.sin(angle) * newLengthPx
+                    };
+
+                    updateComponent(component.id, {
+                      properties: {
+                        ...component.properties,
+                        points: [start, newEnd]
+                      }
+                    });
+                  }}
+                  className="h-8"
+                />
+              </div>
+              <div>
+                <Label htmlFor="annotation" className="text-xs">Annotation</Label>
+                <Input
+                  id="annotation"
+                  type="text"
+                  placeholder="Add annotation..."
+                  value={component.properties.annotation || ''}
+                  onChange={(e) => {
+                    updateComponent(component.id, {
+                      properties: {
+                        ...component.properties,
+                        annotation: e.target.value
+                      }
+                    });
+                  }}
+                  className="h-8"
+                />
+              </div>
+            </>
           )}
 
           {component.type === 'height' && (
