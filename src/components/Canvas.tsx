@@ -608,6 +608,19 @@ export const Canvas = ({
         setMeasureEnd(null);
         setIsMeasuring(false);
       }
+
+      // Escape always resets to select tool (handles stuck shift-pan, hand tool, etc.)
+      if (e.key === 'Escape') {
+        // Clear any drawing/measuring state
+        setDrawingPoints([]);
+        setIsDrawing(false);
+        setGhostPoint(null);
+        setMeasureStart(null);
+        setMeasureEnd(null);
+        setIsMeasuring(false);
+        // Always switch back to select tool
+        onToolChange?.('select');
+      }
     };
     
     const handleKeyUp = (e: KeyboardEvent) => {
