@@ -436,14 +436,15 @@ export const Canvas = ({
       return;
     }
 
-    if (activeTool === 'boundary' || activeTool === 'house') {
-      // Enforce closed polygons for both house and boundary
+    if (activeTool === 'house') {
+      // Enforce closed polygons for house only
       if (!closed) {
-        const what = activeTool === 'house' ? 'House' : 'Boundary';
-        toast.error(`${what} must be closed - click near the starting point to finish`);
+        toast.error('House must be closed - click near the starting point to finish');
         return;
       }
+    }
 
+    if (activeTool === 'boundary' || activeTool === 'house') {
       // Only allow a single boundary component in the project
       if (activeTool === 'boundary') {
         const alreadyHasBoundary = components.some(c => c.type === 'boundary');
@@ -579,11 +580,11 @@ export const Canvas = ({
       if (isDrawing) {
         if (e.key === 'Enter') {
           if (activeTool === 'boundary') {
-            // Force-close boundary on Enter if we have enough points
-            if (drawingPoints.length >= 3) {
-              finishDrawing(true);
+            // Allow boundary to finish as open polyline (2+ points) or closed shape (3+ points near start)
+            if (drawingPoints.length >= 2) {
+              finishDrawing(false); // Finish as open polyline
             } else {
-              toast.error('Add at least 3 points to close the boundary');
+              toast.error('Add at least 2 points to create the boundary');
             }
             return;
           }
