@@ -4,7 +4,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -35,8 +34,7 @@ interface CloudProject {
 export function CloudHomePage() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const [myProjects, setMyProjects] = useState<CloudProject[]>([]);
-  const [sharedProjects, setSharedProjects] = useState<CloudProject[]>([]);
+  const [projects, setProjects] = useState<CloudProject[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [showMigrationDialog, setShowMigrationDialog] = useState(false);
@@ -55,8 +53,8 @@ export function CloudHomePage() {
     // Set up real-time subscriptions
     const projectsChannel = supabase
       .channel('projects-changes')
-      .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'projects', filter: `owner_id=eq.${user?.id}` },
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'projects' },
         () => loadProjects()
       )
       .on('postgres_changes',
@@ -69,21 +67,8 @@ export function CloudHomePage() {
       )
       .subscribe();
 
-    const sharesChannel = supabase
-      .channel('shares-changes')
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'project_shares', filter: `user_id=eq.${user?.id}` },
-        () => loadProjects()
-      )
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'project_shares' },
-        () => loadProjects()
-      )
-      .subscribe();
-
     return () => {
       projectsChannel.unsubscribe();
-      sharesChannel.unsubscribe();
     };
   }, [user?.id]);
 
@@ -115,31 +100,14 @@ export function CloudHomePage() {
     if (!user) return;
 
     try {
-      // Load my projects
-      const { data: myData, error: myError } = await supabase
+      const { data, error } = await supabase
         .from('projects')
-        .select('*')
-        .eq('owner_id', user.id)
+        .select('*, profiles:owner_id(full_name)')
         .eq('is_archived', false)
         .order('updated_at', { ascending: false });
 
-      if (myError) throw myError;
-      setMyProjects((myData as any) || []);
-
-      // Load shared projects
-      const { data: sharedData, error: sharedError } = await supabase
-        .from('projects')
-        .select(`
-          *,
-          project_shares!inner(permission)
-        `)
-        .eq('project_shares.user_id', user.id)
-        .is('project_shares.revoked_at', null)
-        .eq('is_archived', false)
-        .order('updated_at', { ascending: false });
-
-      if (sharedError) throw sharedError;
-      setSharedProjects((sharedData as any) || []);
+      if (error) throw error;
+      setProjects((data as any) || []);
     } catch (error: any) {
       toast({
         title: 'Error loading projects',
@@ -369,122 +337,77 @@ export function CloudHomePage() {
           </div>
         </div>
 
-        <Tabs defaultValue="my-projects">
-          <TabsList>
-            <TabsTrigger value="my-projects">
-              My Projects ({myProjects.length})
-            </TabsTrigger>
-            <TabsTrigger value="shared">
-              Shared with Me ({sharedProjects.length})
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="my-projects" className="mt-6">
-            {filterProjects(myProjects).length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <p className="text-muted-foreground">No projects found</p>
-                  <Button className="mt-4" onClick={() => setShowNewProjectModal(true)}>
-                    Create your first project
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {filterProjects(myProjects).map((project) => (
-                  <Card key={project.id} className="hover:shadow-lg transition-shadow">
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <CardTitle className="text-lg">{project.customer_name}</CardTitle>
-                          <CardDescription className="mt-1">{project.address}</CardDescription>
-                        </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreVertical className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedProject(project);
-                                setShowShareDialog(true);
-                              }}
-                            >
-                              <Share2 className="w-4 h-4 mr-2" />
-                              Share
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => {
-                                setProjectToDelete(project.id);
-                                setDeleteDialogOpen(true);
-                              }}
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+        <div className="mt-6">
+          <p className="text-sm text-muted-foreground mb-4">
+            {projects.length} project{projects.length !== 1 ? 's' : ''}
+          </p>
+          {filterProjects(projects).length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <p className="text-muted-foreground">No projects found</p>
+                <Button className="mt-4" onClick={() => setShowNewProjectModal(true)}>
+                  Create your first project
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {filterProjects(projects).map((project) => (
+                <Card key={project.id} className="hover:shadow-lg transition-shadow">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <CardTitle className="text-lg">{project.customer_name}</CardTitle>
+                        <CardDescription className="mt-1">{project.address}</CardDescription>
                       </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2 text-sm text-muted-foreground">
-                        <p>📅 Updated: {formatDate(project.updated_at)}</p>
-                        <p>👤 Owner: You</p>
-                        <p>✓ {getComponentSummary(project.components)}</p>
-                      </div>
-                      <Button
-                        className="w-full mt-4"
-                        onClick={() => navigate(`/project/${project.id}`)}
-                      >
-                        Open
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="shared" className="mt-6">
-            {filterProjects(sharedProjects).length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <p className="text-muted-foreground">No shared projects</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {filterProjects(sharedProjects).map((project) => (
-                  <Card key={project.id} className="hover:shadow-lg transition-shadow">
-                    <CardHeader>
-                      <CardTitle className="text-lg">{project.customer_name}</CardTitle>
-                      <CardDescription className="mt-1">{project.address}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2 text-sm text-muted-foreground">
-                        <p>📅 Updated: {formatDate(project.updated_at)}</p>
-                        <p>👤 Owner: {project.profiles?.full_name || 'Unknown'}</p>
-                        <p>
-                          {project.project_shares?.[0]?.permission === 'view' ? '👁️ View Only' : '✏️ Can Edit'}
-                        </p>
-                        <p>✓ {getComponentSummary(project.components)}</p>
-                      </div>
-                      <Button
-                        className="w-full mt-4"
-                        onClick={() => navigate(`/project/${project.id}`)}
-                      >
-                        Open
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setSelectedProject(project);
+                              setShowShareDialog(true);
+                            }}
+                          >
+                            <Share2 className="w-4 h-4 mr-2" />
+                            Share
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => {
+                              setProjectToDelete(project.id);
+                              setDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      <p>Updated: {formatDate(project.updated_at)}</p>
+                      <p>Owner: {project.owner_id === user?.id ? 'You' : (project.profiles?.full_name || 'Unknown')}</p>
+                      <p>{getComponentSummary(project.components)}</p>
+                    </div>
+                    <Button
+                      className="w-full mt-4"
+                      onClick={() => navigate(`/project/${project.id}`)}
+                    >
+                      Open
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Modals */}
