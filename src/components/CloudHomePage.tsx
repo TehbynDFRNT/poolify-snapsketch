@@ -9,7 +9,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { NewProjectModal } from './NewProjectModal';
 import { ShareProjectDialog } from './ShareProjectDialog';
-import { MigrationDialog } from './MigrationDialog';
 import { toast } from '@/hooks/use-toast';
 import { Plus, Search, MoreVertical, Share2, Trash2, User, Settings, LogOut, Database } from 'lucide-react';
 
@@ -37,7 +36,6 @@ export function CloudHomePage() {
   const [projects, setProjects] = useState<CloudProject[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
-  const [showMigrationDialog, setShowMigrationDialog] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [selectedProject, setSelectedProject] = useState<CloudProject | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -48,7 +46,6 @@ export function CloudHomePage() {
   useEffect(() => {
     loadProjects();
     loadUserProfile();
-    checkForLocalProjects();
     
     // Set up real-time subscriptions
     const projectsChannel = supabase
@@ -86,23 +83,13 @@ export function CloudHomePage() {
     }
   };
 
-  const checkForLocalProjects = () => {
-    const localProjectsList = localStorage.getItem('pool-design-projects-list');
-    if (localProjectsList) {
-      const ids = JSON.parse(localProjectsList);
-      if (ids.length > 0) {
-        setShowMigrationDialog(true);
-      }
-    }
-  };
-
   const loadProjects = async () => {
     if (!user) return;
 
     try {
       const { data, error } = await supabase
         .from('projects')
-        .select('*, profiles:owner_id(full_name)')
+        .select('*')
         .eq('is_archived', false)
         .order('updated_at', { ascending: false });
 
@@ -321,9 +308,6 @@ export function CloudHomePage() {
               <Plus className="w-4 h-4 mr-2" />
               New Project
             </Button>
-            <Button variant="outline" onClick={() => setShowMigrationDialog(true)}>
-              Migrate Local Projects
-            </Button>
           </div>
           
           <div className="relative w-64">
@@ -393,7 +377,7 @@ export function CloudHomePage() {
                   <CardContent>
                     <div className="space-y-2 text-sm text-muted-foreground">
                       <p>Updated: {formatDate(project.updated_at)}</p>
-                      <p>Owner: {project.owner_id === user?.id ? 'You' : (project.profiles?.full_name || 'Unknown')}</p>
+                      <p>Owner: {project.owner_id === user?.id ? 'You' : 'Shared'}</p>
                       <p>{getComponentSummary(project.components)}</p>
                     </div>
                     <Button
@@ -415,12 +399,6 @@ export function CloudHomePage() {
         open={showNewProjectModal}
         onOpenChange={setShowNewProjectModal}
         onSubmit={handleCreateProject}
-      />
-
-      <MigrationDialog
-        open={showMigrationDialog}
-        onOpenChange={setShowMigrationDialog}
-        onMigrationComplete={loadProjects}
       />
 
       {selectedProject && (
