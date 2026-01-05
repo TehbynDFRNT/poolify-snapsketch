@@ -21,7 +21,7 @@ import { PavingAreaComponent } from './canvas/PavingAreaComponent';
 
 // Import UI components
 import { Button } from '@/components/ui/button';
-import { Home, Grid3X3, Tag, FileText } from 'lucide-react';
+import { Home, Grid3X3, Tag, FileText, ZoomIn, ZoomOut } from 'lucide-react';
 
 const INITIAL_SCALE = 0.7;
 
@@ -167,6 +167,16 @@ export const PublicProjectView: React.FC = () => {
     });
   };
 
+  const handleZoomIn = () => {
+    const newZoom = Math.min(5, zoom * 1.2);
+    setZoom(newZoom);
+  };
+
+  const handleZoomOut = () => {
+    const newZoom = Math.max(0.1, zoom / 1.2);
+    setZoom(newZoom);
+  };
+
   const renderComponent = (component: Component) => {
     const commonProps = {
       component,
@@ -271,6 +281,22 @@ export const PublicProjectView: React.FC = () => {
           >
             <FileText className="h-4 w-4" />
             <span className="hidden sm:inline">Blueprint</span>
+          </button>
+          <div className="w-px h-6 bg-gray-300 mx-1" />
+          <button
+            onClick={handleZoomOut}
+            className="flex items-center justify-center w-8 h-8 rounded text-gray-600 hover:bg-gray-100 transition-colors"
+            title="Zoom Out"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </button>
+          <span className="text-xs text-gray-500 min-w-[3rem] text-center">{Math.round(zoom * 100)}%</span>
+          <button
+            onClick={handleZoomIn}
+            className="flex items-center justify-center w-8 h-8 rounded text-gray-600 hover:bg-gray-100 transition-colors"
+            title="Zoom In"
+          >
+            <ZoomIn className="h-4 w-4" />
           </button>
         </div>
 
