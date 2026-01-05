@@ -23,7 +23,7 @@ import { PavingAreaComponent } from './canvas/PavingAreaComponent';
 import { Button } from '@/components/ui/button';
 import { Home, Grid3X3, Tag, FileText, ZoomIn, ZoomOut } from 'lucide-react';
 
-const INITIAL_SCALE = 0.7;
+const INITIAL_SCALE = 0.5; // 30% further out than 0.7
 
 export const PublicProjectView: React.FC = () => {
   const { token } = useParams<{ token: string }>();
