@@ -381,14 +381,14 @@ const MaterialsSummary = ({
         </Card>
       )}
 
-      {summary.paving.length > 0 && (
+      {summary.paving.filter(p => p.count > 0).length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Paving</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="space-y-3">
-              {summary.paving.map((paving, i) => (
+              {summary.paving.filter(p => p.count > 0).map((paving, i) => (
                 <li key={i} className="text-sm">
                   <div className="font-medium">• {paving.size}</div>
                   <div className="text-xs text-muted-foreground ml-4 mt-1 space-y-0.5">
