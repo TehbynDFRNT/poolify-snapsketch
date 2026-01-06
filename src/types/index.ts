@@ -247,17 +247,19 @@ export interface Summary {
   }>;
   drainage: Array<{
     type: string;
-    length: number;
+    length: number;     // Total length in mm
+    width: number;      // Width in mm from DRAINAGE_TYPES
   }>;
   fencing: Array<{
     type: string;
-    length: number;
+    length: number;     // Length in mm
+    gates: number;      // Number of gates
   }>;
   walls: Array<{
     material: string;
-    length: number;
-    height: number;
-    status?: string;
+    length: number;     // Length in mm
+    height: number;     // Height in mm
+    status?: 'proposed' | 'existing';
   }>;
 }
 

@@ -370,10 +370,7 @@ const MaterialsSummary = ({
                   </div>
                   {pool.coping && (
                     <div className="text-xs text-blue-600 dark:text-blue-400 ml-4 mt-1 space-y-0.5">
-                      <div className="font-medium">Coping: {pool.coping.totalPavers} pavers ({pool.coping.paverSize})</div>
-                      <div>
-                        {pool.coping.fullPavers} full + {pool.coping.partialPavers} partial
-                      </div>
+                      <div className="font-medium">Coping: {pool.coping.paverSize}</div>
                       <div>Total area: {pool.coping.area.toFixed(2)} m²</div>
                     </div>
                   )}
@@ -419,8 +416,8 @@ const MaterialsSummary = ({
                   <div className="font-medium">• {drain.type} Drainage</div>
                   <div className="text-xs text-muted-foreground ml-4 mt-1 space-y-0.5">
                     <div>Length: {formatLength(drain.length)}</div>
-                    <div>Width: 100mm</div>
-                    <div>Volume: {((drain.length / 1000) * 0.1).toFixed(2)} m³</div>
+                    <div>Width: {drain.width}mm</div>
+                    <div>Volume: {((drain.length / 1000) * (drain.width / 1000)).toFixed(2)} m³</div>
                   </div>
                 </li>
               ))}
@@ -469,7 +466,7 @@ const MaterialsSummary = ({
             <ul className="space-y-3">
               {summary.walls.map((wall, i) => (
                 <li key={i} className="text-sm">
-                  <div className="font-medium">• {wall.material} Retaining Wall</div>
+                  <div className="font-medium">• {wall.material} Retaining Wall {wall.status === 'existing' && <span className="text-orange-500">(Existing)</span>}</div>
                   <div className="text-xs text-muted-foreground ml-4 mt-1 space-y-0.5">
                     <div>Length: {formatLength(wall.length)}</div>
                     <div>Height: {formatLength(wall.height)}</div>

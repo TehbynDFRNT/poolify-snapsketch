@@ -108,16 +108,24 @@ export const calculateMeasurements = (components: Component[]): Summary => {
 
       case 'drainage': {
         const type = component.properties.drainageType || 'rock';
-        const length = component.properties.length || component.dimensions.width;
-        const label = DRAINAGE_TYPES[type]?.label || type;
-        
+        const drainageData = DRAINAGE_TYPES[type];
+        const label = drainageData?.label || type;
+        const width = drainageData?.width || 100;
+
+        // Use totalLM for polyline drains, fallback to length or dimensions
+        const totalLM = component.properties.totalLM as number | undefined;
+        const lengthMm = totalLM
+          ? totalLM * 1000  // totalLM is in meters, convert to mm
+          : (component.properties.length || (component.dimensions.width * 10)); // dimensions in px, 1px = 10mm
+
         const existing = summary.drainage.find(d => d.type === label);
         if (existing) {
-          existing.length += length;
+          existing.length += lengthMm;
         } else {
           summary.drainage.push({
             type: label,
-            length,
+            length: lengthMm,
+            width,
           });
         }
         break;
@@ -126,14 +134,22 @@ export const calculateMeasurements = (components: Component[]): Summary => {
       case 'fence': {
         const type = component.properties.fenceType || 'glass';
         const fenceLabel = FENCE_TYPES[type]?.label || 'Glass Pool Fence';
-        // Use dimensions.width (in pixels) and convert to mm (1 pixel = 10mm)
-        const length = (component.dimensions.width || 0) * 10;
-        
+
+        // Use totalLM for polyline fences, fallback to dimensions
+        const totalLM = component.properties.totalLM as number | undefined;
+        const lengthMm = totalLM
+          ? totalLM * 1000  // totalLM is in meters, convert to mm
+          : (component.dimensions.width || 0) * 10; // dimensions in px, 1px = 10mm
+
+        // Count gates
+        const gates = (component.properties.gates as Array<any> || []).length;
+
         // Only add fences with valid lengths (ignore zero-length fences)
-        if (length > 0) {
+        if (lengthMm > 0) {
           summary.fencing.push({
             type: fenceLabel,
-            length,
+            length: lengthMm,
+            gates,
           });
         }
         break;
@@ -142,13 +158,19 @@ export const calculateMeasurements = (components: Component[]): Summary => {
       case 'wall': {
         const material = component.properties.wallMaterial || 'timber';
         const materialData = WALL_MATERIALS[material as keyof typeof WALL_MATERIALS];
-        const length = component.dimensions.width;
+
+        // Use totalLM for polyline walls, fallback to dimensions
+        const totalLM = component.properties.totalLM as number | undefined;
+        const lengthMm = totalLM
+          ? totalLM * 1000  // totalLM is in meters, convert to mm
+          : (component.dimensions.width || 0) * 10; // dimensions in px, 1px = 10mm
+
         const height = component.properties.wallHeight || 1200;
-        const status = component.properties.wallStatus || 'proposed';
-        
+        const status = (component.properties.wallStatus || 'proposed') as 'proposed' | 'existing';
+
         summary.walls.push({
           material: materialData?.label || 'Timber',
-          length,
+          length: lengthMm,
           height,
           status,
         });
