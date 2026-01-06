@@ -174,11 +174,16 @@ export const calculateMeasurements = (components: Component[]): Summary => {
         const material = component.properties.wallMaterial || 'timber';
         const materialData = WALL_MATERIALS[material as keyof typeof WALL_MATERIALS];
 
-        // Use totalLM for polyline walls, fallback to dimensions
-        const totalLM = component.properties.totalLM as number | undefined;
-        const lengthMm = totalLM
-          ? totalLM * 1000  // totalLM is in meters, convert to mm
-          : (component.dimensions.width || 0) * 10; // dimensions in px, 1px = 10mm
+        // Calculate length from polyline points
+        const points = component.properties.points as Array<{ x: number; y: number }> | undefined;
+        let lengthMm = 0;
+        if (points && points.length >= 2) {
+          for (let i = 0; i < points.length - 1; i++) {
+            const dx = points[i + 1].x - points[i].x;
+            const dy = points[i + 1].y - points[i].y;
+            lengthMm += Math.sqrt(dx * dx + dy * dy) * 10; // px to mm (1px = 10mm)
+          }
+        }
 
         const height = component.properties.wallHeight || 1200;
         const status = (component.properties.wallStatus || 'proposed') as 'proposed' | 'existing';
