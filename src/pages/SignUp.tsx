@@ -15,7 +15,7 @@ export function SignUp() {
   const [role, setRole] = useState<'sales_rep' | 'designer'>('sales_rep');
   const [loading, setLoading] = useState(false);
   const { verified: accessVerified, accessToken } = useAccessToken();
-  const { signUp, signInWithGoogle } = useAuth();
+  const { signUp } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -56,20 +56,6 @@ export function SignUp() {
         description: "Welcome to Pool Design Tool",
       });
       navigate('/projects');
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    setLoading(true);
-    const { error } = await signInWithGoogle();
-    
-    if (error) {
-      toast({
-        title: "Google sign-in failed",
-        description: error.message,
-        variant: "destructive",
-      });
-      setLoading(false);
     }
   };
 
@@ -176,25 +162,6 @@ export function SignUp() {
 
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? 'Creating account...' : 'Sign Up'}
-          </Button>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">Or</span>
-            </div>
-          </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={handleGoogleSignIn}
-            disabled={loading}
-          >
-            🔵 Sign up with Google
           </Button>
 
           <p className="text-center text-sm text-muted-foreground">

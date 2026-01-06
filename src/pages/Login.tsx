@@ -13,7 +13,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { verified: accessVerified, accessToken } = useAccessToken();
-  const { signIn, signInWithGoogle } = useAuth();
+  const { signIn } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -59,20 +59,6 @@ export function Login() {
       });
       clearSSORedirect();
       navigate(from, { replace: true });
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    setLoading(true);
-    const { error } = await signInWithGoogle();
-    
-    if (error) {
-      toast({
-        title: "Google sign-in failed",
-        description: error.message,
-        variant: "destructive",
-      });
-      setLoading(false);
     }
   };
 
@@ -151,25 +137,6 @@ export function Login() {
 
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? 'Logging in...' : 'Log In'}
-          </Button>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">Or</span>
-            </div>
-          </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={handleGoogleSignIn}
-            disabled={loading}
-          >
-            🔵 Sign in with Google
           </Button>
 
           <p className="text-center text-sm text-muted-foreground">
