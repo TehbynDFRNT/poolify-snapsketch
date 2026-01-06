@@ -91,25 +91,21 @@ export const FenceComponent = ({
   const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [ghostLocal, setGhostLocal] = useState<Array<{ x: number; y: number }> | null>(null);
-  const [shiftPressed, setShiftPressed] = useState(false);
+  // shiftPressed from store (supports touch toggle button)
+  const shiftPressed = useDesignStore((s) => s.shiftPressed);
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
 
+  // Escape key to clear segment selection
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') setShiftPressed(true);
       if (e.key === 'Escape') {
         setSelectedSeg(null);
         selectFenceSegment(null);
       }
     };
-    const up = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') setShiftPressed(false);
-    };
     window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
     return () => {
       window.removeEventListener('keydown', down);
-      window.removeEventListener('keyup', up);
     };
   }, []);
 

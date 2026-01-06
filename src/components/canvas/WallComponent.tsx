@@ -45,25 +45,11 @@ export const WallComponent = ({
 
   const updateComponent = useDesignStore((s) => s.updateComponent);
   const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
+  // shiftPressed from store (supports touch toggle button)
+  const shiftPressed = useDesignStore((s) => s.shiftPressed);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [ghostLocal, setGhostLocal] = useState<Array<{ x: number; y: number }> | null>(null);
-  const [shiftPressed, setShiftPressed] = useState(false);
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
-
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') setShiftPressed(true);
-    };
-    const up = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') setShiftPressed(false);
-    };
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-    return () => {
-      window.removeEventListener('keydown', down);
-      window.removeEventListener('keyup', up);
-    };
-  }, []);
 
   const handleRightClick = (e: any) => {
     e.evt.preventDefault();

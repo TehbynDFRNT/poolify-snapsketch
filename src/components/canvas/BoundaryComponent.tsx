@@ -84,23 +84,10 @@ export const BoundaryComponent = ({
       });
     }
   }, [points, closed, component.id, component.properties.centerOfMass, updateComponentSilent]);
-  const [shiftPressed, setShiftPressed] = useState(false);
-  const dragStartPos = useRef<{ x: number; y: number } | null>(null);
 
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') setShiftPressed(true);
-    };
-    const up = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') setShiftPressed(false);
-    };
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-    return () => {
-      window.removeEventListener('keydown', down);
-      window.removeEventListener('keyup', up);
-    };
-  }, []);
+  // shiftPressed from store (supports touch toggle button)
+  const shiftPressed = useDesignStore((s) => s.shiftPressed);
+  const dragStartPos = useRef<{ x: number; y: number } | null>(null);
 
   const handleRightClick = (e: any) => {
     e.evt.preventDefault();

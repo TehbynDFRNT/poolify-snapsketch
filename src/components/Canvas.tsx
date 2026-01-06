@@ -78,7 +78,9 @@ export const Canvas = ({
   const [measureStart, setMeasureStart] = useState<{ x: number; y: number } | null>(null);
   const [measureEnd, setMeasureEnd] = useState<{ x: number; y: number } | null>(null);
   const [isMeasuring, setIsMeasuring] = useState(false);
-  const [shiftPressed, setShiftPressed] = useState(false);
+  // shiftPressed from store (for touch device toggle support - used for node editing)
+  // keyboardShiftPressed is local state for canvas panning only (don't want touch toggle to enable pan)
+  const [keyboardShiftPressed, setKeyboardShiftPressed] = useState(false);
 
   // Universal context menu state
   const [contextMenuState, setContextMenuState] = useState<{ open: boolean; x: number; y: number; component: Component | null }>({
@@ -117,6 +119,8 @@ export const Canvas = ({
     updateComponent,
     deleteComponent,
     currentProject,
+    shiftPressed,
+    setShiftPressed,
   } = useDesignStore();
 
   // Removed global clip wrapper; components render un-clipped
@@ -539,9 +543,10 @@ export const Canvas = ({
         return;
       }
 
-      // Track Shift key
+      // Track Shift key - set both store (for node editing) and local (for panning)
       if (e.key === 'Shift') {
         setShiftPressed(true);
+        setKeyboardShiftPressed(true);
       }
 
       // Arrow key movement for simple positioned objects only
@@ -627,6 +632,7 @@ export const Canvas = ({
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.key === 'Shift') {
         setShiftPressed(false);
+        setKeyboardShiftPressed(false);
       }
     };
 
@@ -1100,8 +1106,9 @@ export const Canvas = ({
     );
   };
 
-  // Determine if stage should be draggable (hand tool OR select tool with shift AND no object selected)
-  const isDraggable = activeTool === 'hand' || (activeTool === 'select' && shiftPressed && !selectedComponentId);
+  // Determine if stage should be draggable (hand tool OR select tool with KEYBOARD shift AND no object selected)
+  // Note: Uses keyboardShiftPressed (not store shiftPressed) so touch toggle doesn't enable panning
+  const isDraggable = activeTool === 'hand' || (activeTool === 'select' && keyboardShiftPressed && !selectedComponentId);
 
   // Disable selection/listening on components while drawing/placing/measuring for polyline tools
   // Also block selection when shift-panning
@@ -1109,8 +1116,8 @@ export const Canvas = ({
     const polylineTools = new Set([
       'boundary', 'house', 'paving_area', 'area', 'wall', 'fence', 'drainage', 'quick_measure'
     ]);
-    // Block selection when in shift-pan mode (select tool + shift + no selection)
-    const isShiftPanning = activeTool === 'select' && shiftPressed && !selectedComponentId;
+    // Block selection when in shift-pan mode (select tool + keyboard shift + no selection)
+    const isShiftPanning = activeTool === 'select' && keyboardShiftPressed && !selectedComponentId;
     return isDrawing || isMeasuring || polylineTools.has(activeTool) || isShiftPanning;
   })();
 

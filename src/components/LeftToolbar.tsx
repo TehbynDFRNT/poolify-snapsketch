@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   MousePointer2,
   Hand,
@@ -20,6 +20,8 @@ import { cn } from '@/lib/utils';
 import type { ToolType, Component } from '@/types';
 import { DRAINAGE_TYPES, WALL_MATERIALS } from '@/constants/components';
 
+const LONG_PRESS_DURATION = 500; // ms for long-press to trigger menu
+
 interface LeftToolbarProps {
   activeTool: ToolType;
   components: Component[];
@@ -38,6 +40,7 @@ interface LeftToolbarProps {
 export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolbarProps) => {
   const [toolMenu, setToolMenu] = useState<{ open: boolean; x: number; y: number; tool: ToolType | 'area' | 'select' | null }>({ open: false, x: 0, y: 0, tool: null });
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track selected sub-options
   const [selectedAreaType, setSelectedAreaType] = useState<'pavers' | 'concrete' | 'grass'>('pavers');
@@ -57,6 +60,40 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
     document.addEventListener('click', onDoc);
     return () => document.removeEventListener('click', onDoc);
   }, [toolMenu.open]);
+
+  // Long-press handlers for touch devices
+  const handleTouchStart = useCallback((e: React.TouchEvent, tool: { id: ToolType | 'area' | 'select'; hasMenu?: boolean; disabled?: boolean }) => {
+    if (!tool.hasMenu || tool.disabled) return;
+
+    const target = e.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+
+    longPressTimeoutRef.current = setTimeout(() => {
+      setToolMenu({ open: true, x: rect.right + 4, y: rect.top, tool: tool.id });
+      // Prevent the click from firing after long-press
+      target.dataset.longPressed = 'true';
+    }, LONG_PRESS_DURATION);
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    }
+    // Clear long-press flag after a short delay
+    const target = e.currentTarget as HTMLElement;
+    setTimeout(() => {
+      target.dataset.longPressed = 'false';
+    }, 50);
+  }, []);
+
+  const handleTouchMove = useCallback(() => {
+    // Cancel long-press if finger moves
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    }
+  }, []);
 
   // Helper to render a colored square with the original icon inside
   const coloredIcon = (bg: string, icon: JSX.Element, iconClassName?: string) => (
@@ -151,7 +188,7 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
   };
 
   return (
-    <div className="w-[72px] border-r bg-background flex flex-col gap-2 p-2 flex-shrink-0">
+    <div className="w-[72px] border-r bg-background flex flex-col gap-2 p-2 flex-shrink-0 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
       {tools.map(tool => {
         const isActive = tool.id === 'select'
           ? (activeTool === 'select' || activeTool === 'hand')
@@ -166,7 +203,15 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
             <Button
               variant={isActive ? 'default' : 'ghost'}
               size="icon"
-              onClick={() => !tool.disabled && handleToolClick(tool.id)}
+              onClick={(e) => {
+                // Skip click if long-press just triggered
+                const target = e.currentTarget as HTMLElement;
+                if (target.dataset.longPressed === 'true') {
+                  target.dataset.longPressed = 'false';
+                  return;
+                }
+                if (!tool.disabled) handleToolClick(tool.id);
+              }}
               onContextMenu={(e) => {
                 if (tool.hasMenu && !tool.disabled) {
                   e.preventDefault();
@@ -174,8 +219,11 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
                   setToolMenu({ open: true, x: rect.right + 4, y: rect.top, tool: tool.id });
                 }
               }}
+              onTouchStart={(e) => handleTouchStart(e, tool)}
+              onTouchEnd={handleTouchEnd}
+              onTouchMove={handleTouchMove}
               className={cn(
-                "w-14 h-14 flex-shrink-0",
+                "w-14 h-14 flex-shrink-0 touch-manipulation",
                 isActive && 'bg-primary text-primary-foreground',
                 tool.disabled && 'opacity-40 cursor-not-allowed'
               )}

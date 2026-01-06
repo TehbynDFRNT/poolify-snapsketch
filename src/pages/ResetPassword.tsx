@@ -1,15 +1,17 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
+import { useAccessToken, buildAuthUrl } from '@/hooks/useAccessToken';
 
 export function ResetPassword() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const { verified: accessVerified, accessToken } = useAccessToken();
   const { updatePassword } = useAuth();
   const navigate = useNavigate();
 
@@ -62,6 +64,38 @@ export function ResetPassword() {
       navigate('/projects');
     }
   };
+
+  // Still checking access
+  if (accessVerified === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Verifying access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Access denied
+  if (!accessVerified) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="w-full max-w-md space-y-8 text-center">
+          <h1 className="text-3xl font-bold">🏊 Pool Design Tool</h1>
+          <div className="mt-8 p-6 border rounded-lg bg-destructive/10">
+            <h2 className="text-xl font-semibold text-destructive">Access Denied</h2>
+            <p className="mt-2 text-muted-foreground">
+              Valid access token required.
+            </p>
+            <Link to={buildAuthUrl('/login', accessToken)} className="mt-4 inline-block text-primary hover:underline">
+              Go to Login
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">

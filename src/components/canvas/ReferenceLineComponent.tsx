@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Group, Line, Circle, Label, Tag, Text } from 'react-konva';
 import { Component } from '@/types';
 import { useDesignStore } from '@/store/designStore';
@@ -26,24 +26,9 @@ export const ReferenceLineComponent: React.FC<Props> = ({
   const blueprintMode = useDesignStore((s) => s.blueprintMode);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [isDraggingNode, setIsDraggingNode] = useState(false);
-  const [shiftPressed, setShiftPressed] = useState(false);
+  // shiftPressed from store (supports touch toggle button for hinge mode)
+  const shiftPressed = useDesignStore((s) => s.shiftPressed);
   const points = component.properties.points || [];
-
-  // Track shift key for hinge mode
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') setShiftPressed(true);
-    };
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') setShiftPressed(false);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, []);
   if (points.length < 2) return null;
 
   const [start, end] = points;

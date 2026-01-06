@@ -24,7 +24,8 @@ interface DesignStore {
   blueprintMode: boolean; // Technical/construction style rendering
   snapEnabled: boolean;
   zoomLocked: boolean;
-  
+  shiftPressed: boolean; // Virtual shift key for touch devices
+
   // History
   history: Component[][];
   historyIndex: number;
@@ -62,7 +63,8 @@ interface DesignStore {
   toggleBlueprintMode: () => void;
   toggleSnap: () => void;
   toggleZoomLock: () => void;
-  
+  setShiftPressed: (pressed: boolean) => void;
+
   getMeasurements: () => Summary;
   saveCurrentProject: () => void;
   updateCurrentProject: (updates: Partial<Project>) => void;
@@ -86,7 +88,8 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   blueprintMode: false, // Session-only, defaults to off
   snapEnabled: true,
   zoomLocked: false,
-  
+  shiftPressed: false,
+
   history: [[]],
   historyIndex: 0,
   
@@ -361,7 +364,8 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   }),
   toggleSnap: () => set((state) => ({ snapEnabled: !state.snapEnabled })),
   toggleZoomLock: () => set((state) => ({ zoomLocked: !state.zoomLocked })),
-  
+  setShiftPressed: (pressed) => set({ shiftPressed: pressed }),
+
   getMeasurements: () => {
     const { components } = get();
     return calculateMeasurements(components);

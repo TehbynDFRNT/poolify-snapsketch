@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Home,
@@ -6,9 +7,19 @@ import {
   Save,
   Download,
   Menu,
-  Share2
+  Share2,
+  Layers,
+  Grid3X3,
+  Satellite,
+  Tag,
+  FileText
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 
 interface TopBarProps {
   projectName: string;
@@ -51,6 +62,8 @@ export const TopBar = ({
   onExport,
   onMenuClick,
 }: TopBarProps) => {
+  const [layersOpen, setLayersOpen] = useState(false);
+
   const formatLastSaved = (date: Date | null) => {
     if (!date) return 'Not saved';
     const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -104,44 +117,115 @@ export const TopBar = ({
           <Redo2 className="w-5 h-5" />
         </Button>
         
-        <label className="flex items-center gap-2 px-2 cursor-pointer">
+        {/* Mobile/Tablet: Layers popover */}
+        <Popover open={layersOpen} onOpenChange={setLayersOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="lg:hidden min-w-[44px] min-h-[44px]"
+              title="Layer options"
+            >
+              <Layers className="w-5 h-5" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-48 p-2" align="end">
+            <div className="space-y-1">
+              <button
+                onClick={() => onGridToggle()}
+                className="flex items-center gap-3 w-full px-3 py-2 rounded-md hover:bg-accent text-left"
+              >
+                <Grid3X3 className="w-4 h-4" />
+                <span className="flex-1 text-sm">Grid</span>
+                <input
+                  type="checkbox"
+                  checked={gridVisible}
+                  onChange={() => {}}
+                  className="w-4 h-4 pointer-events-none"
+                />
+              </button>
+              <button
+                onClick={() => onSatelliteToggle()}
+                className="flex items-center gap-3 w-full px-3 py-2 rounded-md hover:bg-accent text-left"
+              >
+                <Satellite className="w-4 h-4" />
+                <span className="flex-1 text-sm">Satellite</span>
+                <input
+                  type="checkbox"
+                  checked={satelliteVisible}
+                  onChange={() => {}}
+                  className="w-4 h-4 pointer-events-none"
+                />
+              </button>
+              <button
+                onClick={() => onAnnotationsToggle()}
+                className="flex items-center gap-3 w-full px-3 py-2 rounded-md hover:bg-accent text-left"
+              >
+                <Tag className="w-4 h-4" />
+                <span className="flex-1 text-sm">Annotations</span>
+                <input
+                  type="checkbox"
+                  checked={annotationsVisible}
+                  onChange={() => {}}
+                  className="w-4 h-4 pointer-events-none"
+                />
+              </button>
+              <button
+                onClick={() => onBlueprintToggle()}
+                className="flex items-center gap-3 w-full px-3 py-2 rounded-md hover:bg-accent text-left"
+              >
+                <FileText className="w-4 h-4" />
+                <span className="flex-1 text-sm">Blueprint</span>
+                <input
+                  type="checkbox"
+                  checked={blueprintMode}
+                  onChange={() => {}}
+                  className="w-4 h-4 pointer-events-none"
+                />
+              </button>
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        {/* Desktop: Inline layer checkboxes */}
+        <label className="hidden lg:flex items-center gap-2 px-2 cursor-pointer">
           <input
             type="checkbox"
             checked={gridVisible}
-            onChange={(e) => onGridToggle()}
+            onChange={() => onGridToggle()}
             className="w-4 h-4"
           />
-          <span className="text-sm hidden md:inline">Grid</span>
+          <span className="text-sm">Grid</span>
         </label>
 
-        <label className="flex items-center gap-2 px-2 cursor-pointer">
+        <label className="hidden lg:flex items-center gap-2 px-2 cursor-pointer">
           <input
             type="checkbox"
             checked={satelliteVisible}
             onChange={() => onSatelliteToggle()}
             className="w-4 h-4"
           />
-          <span className="text-sm hidden md:inline">Satellite</span>
+          <span className="text-sm">Satellite</span>
         </label>
 
-        <label className="flex items-center gap-2 px-2 cursor-pointer">
+        <label className="hidden lg:flex items-center gap-2 px-2 cursor-pointer">
           <input
             type="checkbox"
             checked={annotationsVisible}
             onChange={() => onAnnotationsToggle()}
             className="w-4 h-4"
           />
-          <span className="text-sm hidden md:inline">Annotations</span>
+          <span className="text-sm">Annotations</span>
         </label>
 
-        <label className="flex items-center gap-2 px-2 cursor-pointer">
+        <label className="hidden lg:flex items-center gap-2 px-2 cursor-pointer">
           <input
             type="checkbox"
             checked={blueprintMode}
             onChange={() => onBlueprintToggle()}
             className="w-4 h-4"
           />
-          <span className="text-sm hidden md:inline">Blueprint</span>
+          <span className="text-sm">Blueprint</span>
         </label>
 
         <Button

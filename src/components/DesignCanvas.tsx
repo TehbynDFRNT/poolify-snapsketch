@@ -21,6 +21,7 @@ import { LeftToolbar } from './LeftToolbar';
 import { BottomPanel } from './BottomPanel';
 import { FloatingPropertiesCard } from './FloatingPropertiesCard';
 import { FloatingKeyboardShortcuts } from './FloatingKeyboardShortcuts';
+import { FloatingShiftToggle } from './FloatingShiftToggle';
 import { ExportDialog } from './ExportDialog';
 import { ShareProjectDialog } from './ShareProjectDialog';
 import { AddressAutocomplete } from './AddressAutocomplete';
@@ -586,6 +587,14 @@ export const DesignCanvas = () => {
               hasSelection={!!selectedComponentId}
               selectedComponentType={selectedComponent?.type}
             />
+          </div>
+
+          {/* Floating Shift Toggle - for touch devices */}
+          <div
+            className="absolute left-4 z-40"
+            style={{ bottom: `${bottomPanelHeight + 16}px` }}
+          >
+            <FloatingShiftToggle />
           </div>
 
           {/* Bottom Panel */}

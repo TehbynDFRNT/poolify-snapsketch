@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { toast } from '@/hooks/use-toast';
-import { verifyAccessToken, storeAccessToken, hasValidStoredToken } from '@/utils/accessToken';
+import { useAccessToken, buildAuthUrl } from '@/hooks/useAccessToken';
 
 export function SignUp() {
   const [fullName, setFullName] = useState('');
@@ -14,32 +14,9 @@ export function SignUp() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'sales_rep' | 'designer'>('sales_rep');
   const [loading, setLoading] = useState(false);
-  const [accessVerified, setAccessVerified] = useState<boolean | null>(null);
+  const { verified: accessVerified, accessToken } = useAccessToken();
   const { signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  // Check access token on mount
-  useEffect(() => {
-    const checkAccess = async () => {
-      const urlToken = searchParams.get('access');
-
-      if (urlToken) {
-        const isValid = await verifyAccessToken(urlToken);
-        if (isValid) {
-          storeAccessToken(urlToken);
-          setAccessVerified(true);
-          return;
-        }
-      }
-
-      // Check stored token
-      const hasStored = await hasValidStoredToken();
-      setAccessVerified(hasStored);
-    };
-
-    checkAccess();
-  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,7 +96,7 @@ export function SignUp() {
             <p className="mt-2 text-muted-foreground">
               Valid access token required.
             </p>
-            <Link to="/login" className="mt-4 inline-block text-primary hover:underline">
+            <Link to={buildAuthUrl('/login', accessToken)} className="mt-4 inline-block text-primary hover:underline">
               Go to Login
             </Link>
           </div>
@@ -222,7 +199,7 @@ export function SignUp() {
 
           <p className="text-center text-sm text-muted-foreground">
             Already have an account?{' '}
-            <Link to="/login" className="font-medium text-primary hover:underline">
+            <Link to={buildAuthUrl('/login', accessToken)} className="font-medium text-primary hover:underline">
               Log In
             </Link>
           </p>

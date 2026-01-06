@@ -5,11 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
+import { useAccessToken, buildAuthUrl } from '@/hooks/useAccessToken';
 
 export function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const { verified: accessVerified, accessToken } = useAccessToken();
   const { resetPassword } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -45,6 +47,38 @@ export function ForgotPassword() {
     }
   };
 
+  // Still checking access
+  if (accessVerified === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Verifying access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Access denied
+  if (!accessVerified) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="w-full max-w-md space-y-8 text-center">
+          <h1 className="text-3xl font-bold">🏊 Pool Design Tool</h1>
+          <div className="mt-8 p-6 border rounded-lg bg-destructive/10">
+            <h2 className="text-xl font-semibold text-destructive">Access Denied</h2>
+            <p className="mt-2 text-muted-foreground">
+              Valid access token required.
+            </p>
+            <Link to={buildAuthUrl('/login', accessToken)} className="mt-4 inline-block text-primary hover:underline">
+              Go to Login
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-8">
@@ -76,7 +110,7 @@ export function ForgotPassword() {
 
             <p className="text-center text-sm text-muted-foreground">
               Remember your password?{' '}
-              <Link to="/login" className="font-medium text-primary hover:underline">
+              <Link to={buildAuthUrl('/login', accessToken)} className="font-medium text-primary hover:underline">
                 Log In
               </Link>
             </p>
@@ -91,7 +125,7 @@ export function ForgotPassword() {
             <p className="text-sm text-muted-foreground">
               Check your email and click the link to reset your password.
             </p>
-            <Link to="/login">
+            <Link to={buildAuthUrl('/login', accessToken)}>
               <Button variant="outline" className="w-full">
                 Back to Login
               </Button>

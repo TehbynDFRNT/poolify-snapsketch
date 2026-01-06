@@ -1,6 +1,6 @@
 import { Group, Line, Circle, Text } from 'react-konva';
 import { Component } from '@/types';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
 import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
@@ -35,16 +35,9 @@ export const HouseComponent = ({
   const groupRef = useRef<any>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [ghostLocal, setGhostLocal] = useState<Array<{ x: number; y: number }> | null>(null);
-  const [shiftPressed, setShiftPressed] = useState(false);
+  // shiftPressed from store (supports touch toggle button)
+  const shiftPressed = useDesignStore((s) => s.shiftPressed);
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
-
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => { if (e.key === 'Shift') setShiftPressed(true); };
-    const up = (e: KeyboardEvent) => { if (e.key === 'Shift') setShiftPressed(false); };
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
-  }, []);
 
   const handleRightClick = (e: any) => {
     e.evt.preventDefault();

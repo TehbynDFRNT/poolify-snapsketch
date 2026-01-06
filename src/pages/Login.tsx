@@ -1,22 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
-import { verifyAccessToken, storeAccessToken, hasValidStoredToken } from '@/utils/accessToken';
+import { useAccessToken, buildAuthUrl } from '@/hooks/useAccessToken';
 import { getSSORediect, getSSOEmail, clearSSORedirect } from '@/pages/SSO';
 
 export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [accessVerified, setAccessVerified] = useState<boolean | null>(null);
+  const { verified: accessVerified, accessToken } = useAccessToken();
   const { signIn, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchParams] = useSearchParams();
 
   // Check for SSO redirect first, then fall back to location state
   const ssoRedirect = getSSORediect();
@@ -29,28 +28,6 @@ export function Login() {
       setEmail(ssoEmail);
     }
   }, []);
-
-  // Check access token on mount
-  useEffect(() => {
-    const checkAccess = async () => {
-      const urlToken = searchParams.get('access');
-
-      if (urlToken) {
-        const isValid = await verifyAccessToken(urlToken);
-        if (isValid) {
-          storeAccessToken(urlToken);
-          setAccessVerified(true);
-          return;
-        }
-      }
-
-      // Check stored token
-      const hasStored = await hasValidStoredToken();
-      setAccessVerified(hasStored);
-    };
-
-    checkAccess();
-  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,7 +141,7 @@ export function Login() {
 
             <div className="text-right">
               <Link
-                to="/forgot-password"
+                to={buildAuthUrl('/forgot-password', accessToken)}
                 className="text-sm text-primary hover:underline"
               >
                 Forgot Password?
@@ -197,7 +174,7 @@ export function Login() {
 
           <p className="text-center text-sm text-muted-foreground">
             Don't have an account?{' '}
-            <Link to="/signup" className="font-medium text-primary hover:underline">
+            <Link to={buildAuthUrl('/signup', accessToken)} className="font-medium text-primary hover:underline">
               Sign Up
             </Link>
           </p>
