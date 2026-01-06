@@ -4,7 +4,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { toast } from '@/hooks/use-toast';
 import { useAccessToken, buildAuthUrl } from '@/hooks/useAccessToken';
 
@@ -12,7 +11,6 @@ export function SignUp() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'sales_rep' | 'designer'>('sales_rep');
   const [loading, setLoading] = useState(false);
   const { verified: accessVerified, accessToken } = useAccessToken();
   const { signUp } = useAuth();
@@ -41,7 +39,7 @@ export function SignUp() {
 
     setLoading(true);
     
-    const { error } = await signUp(email, password, fullName, role);
+    const { error } = await signUp(email, password, fullName);
     
     if (error) {
       toast({
@@ -139,24 +137,6 @@ export function SignUp() {
               <p className="text-xs text-muted-foreground mt-1">
                 Minimum 8 characters
               </p>
-            </div>
-
-            <div>
-              <Label>Role</Label>
-              <RadioGroup value={role} onValueChange={(value) => setRole(value as 'sales_rep' | 'designer')} className="mt-2 space-y-2">
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="sales_rep" id="sales_rep" />
-                  <Label htmlFor="sales_rep" className="font-normal cursor-pointer">
-                    Sales Representative
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="designer" id="designer" />
-                  <Label htmlFor="designer" className="font-normal cursor-pointer">
-                    Designer
-                  </Label>
-                </div>
-              </RadioGroup>
             </div>
           </div>
 
