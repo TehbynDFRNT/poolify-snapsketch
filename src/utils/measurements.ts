@@ -7,6 +7,7 @@ export const calculateMeasurements = (components: Component[]): Summary => {
     pools: [],
     paving: [],
     concrete: [],
+    gates: { glass: 0, metal: 0 },
     drainage: [],
     fencing: [],
     walls: [],
@@ -196,6 +197,12 @@ export const calculateMeasurements = (components: Component[]): Summary => {
           status,
           nodeHeights,
         });
+        break;
+      }
+
+      case 'gate': {
+        const gateType = (component.properties.gateType || 'glass') as 'glass' | 'metal';
+        summary.gates[gateType]++;
         break;
       }
     }

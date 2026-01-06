@@ -436,6 +436,24 @@ const MaterialsSummary = ({
         </Card>
       )}
 
+      {(summary.gates.glass > 0 || summary.gates.metal > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Gates ({summary.gates.glass + summary.gates.metal})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1 text-sm">
+              {summary.gates.glass > 0 && (
+                <li>• Glass Gates: {summary.gates.glass}</li>
+              )}
+              {summary.gates.metal > 0 && (
+                <li>• Metal Gates: {summary.gates.metal}</li>
+              )}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
       {summary.drainage.length > 0 && (
         <Card>
           <CardHeader>
@@ -524,7 +542,7 @@ const MaterialsSummary = ({
         </Card>
       )}
 
-      {summary.pools.length === 0 && summary.paving.length === 0 && summary.concrete.length === 0 && summary.drainage.length === 0 && summary.fencing.length === 0 && summary.walls.length === 0 && (
+      {summary.pools.length === 0 && summary.paving.length === 0 && summary.concrete.length === 0 && (summary.gates.glass + summary.gates.metal) === 0 && summary.drainage.length === 0 && summary.fencing.length === 0 && summary.walls.length === 0 && (
         <div className="text-center text-muted-foreground py-8">
           <p>No components added yet</p>
         </div>

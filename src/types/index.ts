@@ -248,6 +248,10 @@ export interface Summary {
   concrete: Array<{
     area: number;         // Total area in m²
   }>;
+  gates: {
+    glass: number;
+    metal: number;
+  };
   drainage: Array<{
     type: string;
     length: number;     // Total length in mm
