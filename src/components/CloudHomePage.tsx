@@ -41,7 +41,7 @@ interface CloudProject {
 export function CloudHomePage() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const { linkToPoolify, searchProjects } = usePoolifyIntegration();
+  const { linkToPoolify, searchProjects, checkLink } = usePoolifyIntegration();
   const [projects, setProjects] = useState<CloudProject[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
@@ -59,6 +59,8 @@ export function CloudHomePage() {
   const [editPoolifyResults, setEditPoolifyResults] = useState<any[]>([]);
   const [editSelectedPoolifyProject, setEditSelectedPoolifyProject] = useState<any>(null);
   const [editPoolifySearching, setEditPoolifySearching] = useState(false);
+  const [editLinkedPoolProject, setEditLinkedPoolProject] = useState<any>(null);
+  const [editCheckingLink, setEditCheckingLink] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<any>(null);
 
@@ -388,7 +390,7 @@ export function CloudHomePage() {
     }
   };
 
-  const openEditDialog = (project: CloudProject) => {
+  const openEditDialog = async (project: CloudProject) => {
     setProjectToEdit(project);
     setEditCustomerName(project.customer_name);
     setEditAddress(project.address);
@@ -397,7 +399,16 @@ export function CloudHomePage() {
     setEditPoolifySearch('');
     setEditPoolifyResults([]);
     setEditSelectedPoolifyProject(null);
+    setEditLinkedPoolProject(null);
     setEditDialogOpen(true);
+
+    // Check if already linked to Poolify
+    setEditCheckingLink(true);
+    const linkStatus = await checkLink(project.id);
+    setEditCheckingLink(false);
+    if (linkStatus?.linked && linkStatus.poolProject) {
+      setEditLinkedPoolProject(linkStatus.poolProject);
+    }
   };
 
   const handleSignOut = async () => {
@@ -666,78 +677,100 @@ export function CloudHomePage() {
 
             {/* Poolify Integration */}
             <div className="grid gap-2 pt-2 border-t">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="editLinkPoolify"
-                  checked={editLinkToPoolify}
-                  onCheckedChange={(checked) => {
-                    setEditLinkToPoolify(!!checked);
-                    if (!checked) {
-                      setEditPoolifySearch('');
-                      setEditPoolifyResults([]);
-                      setEditSelectedPoolifyProject(null);
-                    }
-                  }}
-                />
-                <Label htmlFor="editLinkPoolify" className="flex items-center gap-1.5 cursor-pointer">
-                  <Link className="h-4 w-4" />
-                  Link to Poolify project
-                </Label>
-              </div>
-
-              {editLinkToPoolify && (
-                <div className="space-y-3 mt-2 p-3 border rounded-lg bg-muted/50">
-                  <div className="relative">
-                    <Input
-                      placeholder="Search Poolify by customer name or address..."
-                      value={editPoolifySearch}
-                      onChange={(e) => setEditPoolifySearch(e.target.value)}
-                    />
-                    {editPoolifySearching && (
-                      <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+              {editCheckingLink ? (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Checking Poolify link...</span>
+                </div>
+              ) : editLinkedPoolProject ? (
+                <Alert className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <AlertDescription className="text-green-700 dark:text-green-300">
+                    <span className="flex items-center gap-1.5">
+                      <Link className="h-4 w-4" />
+                      Linked to Poolify: <strong>{editLinkedPoolProject.owner1}</strong>
+                    </span>
+                    {editLinkedPoolProject.siteAddress && (
+                      <span className="text-xs block mt-1 opacity-80">{editLinkedPoolProject.siteAddress}</span>
                     )}
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="editLinkPoolify"
+                      checked={editLinkToPoolify}
+                      onCheckedChange={(checked) => {
+                        setEditLinkToPoolify(!!checked);
+                        if (!checked) {
+                          setEditPoolifySearch('');
+                          setEditPoolifyResults([]);
+                          setEditSelectedPoolifyProject(null);
+                        }
+                      }}
+                    />
+                    <Label htmlFor="editLinkPoolify" className="flex items-center gap-1.5 cursor-pointer">
+                      <Link className="h-4 w-4" />
+                      Link to Poolify project
+                    </Label>
                   </div>
 
-                  {editPoolifyResults.length > 0 && (
-                    <div className="max-h-48 overflow-y-auto space-y-2">
-                      {editPoolifyResults.map((project: any) => (
-                        <div
-                          key={project.id}
-                          className={cn(
-                            "p-2 border rounded cursor-pointer hover:bg-accent transition-colors",
-                            editSelectedPoolifyProject?.id === project.id && "border-primary bg-accent"
-                          )}
-                          onClick={() => setEditSelectedPoolifyProject(project)}
-                        >
-                          <p className="font-medium text-sm">{project.owner1}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {project.siteAddress || project.homeAddress}
-                          </p>
-                          {project.hasSnapSketch && (
-                            <Badge variant="secondary" className="mt-1 text-xs">
-                              Already linked
-                            </Badge>
-                          )}
+                  {editLinkToPoolify && (
+                    <div className="space-y-3 mt-2 p-3 border rounded-lg bg-muted/50">
+                      <div className="relative">
+                        <Input
+                          placeholder="Search Poolify by customer name or address..."
+                          value={editPoolifySearch}
+                          onChange={(e) => setEditPoolifySearch(e.target.value)}
+                        />
+                        {editPoolifySearching && (
+                          <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                        )}
+                      </div>
+
+                      {editPoolifyResults.length > 0 && (
+                        <div className="max-h-48 overflow-y-auto space-y-2">
+                          {editPoolifyResults.map((project: any) => (
+                            <div
+                              key={project.id}
+                              className={cn(
+                                "p-2 border rounded cursor-pointer hover:bg-accent transition-colors",
+                                editSelectedPoolifyProject?.id === project.id && "border-primary bg-accent"
+                              )}
+                              onClick={() => setEditSelectedPoolifyProject(project)}
+                            >
+                              <p className="font-medium text-sm">{project.owner1}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {project.siteAddress || project.homeAddress}
+                              </p>
+                              {project.hasSnapSketch && (
+                                <Badge variant="secondary" className="mt-1 text-xs">
+                                  Already linked
+                                </Badge>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
+
+                      {editPoolifySearch.length >= 2 && !editPoolifySearching && editPoolifyResults.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-2">
+                          No Poolify projects found
+                        </p>
+                      )}
+
+                      {editSelectedPoolifyProject && (
+                        <Alert className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <AlertDescription className="text-green-700 dark:text-green-300">
+                            Will link to: <strong>{editSelectedPoolifyProject.owner1}</strong>
+                          </AlertDescription>
+                        </Alert>
+                      )}
                     </div>
                   )}
-
-                  {editPoolifySearch.length >= 2 && !editPoolifySearching && editPoolifyResults.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-2">
-                      No Poolify projects found
-                    </p>
-                  )}
-
-                  {editSelectedPoolifyProject && (
-                    <Alert className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                      <AlertDescription className="text-green-700 dark:text-green-300">
-                        Will link to: <strong>{editSelectedPoolifyProject.owner1}</strong>
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </div>
+                </>
               )}
             </div>
           </div>

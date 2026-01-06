@@ -31,3 +31,15 @@ export interface PoolifyLinkRequest {
     expiresAt: string | null;
   };
 }
+
+export interface PoolifyLinkStatus {
+  success: boolean;
+  linked: boolean;
+  poolProject?: {
+    id: string;
+    owner1: string;
+    siteAddress: string | null;
+    currentStatus: string;
+  };
+  error?: string;
+}

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { PoolifyProject, PoolifySearchResponse, PoolifyLinkRequest } from '@/types/poolify';
+import { PoolifyProject, PoolifySearchResponse, PoolifyLinkRequest, PoolifyLinkStatus } from '@/types/poolify';
 
 const POOLIFY_API_URL = import.meta.env.VITE_POOLIFY_API_URL;
 const POOLIFY_API_KEY = import.meta.env.VITE_POOLIFY_API_KEY;
@@ -79,9 +79,40 @@ export const usePoolifyIntegration = () => {
     }
   }, []);
 
+  const checkLink = useCallback(async (snapsketchId: string): Promise<PoolifyLinkStatus | null> => {
+    if (!snapsketchId) return null;
+    if (!POOLIFY_API_URL || !POOLIFY_API_KEY) {
+      console.warn('Poolify API configuration missing');
+      return null;
+    }
+
+    try {
+      const response = await fetch(`${POOLIFY_API_URL}/check-snapsketch-link`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${POOLIFY_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ snapsketchId }),
+      });
+
+      const data: PoolifyLinkStatus = await response.json();
+
+      if (!response.ok || !data.success) {
+        return null;
+      }
+
+      return data;
+    } catch (err: any) {
+      console.error('Poolify check link error:', err);
+      return null;
+    }
+  }, []);
+
   return {
     searchProjects,
     linkToPoolify,
+    checkLink,
     loading,
     error,
   };
