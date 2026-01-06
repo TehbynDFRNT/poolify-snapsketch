@@ -261,8 +261,9 @@ export interface Summary {
   walls: Array<{
     material: string;
     length: number;     // Length in mm
-    height: number;     // Height in mm
+    height: number;     // Default height in mm
     status?: 'proposed' | 'existing';
+    nodeHeights?: Record<number, number>;  // Per-node heights
   }>;
 }
 

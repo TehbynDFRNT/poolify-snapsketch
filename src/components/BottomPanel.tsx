@@ -496,16 +496,29 @@ const MaterialsSummary = ({
           </CardHeader>
           <CardContent>
             <ul className="space-y-3">
-              {summary.walls.map((wall, i) => (
-                <li key={i} className="text-sm">
-                  <div className="font-medium">• {wall.material} Retaining Wall {wall.status === 'existing' && <span className="text-orange-500">(Existing)</span>}</div>
-                  <div className="text-xs text-muted-foreground ml-4 mt-1 space-y-0.5">
-                    <div>Length: {formatLength(wall.length)}</div>
-                    <div>Height: {formatLength(wall.height)}</div>
-                    <div>Volume: {((wall.length / 1000) * (wall.height / 1000) * 0.3).toFixed(2)} m³</div>
-                  </div>
-                </li>
-              ))}
+              {summary.walls.map((wall, i) => {
+                const hasNodeHeights = wall.nodeHeights && Object.keys(wall.nodeHeights).length > 0;
+                return (
+                  <li key={i} className="text-sm">
+                    <div className="font-medium">
+                      • Wall {i + 1}: {wall.material} {wall.status === 'existing' && <span className="text-orange-500">(Existing)</span>}
+                    </div>
+                    <div className="text-xs text-muted-foreground ml-4 mt-1 space-y-0.5">
+                      <div>Length: {formatLength(wall.length)}</div>
+                      {hasNodeHeights ? (
+                        <div>
+                          Node Heights: {Object.entries(wall.nodeHeights!)
+                            .sort(([a], [b]) => Number(a) - Number(b))
+                            .map(([idx, h]) => `${String.fromCharCode(65 + Number(idx))}: ${formatLength(h)}`)
+                            .join(', ')}
+                        </div>
+                      ) : (
+                        <div>Height: {formatLength(wall.height)}</div>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </CardContent>
         </Card>

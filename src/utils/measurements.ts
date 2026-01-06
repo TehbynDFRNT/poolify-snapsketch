@@ -182,12 +182,14 @@ export const calculateMeasurements = (components: Component[]): Summary => {
 
         const height = component.properties.wallHeight || 1200;
         const status = (component.properties.wallStatus || 'proposed') as 'proposed' | 'existing';
+        const nodeHeights = component.properties.nodeHeights as Record<number, number> | undefined;
 
         summary.walls.push({
           material: materialData?.label || 'Timber',
           length: lengthMm,
           height,
           status,
+          nodeHeights,
         });
         break;
       }
