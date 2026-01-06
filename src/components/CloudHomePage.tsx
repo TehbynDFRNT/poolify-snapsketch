@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { usePoolifyIntegration } from '@/hooks/usePoolifyIntegration';
@@ -8,10 +8,17 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { NewProjectModal } from './NewProjectModal';
 import { ShareProjectDialog } from './ShareProjectDialog';
 import { toast } from '@/hooks/use-toast';
-import { Plus, Search, MoreVertical, Share2, Trash2, User, Settings, LogOut, Database } from 'lucide-react';
+import { Plus, Search, MoreVertical, Share2, Trash2, User, Settings, LogOut, Database, Pencil, Loader2, CheckCircle, Link } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
 
 interface CloudProject {
   id: string;
@@ -34,7 +41,7 @@ interface CloudProject {
 export function CloudHomePage() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const { linkToPoolify } = usePoolifyIntegration();
+  const { linkToPoolify, searchProjects } = usePoolifyIntegration();
   const [projects, setProjects] = useState<CloudProject[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
@@ -42,6 +49,16 @@ export function CloudHomePage() {
   const [selectedProject, setSelectedProject] = useState<CloudProject | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [projectToEdit, setProjectToEdit] = useState<CloudProject | null>(null);
+  const [editCustomerName, setEditCustomerName] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editLinkToPoolify, setEditLinkToPoolify] = useState(false);
+  const [editPoolifySearch, setEditPoolifySearch] = useState('');
+  const [editPoolifyResults, setEditPoolifyResults] = useState<any[]>([]);
+  const [editSelectedPoolifyProject, setEditSelectedPoolifyProject] = useState<any>(null);
+  const [editPoolifySearching, setEditPoolifySearching] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<any>(null);
 
@@ -70,6 +87,32 @@ export function CloudHomePage() {
       projectsChannel.unsubscribe();
     };
   }, [user?.id]);
+
+  // Debounced Poolify search for edit dialog
+  const editSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (!editLinkToPoolify || editPoolifySearch.length < 2) {
+      setEditPoolifyResults([]);
+      return;
+    }
+
+    if (editSearchTimeoutRef.current) {
+      clearTimeout(editSearchTimeoutRef.current);
+    }
+
+    setEditPoolifySearching(true);
+    editSearchTimeoutRef.current = setTimeout(async () => {
+      const results = await searchProjects(editPoolifySearch);
+      setEditPoolifyResults(results);
+      setEditPoolifySearching(false);
+    }, 300);
+
+    return () => {
+      if (editSearchTimeoutRef.current) {
+        clearTimeout(editSearchTimeoutRef.current);
+      }
+    };
+  }, [editPoolifySearch, editLinkToPoolify, searchProjects]);
 
   const loadUserProfile = async () => {
     if (!user) return;
@@ -255,6 +298,108 @@ export function CloudHomePage() {
     }
   };
 
+  const handleEditProject = async () => {
+    if (!projectToEdit || !user) return;
+
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({
+          customer_name: editCustomerName.trim(),
+          address: editAddress.trim(),
+          notes: editNotes.trim() || null,
+        })
+        .eq('id', projectToEdit.id);
+
+      if (error) throw error;
+
+      // Handle Poolify linking if selected
+      if (editSelectedPoolifyProject) {
+        // Get existing public link or create one
+        const { data: existingLink } = await supabase
+          .from('project_public_links')
+          .select('token')
+          .eq('project_id', projectToEdit.id)
+          .is('revoked_at', null)
+          .single();
+
+        let token = existingLink?.token;
+
+        if (!token) {
+          // Create a new public link
+          const generateToken = () => {
+            const array = new Uint8Array(32);
+            crypto.getRandomValues(array);
+            return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+          };
+          token = generateToken();
+
+          await supabase
+            .from('project_public_links')
+            .insert({
+              project_id: projectToEdit.id,
+              token: token,
+              allow_export: true,
+              expires_at: null,
+              created_by: user.id,
+            });
+        }
+
+        // Link to Poolify
+        const baseUrl = import.meta.env.VITE_BASE_URL || window.location.origin;
+        const embedUrl = `${baseUrl}/share/${token}`;
+
+        const success = await linkToPoolify({
+          poolProjectId: editSelectedPoolifyProject.id,
+          snapsketch: {
+            id: projectToEdit.id,
+            customerName: editCustomerName.trim(),
+            address: editAddress.trim(),
+            embedToken: token,
+            embedUrl: embedUrl,
+            embedCode: `<iframe src="${embedUrl}" width="800" height="600" frameborder="0" title="${editCustomerName.trim()} Pool Design"></iframe>`,
+            allowExport: true,
+            expiresAt: null,
+          },
+        });
+
+        if (success) {
+          toast({
+            title: 'Project linked to Poolify',
+            description: 'Site plan is now available in Poolify.',
+          });
+        }
+      }
+
+      toast({
+        title: 'Project updated',
+        description: 'Project details have been saved',
+      });
+
+      setEditDialogOpen(false);
+      setProjectToEdit(null);
+      loadProjects();
+    } catch (error: any) {
+      toast({
+        title: 'Error updating project',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const openEditDialog = (project: CloudProject) => {
+    setProjectToEdit(project);
+    setEditCustomerName(project.customer_name);
+    setEditAddress(project.address);
+    setEditNotes(project.notes || '');
+    setEditLinkToPoolify(false);
+    setEditPoolifySearch('');
+    setEditPoolifyResults([]);
+    setEditSelectedPoolifyProject(null);
+    setEditDialogOpen(true);
+  };
+
   const handleSignOut = async () => {
     await signOut();
     navigate('/login');
@@ -400,6 +545,10 @@ export function CloudHomePage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
+                          <DropdownMenuItem onClick={() => openEditDialog(project)}>
+                            <Pencil className="w-4 h-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => {
                               setSelectedProject(project);
@@ -479,6 +628,129 @@ export function CloudHomePage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Project</DialogTitle>
+            <DialogDescription>
+              Update project details
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="editCustomerName">Customer Name</Label>
+              <Input
+                id="editCustomerName"
+                value={editCustomerName}
+                onChange={(e) => setEditCustomerName(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="editAddress">Address</Label>
+              <Input
+                id="editAddress"
+                value={editAddress}
+                onChange={(e) => setEditAddress(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="editNotes">Notes</Label>
+              <Textarea
+                id="editNotes"
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
+
+            {/* Poolify Integration */}
+            <div className="grid gap-2 pt-2 border-t">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="editLinkPoolify"
+                  checked={editLinkToPoolify}
+                  onCheckedChange={(checked) => {
+                    setEditLinkToPoolify(!!checked);
+                    if (!checked) {
+                      setEditPoolifySearch('');
+                      setEditPoolifyResults([]);
+                      setEditSelectedPoolifyProject(null);
+                    }
+                  }}
+                />
+                <Label htmlFor="editLinkPoolify" className="flex items-center gap-1.5 cursor-pointer">
+                  <Link className="h-4 w-4" />
+                  Link to Poolify project
+                </Label>
+              </div>
+
+              {editLinkToPoolify && (
+                <div className="space-y-3 mt-2 p-3 border rounded-lg bg-muted/50">
+                  <div className="relative">
+                    <Input
+                      placeholder="Search Poolify by customer name or address..."
+                      value={editPoolifySearch}
+                      onChange={(e) => setEditPoolifySearch(e.target.value)}
+                    />
+                    {editPoolifySearching && (
+                      <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+
+                  {editPoolifyResults.length > 0 && (
+                    <div className="max-h-48 overflow-y-auto space-y-2">
+                      {editPoolifyResults.map((project: any) => (
+                        <div
+                          key={project.id}
+                          className={cn(
+                            "p-2 border rounded cursor-pointer hover:bg-accent transition-colors",
+                            editSelectedPoolifyProject?.id === project.id && "border-primary bg-accent"
+                          )}
+                          onClick={() => setEditSelectedPoolifyProject(project)}
+                        >
+                          <p className="font-medium text-sm">{project.owner1}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {project.siteAddress || project.homeAddress}
+                          </p>
+                          {project.hasSnapSketch && (
+                            <Badge variant="secondary" className="mt-1 text-xs">
+                              Already linked
+                            </Badge>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {editPoolifySearch.length >= 2 && !editPoolifySearching && editPoolifyResults.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-2">
+                      No Poolify projects found
+                    </p>
+                  )}
+
+                  {editSelectedPoolifyProject && (
+                    <Alert className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <AlertDescription className="text-green-700 dark:text-green-300">
+                        Will link to: <strong>{editSelectedPoolifyProject.owner1}</strong>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleEditProject}>
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
