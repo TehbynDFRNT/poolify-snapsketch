@@ -18,7 +18,8 @@ import { ResetPassword } from "./pages/ResetPassword";
 import { ProfileSettings } from "./pages/ProfileSettings";
 import { TeamManagement } from "./pages/TeamManagement";
 import { PoolManagement } from "./pages/PoolManagement";
-import { LandingPage } from "./pages/LandingPage";
+import { SSO } from "./pages/SSO";
+// LandingPage removed - root redirects to login
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,11 +33,12 @@ const App = () => (
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
             {/* Public routes */}
-            <Route path="/" element={<LandingPage />} />
+            <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/login" element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/sso" element={<SSO />} />
             <Route path="/share/:token" element={<PublicProjectView />} />
 
             {/* Protected routes */}

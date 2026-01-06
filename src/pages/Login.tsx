@@ -1,20 +1,56 @@
-import { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
+import { verifyAccessToken, storeAccessToken, hasValidStoredToken } from '@/utils/accessToken';
+import { getSSORediect, getSSOEmail, clearSSORedirect } from '@/pages/SSO';
 
 export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [accessVerified, setAccessVerified] = useState<boolean | null>(null);
   const { signIn, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
 
-  const from = (location.state as any)?.from?.pathname || '/projects';
+  // Check for SSO redirect first, then fall back to location state
+  const ssoRedirect = getSSORediect();
+  const from = ssoRedirect || (location.state as any)?.from?.pathname || '/projects';
+
+  // Pre-fill email from SSO if available
+  useEffect(() => {
+    const ssoEmail = getSSOEmail();
+    if (ssoEmail && !email) {
+      setEmail(ssoEmail);
+    }
+  }, []);
+
+  // Check access token on mount
+  useEffect(() => {
+    const checkAccess = async () => {
+      const urlToken = searchParams.get('access');
+
+      if (urlToken) {
+        const isValid = await verifyAccessToken(urlToken);
+        if (isValid) {
+          storeAccessToken(urlToken);
+          setAccessVerified(true);
+          return;
+        }
+      }
+
+      // Check stored token
+      const hasStored = await hasValidStoredToken();
+      setAccessVerified(hasStored);
+    };
+
+    checkAccess();
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,6 +80,7 @@ export function Login() {
         title: "Welcome back!",
         description: "You've successfully logged in",
       });
+      clearSSORedirect();
       navigate(from, { replace: true });
     }
   };
@@ -61,6 +98,35 @@ export function Login() {
       setLoading(false);
     }
   };
+
+  // Still checking access
+  if (accessVerified === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Verifying access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Access denied
+  if (!accessVerified) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="w-full max-w-md space-y-8 text-center">
+          <h1 className="text-3xl font-bold">🏊 Pool Design Tool</h1>
+          <div className="mt-8 p-6 border rounded-lg bg-destructive/10">
+            <h2 className="text-xl font-semibold text-destructive">Access Denied</h2>
+            <p className="mt-2 text-muted-foreground">
+              Valid access token required.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">

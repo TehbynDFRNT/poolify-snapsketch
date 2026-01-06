@@ -304,11 +304,19 @@ export function CloudHomePage() {
     if (!projectToEdit || !user) return;
 
     try {
+      // If linking to Poolify, use Poolify's owner1 and siteAddress
+      const finalCustomerName = editSelectedPoolifyProject
+        ? editSelectedPoolifyProject.owner1
+        : editCustomerName.trim();
+      const finalAddress = editSelectedPoolifyProject
+        ? (editSelectedPoolifyProject.siteAddress || editSelectedPoolifyProject.homeAddress)
+        : editAddress.trim();
+
       const { error } = await supabase
         .from('projects')
         .update({
-          customer_name: editCustomerName.trim(),
-          address: editAddress.trim(),
+          customer_name: finalCustomerName,
+          address: finalAddress,
           notes: editNotes.trim() || null,
         })
         .eq('id', projectToEdit.id);
@@ -355,11 +363,11 @@ export function CloudHomePage() {
           poolProjectId: editSelectedPoolifyProject.id,
           snapsketch: {
             id: projectToEdit.id,
-            customerName: editCustomerName.trim(),
-            address: editAddress.trim(),
+            customerName: finalCustomerName,
+            address: finalAddress,
             embedToken: token,
             embedUrl: embedUrl,
-            embedCode: `<iframe src="${embedUrl}" width="800" height="600" frameborder="0" title="${editCustomerName.trim()} Pool Design"></iframe>`,
+            embedCode: `<iframe src="${embedUrl}" width="800" height="600" frameborder="0" title="${finalCustomerName} Pool Design"></iframe>`,
             allowExport: true,
             expiresAt: null,
           },
@@ -408,6 +416,11 @@ export function CloudHomePage() {
     setEditCheckingLink(false);
     if (linkStatus?.linked && linkStatus.poolProject) {
       setEditLinkedPoolProject(linkStatus.poolProject);
+      // Update name and address from Poolify data
+      setEditCustomerName(linkStatus.poolProject.owner1);
+      if (linkStatus.poolProject.siteAddress) {
+        setEditAddress(linkStatus.poolProject.siteAddress);
+      }
     }
   };
 
@@ -440,19 +453,6 @@ export function CloudHomePage() {
     return date.toLocaleDateString();
   };
 
-  const getComponentSummary = (components: any[]) => {
-    const pools = components.filter((c) => c.type === 'pool').length;
-    const pavers = components.filter((c) => c.type === 'paver').length;
-    const fences = components.filter((c) => c.type === 'fence');
-    const totalFenceLength = fences.reduce((sum, f) => sum + (f.dimensions?.width || 0), 0);
-
-    const parts = [];
-    if (pools > 0) parts.push(`${pools} pool${pools > 1 ? 's' : ''}`);
-    if (pavers > 0) parts.push(`${pavers} paver${pavers > 1 ? 's' : ''}`);
-    if (fences.length > 0) parts.push(`${(totalFenceLength / 100).toFixed(1)}m fence`);
-
-    return parts.length > 0 ? parts.join(' • ') : 'Empty project';
-  };
 
   if (loading) {
     return (
@@ -586,8 +586,6 @@ export function CloudHomePage() {
                   <CardContent>
                     <div className="space-y-2 text-sm text-muted-foreground">
                       <p>Updated: {formatDate(project.updated_at)}</p>
-                      <p>Owner: {project.owner_id === user?.id ? 'You' : 'Shared'}</p>
-                      <p>{getComponentSummary(project.components)}</p>
                     </div>
                     <Button
                       className="w-full mt-4"
