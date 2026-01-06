@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { usePoolifyIntegration } from '@/hooks/usePoolifyIntegration';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +34,7 @@ interface CloudProject {
 export function CloudHomePage() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { linkToPoolify } = usePoolifyIntegration();
   const [projects, setProjects] = useState<CloudProject[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
@@ -111,6 +113,7 @@ export function CloudHomePage() {
     address: string;
     coordinates?: { lat: number; lng: number };
     notes?: string;
+    poolifyProjectId?: string;
   }) => {
     if (!user) return;
 
@@ -129,35 +132,81 @@ export function CloudHomePage() {
 
       if (error) throw error;
 
-      // Automatically create public link in the background
+      // Generate public link token
       const generateToken = () => {
         const array = new Uint8Array(32);
         crypto.getRandomValues(array);
         return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
       };
 
-      // Create public link (don't await - run in background)
-      supabase
+      const token = generateToken();
+
+      // Create public link - await if linking to Poolify, otherwise run in background
+      const publicLinkPromise = supabase
         .from('project_public_links')
         .insert({
           project_id: newProject.id,
-          token: generateToken(),
+          token: token,
           allow_export: true,
           expires_at: null,
           created_by: user.id,
         })
-        .then(() => {
+        .select()
+        .single();
+
+      if (data.poolifyProjectId) {
+        // Need to await public link creation to get the token for Poolify
+        const { error: linkError } = await publicLinkPromise;
+
+        if (!linkError) {
+          // Link to Poolify
+          const baseUrl = import.meta.env.VITE_BASE_URL || window.location.origin;
+          const embedUrl = `${baseUrl}/share/${token}`;
+
+          const success = await linkToPoolify({
+            poolProjectId: data.poolifyProjectId,
+            snapsketch: {
+              id: newProject.id,
+              customerName: data.customerName,
+              address: data.address,
+              embedToken: token,
+              embedUrl: embedUrl,
+              embedCode: `<iframe src="${embedUrl}" width="800" height="600" frameborder="0" title="${data.customerName} Pool Design"></iframe>`,
+              allowExport: true,
+              expiresAt: null,
+            },
+          });
+
+          if (success) {
+            toast({
+              title: 'Project linked to Poolify',
+              description: 'Site plan will be available in Poolify automatically.',
+            });
+          }
+
           // Log public link creation
           supabase.from('activity_log').insert({
             project_id: newProject.id,
             user_id: user.id,
             action: 'public_link_auto_created',
-            details: { auto_generated: true },
+            details: { auto_generated: true, linked_to_poolify: true },
           });
-        })
-        .catch((err) => {
-          console.error('Failed to auto-create public link:', err);
-        });
+        }
+      } else {
+        // No Poolify linking - run public link creation in background
+        publicLinkPromise
+          .then(() => {
+            supabase.from('activity_log').insert({
+              project_id: newProject.id,
+              user_id: user.id,
+              action: 'public_link_auto_created',
+              details: { auto_generated: true },
+            });
+          })
+          .catch((err) => {
+            console.error('Failed to auto-create public link:', err);
+          });
+      }
 
       // Log activity
       await supabase.from('activity_log').insert({
