@@ -245,6 +245,9 @@ export interface Summary {
     area: number;
     wastage: number;
   }>;
+  concrete: Array<{
+    area: number;         // Total area in m²
+  }>;
   drainage: Array<{
     type: string;
     length: number;     // Total length in mm

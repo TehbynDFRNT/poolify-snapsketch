@@ -6,6 +6,7 @@ export const calculateMeasurements = (components: Component[]): Summary => {
   const summary: Summary = {
     pools: [],
     paving: [],
+    concrete: [],
     drainage: [],
     fencing: [],
     walls: [],
@@ -73,18 +74,32 @@ export const calculateMeasurements = (components: Component[]): Summary => {
       }
 
       case 'paving_area': {
+        const surface = component.properties.areaSurface || 'pavers';
+        const boundary = component.properties.boundary as Array<{ x: number; y: number }> | undefined;
+        const stats = component.properties.statistics;
+        // Fallback area: compute from boundary polygon if stats missing
+        const area = stats?.totalArea ?? (boundary && boundary.length >= 3 ? calculatePolygonArea(boundary) : 0);
+
+        // Skip grass - not a material
+        if (surface === 'grass') {
+          break;
+        }
+
+        // Concrete - just track area
+        if (surface === 'concrete') {
+          summary.concrete.push({ area });
+          break;
+        }
+
+        // Pavers - track counts and group by size
         const size = component.properties.paverSize || '400x400';
         const label = PAVER_SIZES[size].label;
-        const stats = component.properties.statistics;
-        const boundary = component.properties.boundary as Array<{ x: number; y: number }> | undefined;
         // Fallback: derive counts from pavers array if statistics missing
         const full = stats?.fullPavers ?? (component.properties.pavers?.filter(p => !p.isEdgePaver).length || 0);
         const edge = (component.properties.showEdgePavers === false)
           ? 0
           : (stats?.edgePavers ?? (component.properties.pavers?.filter(p => p.isEdgePaver).length || 0));
         const totalCount = full + edge;
-        // Fallback area: compute from boundary polygon if stats missing
-        const area = stats?.totalArea ?? (boundary && boundary.length >= 3 ? calculatePolygonArea(boundary) : 0);
         const wastage = component.properties.wastagePercentage ?? 5;
 
         const existing = summary.paving.find(p => p.size === label);
@@ -94,13 +109,13 @@ export const calculateMeasurements = (components: Component[]): Summary => {
           existing.partialPavers += edge;
           existing.area += area;
         } else {
-          summary.paving.push({ 
-            size: label, 
-            count: totalCount, 
+          summary.paving.push({
+            size: label,
+            count: totalCount,
             fullPavers: full,
             partialPavers: edge,
             area,
-            wastage 
+            wastage
           });
         }
         break;

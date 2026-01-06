@@ -408,6 +408,34 @@ const MaterialsSummary = ({
         </Card>
       )}
 
+      {summary.concrete.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Concrete ({summary.concrete.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {summary.concrete.map((c, i) => (
+                <li key={i} className="text-sm">
+                  <div className="font-medium">• Concrete Area {i + 1}</div>
+                  <div className="text-xs text-muted-foreground ml-4 mt-1">
+                    Area: {c.area.toFixed(2)} m²
+                  </div>
+                </li>
+              ))}
+              {summary.concrete.length > 1 && (
+                <li className="text-sm border-t pt-2 mt-2">
+                  <div className="font-medium">Total Concrete</div>
+                  <div className="text-xs text-muted-foreground ml-4">
+                    {summary.concrete.reduce((sum, c) => sum + c.area, 0).toFixed(2)} m²
+                  </div>
+                </li>
+              )}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
       {summary.drainage.length > 0 && (
         <Card>
           <CardHeader>
@@ -483,7 +511,7 @@ const MaterialsSummary = ({
         </Card>
       )}
 
-      {summary.pools.length === 0 && summary.paving.length === 0 && summary.drainage.length === 0 && summary.fencing.length === 0 && summary.walls.length === 0 && (
+      {summary.pools.length === 0 && summary.paving.length === 0 && summary.concrete.length === 0 && summary.drainage.length === 0 && summary.fencing.length === 0 && summary.walls.length === 0 && (
         <div className="text-center text-muted-foreground py-8">
           <p>No components added yet</p>
         </div>
