@@ -540,7 +540,7 @@ export const DesignCanvas = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-dvh flex flex-col" style={{ height: '100dvh' }}>
       {/* Top Bar */}
       <TopBar
         projectName={currentProject.customerName || 'Untitled Project'}
@@ -575,7 +575,7 @@ export const DesignCanvas = () => {
           {/* Canvas - takes remaining space */}
           <main
             className="flex-1 overflow-hidden relative"
-            style={{ height: `calc(100vh - 60px - ${bottomPanelHeight}px)` }}
+            style={{ height: `calc(100dvh - 60px - ${bottomPanelHeight}px)` }}
           >
             <Canvas
               activeTool={activeTool}
