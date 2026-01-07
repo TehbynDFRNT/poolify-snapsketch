@@ -105,7 +105,7 @@ export const BottomPanel = ({
   const isCollapsed = height <= 100;
 
   const toggleCollapse = () => {
-    onHeightChange(isCollapsed ? 350 : 40);
+    onHeightChange(isCollapsed ? 350 : 56);
   };
 
   // Calculate materials summary using aggregated measurements
@@ -122,40 +122,40 @@ export const BottomPanel = ({
       />
 
       {isCollapsed ? (
-        // Collapsed state - show info, zoom controls, and expand button
-        <div className="flex items-center justify-between px-4 h-10">
+        // Collapsed state - show controls and expand button
+        <div className="flex items-center justify-between px-2 sm:px-4 h-12">
           {/* Show measurement info when drawing or measuring */}
           {(isDrawing && ghostDistance !== null) || (isMeasuring && measureStart && measureEnd) ? (
-            <div className="bg-card border border-border rounded-lg px-3 py-1 shadow-sm">
+            <div className="bg-card border border-border rounded-lg px-2 py-1 shadow-sm">
               {isDrawing && ghostDistance !== null && (
-                <span className="text-sm text-foreground">
+                <span className="text-xs sm:text-sm text-foreground">
                   📏 {(ghostDistance / 100).toFixed(1)}m
                   {shiftPressed && ' 🔒'}
                 </span>
               )}
               {isMeasuring && measureStart && measureEnd && (
-                <span className="text-sm text-foreground">
+                <span className="text-xs sm:text-sm text-foreground">
                   📏 {(calculateDistance(measureStart, measureEnd) / 100).toFixed(1)}m
                   {shiftPressed && ' 🔒'}
                 </span>
               )}
             </div>
           ) : (
-            <span className="text-sm text-muted-foreground">
-              {activeTab === 'materials' ? 'Materials Summary' : 'Project Notes'}
+            <span className="text-xs sm:text-sm text-muted-foreground hidden sm:block">
+              {activeTab === 'materials' ? 'Materials' : 'Notes'}
             </span>
           )}
-          
+
           {/* Undo/Redo */}
           {onUndo && onRedo && (
-            <div className="ml-auto flex gap-1 items-center border-r pr-2 mr-2">
+            <div className="ml-auto flex gap-0.5 sm:gap-1 items-center border-r pr-1 sm:pr-2 mr-1 sm:mr-2">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={onUndo}
                 disabled={!canUndo}
-                className="min-w-[44px] min-h-[44px]"
-                title="Undo (Ctrl+Z)"
+                className="w-9 h-9 sm:w-10 sm:h-10"
+                title="Undo"
               >
                 <Undo2 className="h-4 w-4" />
               </Button>
@@ -164,22 +164,22 @@ export const BottomPanel = ({
                 size="icon"
                 onClick={onRedo}
                 disabled={!canRedo}
-                className="min-w-[44px] min-h-[44px]"
-                title="Redo (Ctrl+Y)"
+                className="w-9 h-9 sm:w-10 sm:h-10"
+                title="Redo"
               >
                 <Redo2 className="h-4 w-4" />
               </Button>
             </div>
           )}
 
-          {/* Zoom Controls - Always visible */}
-          <div className={`${onUndo ? '' : 'ml-auto'} flex gap-1 items-center border-r pr-2 mr-2`}>
+          {/* Zoom Controls */}
+          <div className={`${onUndo ? '' : 'ml-auto'} flex gap-0.5 sm:gap-1 items-center border-r pr-1 sm:pr-2 mr-1 sm:mr-2`}>
             <Button
               variant="ghost"
               size="icon"
               onClick={onToggleZoomLock}
               title={zoomLocked ? "Unlock Zoom" : "Lock Zoom"}
-              className={`min-w-[44px] min-h-[44px] ${zoomLocked ? "text-primary" : ""}`}
+              className={`w-9 h-9 sm:w-10 sm:h-10 hidden sm:flex ${zoomLocked ? "text-primary" : ""}`}
             >
               {zoomLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
             </Button>
@@ -189,7 +189,7 @@ export const BottomPanel = ({
               onClick={onZoomOut}
               title="Zoom Out"
               disabled={zoomLocked}
-              className="min-w-[44px] min-h-[44px]"
+              className="w-9 h-9 sm:w-10 sm:h-10"
             >
               <ZoomOut className="h-4 w-4" />
             </Button>
@@ -198,10 +198,10 @@ export const BottomPanel = ({
               size="sm"
               onClick={onFitView}
               title="Fit to View"
-              className="min-h-[44px]"
+              className="h-9 sm:h-10 px-2 text-xs"
             >
-              <Maximize className="h-4 w-4 mr-1" />
-              {Math.round(zoom * 100)}%
+              <Maximize className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">{Math.round(zoom * 100)}%</span>
             </Button>
             <Button
               variant="ghost"
@@ -209,7 +209,7 @@ export const BottomPanel = ({
               onClick={onZoomIn}
               title="Zoom In"
               disabled={zoomLocked}
-              className="min-w-[44px] min-h-[44px]"
+              className="w-9 h-9 sm:w-10 sm:h-10"
             >
               <ZoomIn className="h-4 w-4" />
             </Button>
@@ -219,7 +219,7 @@ export const BottomPanel = ({
             variant="ghost"
             size="icon"
             onClick={toggleCollapse}
-            className="min-w-[44px] min-h-[44px]"
+            className="w-9 h-9 sm:w-10 sm:h-10"
           >
             <ChevronUp className="w-4 h-4" />
           </Button>

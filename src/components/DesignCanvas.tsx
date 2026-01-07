@@ -95,8 +95,8 @@ export const DesignCanvas = () => {
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
-  // Start collapsed by default
-  const [bottomPanelHeight, setBottomPanelHeight] = useState(40);
+  // Start collapsed by default (56px = 8px handle + 48px content)
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(56);
   const [menuOpen, setMenuOpen] = useState(false);
   // Sidebar collapsed on mobile by default
   const [sidebarOpen, setSidebarOpen] = useState(false);
