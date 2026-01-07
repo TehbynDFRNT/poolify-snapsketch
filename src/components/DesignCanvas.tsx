@@ -540,7 +540,7 @@ export const DesignCanvas = () => {
   }
 
   return (
-    <div className="h-dvh flex flex-col" style={{ height: '100dvh' }}>
+    <div className="h-dvh flex flex-col" style={{ height: '100dvh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {/* Top Bar */}
       <TopBar
         projectName={currentProject.customerName || 'Untitled Project'}

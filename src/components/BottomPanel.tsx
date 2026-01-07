@@ -113,7 +113,7 @@ export const BottomPanel = ({
   return (
     <div
       className="border-t bg-background flex flex-col flex-shrink-0 relative z-20"
-      style={{ height: `${height}px` }}
+      style={{ height: `${height}px`, minHeight: '56px' }}
     >
       {/* Resize Handle */}
       <div
