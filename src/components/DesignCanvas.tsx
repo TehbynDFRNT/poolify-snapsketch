@@ -11,6 +11,20 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import {
+  MousePointer2,
+  Hand,
+  Home,
+  Waves,
+  Droplets,
+  Fence,
+  Construction,
+  Flower2,
+  ScanLine,
+  Square,
+  Pentagon,
+  Ruler,
+} from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useDesignStore } from '@/store/designStore';
@@ -84,6 +98,10 @@ export const DesignCanvas = () => {
   // Start collapsed by default
   const [bottomPanelHeight, setBottomPanelHeight] = useState(40);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Sidebar collapsed on mobile by default
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Track which tool's sub-menu is open in mobile bubble menu
+  const [mobileToolSubmenu, setMobileToolSubmenu] = useState<string | null>(null);
 
   // Project details form state
   const [editingCustomerName, setEditingCustomerName] = useState('');
@@ -527,10 +545,6 @@ export const DesignCanvas = () => {
       <TopBar
         projectName={currentProject.customerName || 'Untitled Project'}
         lastSaved={lastSaved}
-        canUndo={historyIndex > 0}
-        canRedo={historyIndex < history.length - 1}
-        onUndo={undo}
-        onRedo={redo}
         gridVisible={gridVisible}
         satelliteVisible={satelliteVisible}
         annotationsVisible={annotationsVisible}
@@ -547,12 +561,14 @@ export const DesignCanvas = () => {
 
       {/* Main content area with left toolbar and canvas */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Toolbar */}
-        <LeftToolbar
-          activeTool={activeTool}
-          components={components}
-          onToolChange={handleToolChange}
-        />
+        {/* Left Toolbar - desktop only (mobile uses floating bubble menu) */}
+        <div className="hidden lg:block">
+          <LeftToolbar
+            activeTool={activeTool}
+            components={components}
+            onToolChange={handleToolChange}
+          />
+        </div>
 
         {/* Right side: Canvas and Bottom Panel */}
         <div className="flex-1 flex flex-col relative">
@@ -577,9 +593,9 @@ export const DesignCanvas = () => {
             <FloatingPropertiesCard component={selectedComponent} />
           </main>
 
-          {/* Floating Keyboard Shortcuts - positioned above bottom panel */}
+          {/* Floating Keyboard Shortcuts - positioned above bottom panel, hidden on mobile */}
           <div
-            className="absolute left-1/2 transform -translate-x-1/2 z-50 pointer-events-none"
+            className="absolute left-1/2 transform -translate-x-1/2 z-50 pointer-events-none hidden lg:block"
             style={{ bottom: `${bottomPanelHeight + 16}px` }}
           >
             <FloatingKeyboardShortcuts
@@ -589,9 +605,254 @@ export const DesignCanvas = () => {
             />
           </div>
 
-          {/* Floating Shift Toggle - for touch devices */}
+          {/* Mobile: Floating Tool Bubble Menu + Shift Toggle */}
           <div
-            className="absolute left-4 z-40"
+            className="absolute left-4 z-40 flex flex-col gap-2 lg:hidden"
+            style={{ bottom: `${bottomPanelHeight + 16}px` }}
+          >
+            {/* Bubble menu when open */}
+            {sidebarOpen && (
+              <div className="absolute bottom-16 left-0 flex flex-col gap-1 p-2 bg-background/95 backdrop-blur-sm rounded-2xl shadow-xl border min-w-[140px]">
+                {/* Select - no submenu */}
+                <Button
+                  variant={activeTool === 'select' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => { handleToolChange('select'); setSidebarOpen(false); setMobileToolSubmenu(null); }}
+                  className="w-full justify-start gap-2 h-9"
+                >
+                  <MousePointer2 className="w-4 h-4" />
+                  <span className="text-xs">Select</span>
+                </Button>
+
+                {/* Boundary - no submenu */}
+                <Button
+                  variant={activeTool === 'boundary' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => { handleToolChange('boundary'); setSidebarOpen(false); setMobileToolSubmenu(null); }}
+                  disabled={components.some(c => c.type === 'boundary')}
+                  className="w-full justify-start gap-2 h-9"
+                >
+                  <Pentagon className="w-4 h-4" />
+                  <span className="text-xs">Boundary</span>
+                </Button>
+
+                {/* House - no submenu */}
+                <Button
+                  variant={activeTool === 'house' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => { handleToolChange('house'); setSidebarOpen(false); setMobileToolSubmenu(null); }}
+                  className="w-full justify-start gap-2 h-9"
+                >
+                  <Home className="w-4 h-4" />
+                  <span className="text-xs">House</span>
+                </Button>
+
+                {/* Pool - no submenu, opens pool selector */}
+                <Button
+                  variant={activeTool === 'pool' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => { handleToolChange('pool'); setSidebarOpen(false); setMobileToolSubmenu(null); }}
+                  className="w-full justify-start gap-2 h-9"
+                >
+                  <Waves className="w-4 h-4" />
+                  <span className="text-xs">Pool</span>
+                </Button>
+
+                {/* Area - has submenu */}
+                <div className="relative">
+                  <Button
+                    variant={activeTool === 'paving_area' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setMobileToolSubmenu(mobileToolSubmenu === 'area' ? null : 'area')}
+                    className="w-full justify-start gap-2 h-9"
+                  >
+                    <Square className="w-4 h-4" />
+                    <span className="text-xs">Area</span>
+                    <span className="ml-auto text-[10px]">▶</span>
+                  </Button>
+                  {mobileToolSubmenu === 'area' && (
+                    <div className="absolute left-full top-0 ml-1 flex flex-col gap-1 p-2 bg-background border rounded-xl shadow-lg min-w-[100px]">
+                      {[
+                        { id: 'pavers', label: 'Pavers' },
+                        { id: 'concrete', label: 'Concrete' },
+                        { id: 'grass', label: 'Grass' },
+                      ].map((opt) => (
+                        <Button key={opt.id} variant="ghost" size="sm" className="justify-start h-8 text-xs"
+                          onClick={() => { handleToolChange('paving_area', { areaType: opt.id as any }); setSidebarOpen(false); setMobileToolSubmenu(null); }}>
+                          {opt.label}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Fence - has submenu */}
+                <div className="relative">
+                  <Button
+                    variant={activeTool === 'fence' || activeTool === 'gate' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setMobileToolSubmenu(mobileToolSubmenu === 'fence' ? null : 'fence')}
+                    className="w-full justify-start gap-2 h-9"
+                  >
+                    <Fence className="w-4 h-4" />
+                    <span className="text-xs">Fence</span>
+                    <span className="ml-auto text-[10px]">▶</span>
+                  </Button>
+                  {mobileToolSubmenu === 'fence' && (
+                    <div className="absolute left-full top-0 ml-1 flex flex-col gap-1 p-2 bg-background border rounded-xl shadow-lg min-w-[100px]">
+                      {[
+                        { id: 'glass', label: 'Glass' },
+                        { id: 'metal', label: 'Metal' },
+                        { id: 'gate', label: 'Gate' },
+                      ].map((opt) => (
+                        <Button key={opt.id} variant="ghost" size="sm" className="justify-start h-8 text-xs"
+                          onClick={() => {
+                            if (opt.id === 'gate') {
+                              handleToolChange('gate');
+                            } else {
+                              handleToolChange('fence', { fenceType: opt.id as any });
+                            }
+                            setSidebarOpen(false); setMobileToolSubmenu(null);
+                          }}>
+                          {opt.label}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Drainage - has submenu */}
+                <div className="relative">
+                  <Button
+                    variant={activeTool === 'drainage' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setMobileToolSubmenu(mobileToolSubmenu === 'drainage' ? null : 'drainage')}
+                    className="w-full justify-start gap-2 h-9"
+                  >
+                    <Droplets className="w-4 h-4" />
+                    <span className="text-xs">Drainage</span>
+                    <span className="ml-auto text-[10px]">▶</span>
+                  </Button>
+                  {mobileToolSubmenu === 'drainage' && (
+                    <div className="absolute left-full top-0 ml-1 flex flex-col gap-1 p-2 bg-background border rounded-xl shadow-lg min-w-[100px]">
+                      {[
+                        { id: 'rock', label: 'Rock' },
+                        { id: 'ultradrain', label: 'Ultradrain' },
+                      ].map((opt) => (
+                        <Button key={opt.id} variant="ghost" size="sm" className="justify-start h-8 text-xs"
+                          onClick={() => { handleToolChange('drainage', { drainageType: opt.id as any }); setSidebarOpen(false); setMobileToolSubmenu(null); }}>
+                          {opt.label}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Wall - has submenu */}
+                <div className="relative">
+                  <Button
+                    variant={activeTool === 'wall' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setMobileToolSubmenu(mobileToolSubmenu === 'wall' ? null : 'wall')}
+                    className="w-full justify-start gap-2 h-9"
+                  >
+                    <Construction className="w-4 h-4" />
+                    <span className="text-xs">Wall</span>
+                    <span className="ml-auto text-[10px]">▶</span>
+                  </Button>
+                  {mobileToolSubmenu === 'wall' && (
+                    <div className="absolute left-full top-0 ml-1 flex flex-col gap-1 p-2 bg-background border rounded-xl shadow-lg min-w-[120px]">
+                      {[
+                        { id: 'timber', label: 'Timber' },
+                        { id: 'concrete', label: 'Concrete' },
+                        { id: 'concrete_sleeper', label: 'Sleeper' },
+                        { id: 'sandstone', label: 'Sandstone' },
+                      ].map((opt) => (
+                        <Button key={opt.id} variant="ghost" size="sm" className="justify-start h-8 text-xs"
+                          onClick={() => { handleToolChange('wall', { wallMaterial: opt.id as any }); setSidebarOpen(false); setMobileToolSubmenu(null); }}>
+                          {opt.label}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Measure - no submenu */}
+                <Button
+                  variant={activeTool === 'quick_measure' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => { handleToolChange('quick_measure'); setSidebarOpen(false); setMobileToolSubmenu(null); }}
+                  className="w-full justify-start gap-2 h-9"
+                >
+                  <ScanLine className="w-4 h-4" />
+                  <span className="text-xs">Measure</span>
+                </Button>
+
+                {/* Decoration - has submenu */}
+                <div className="relative">
+                  <Button
+                    variant={activeTool === 'decoration' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setMobileToolSubmenu(mobileToolSubmenu === 'decor' ? null : 'decor')}
+                    className="w-full justify-start gap-2 h-9"
+                  >
+                    <Flower2 className="w-4 h-4" />
+                    <span className="text-xs">Decor</span>
+                    <span className="ml-auto text-[10px]">▶</span>
+                  </Button>
+                  {mobileToolSubmenu === 'decor' && (
+                    <div className="absolute left-full top-0 ml-1 flex flex-col gap-1 p-2 bg-background border rounded-xl shadow-lg min-w-[120px]">
+                      {[
+                        { id: 'bush', label: 'Bush' },
+                        { id: 'umbrella', label: 'Umbrella' },
+                        { id: 'waterfeature', label: 'Water Feature' },
+                        { id: 'deckchairs', label: 'Deck Chairs' },
+                      ].map((opt) => (
+                        <Button key={opt.id} variant="ghost" size="sm" className="justify-start h-8 text-xs"
+                          onClick={() => { handleToolChange('decoration', { decorationType: opt.id as any }); setSidebarOpen(false); setMobileToolSubmenu(null); }}>
+                          {opt.label}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Current Tool Button - opens bubble menu */}
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="w-12 h-12 rounded-full shadow-lg bg-background border-2"
+              title="Open tools"
+            >
+              {(() => {
+                switch (activeTool) {
+                  case 'select': return <MousePointer2 className="w-5 h-5" />;
+                  case 'hand': return <Hand className="w-5 h-5" />;
+                  case 'boundary': return <Pentagon className="w-5 h-5" />;
+                  case 'house': return <Home className="w-5 h-5" />;
+                  case 'pool': return <Waves className="w-5 h-5" />;
+                  case 'paving_area':
+                  case 'paver': return <Square className="w-5 h-5" />;
+                  case 'fence':
+                  case 'gate': return <Fence className="w-5 h-5" />;
+                  case 'drainage': return <Droplets className="w-5 h-5" />;
+                  case 'wall': return <Construction className="w-5 h-5" />;
+                  case 'decoration': return <Flower2 className="w-5 h-5" />;
+                  case 'quick_measure': return <ScanLine className="w-5 h-5" />;
+                  case 'height': return <Ruler className="w-5 h-5" />;
+                  default: return <MousePointer2 className="w-5 h-5" />;
+                }
+              })()}
+            </Button>
+            <FloatingShiftToggle />
+          </div>
+
+          {/* Desktop: just the shift toggle */}
+          <div
+            className="absolute left-4 z-40 hidden lg:block"
             style={{ bottom: `${bottomPanelHeight + 16}px` }}
           >
             <FloatingShiftToggle />
@@ -615,6 +876,10 @@ export const DesignCanvas = () => {
             measureStart={drawingState.measureStart}
             measureEnd={drawingState.measureEnd}
             ghostDistance={drawingState.ghostDistance}
+            canUndo={historyIndex > 0}
+            canRedo={historyIndex < history.length - 1}
+            onUndo={undo}
+            onRedo={redo}
           />
         </div>
       </div>

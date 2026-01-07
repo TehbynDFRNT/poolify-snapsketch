@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ChevronDown, ChevronUp, ZoomIn, ZoomOut, Maximize, Lock, Unlock } from 'lucide-react';
+import { ChevronDown, ChevronUp, ZoomIn, ZoomOut, Maximize, Lock, Unlock, Undo2, Redo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -28,6 +28,10 @@ interface BottomPanelProps {
   measureStart: { x: number; y: number } | null;
   measureEnd: { x: number; y: number } | null;
   ghostDistance: number | null;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
 }
 
 type TabType = 'materials' | 'notes';
@@ -49,6 +53,10 @@ export const BottomPanel = ({
   measureStart,
   measureEnd,
   ghostDistance,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
 }: BottomPanelProps) => {
   const [activeTab, setActiveTab] = useState<TabType>('materials');
   const [isResizing, setIsResizing] = useState(false);
@@ -138,49 +146,75 @@ export const BottomPanel = ({
             </span>
           )}
           
+          {/* Undo/Redo */}
+          {onUndo && onRedo && (
+            <div className="ml-auto flex gap-1 items-center border-r pr-2 mr-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onUndo}
+                disabled={!canUndo}
+                className="min-w-[44px] min-h-[44px]"
+                title="Undo (Ctrl+Z)"
+              >
+                <Undo2 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onRedo}
+                disabled={!canRedo}
+                className="min-w-[44px] min-h-[44px]"
+                title="Redo (Ctrl+Y)"
+              >
+                <Redo2 className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
           {/* Zoom Controls - Always visible */}
-          <div className="ml-auto flex gap-1 items-center border-r pr-2 mr-2">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={onToggleZoomLock} 
+          <div className={`${onUndo ? '' : 'ml-auto'} flex gap-1 items-center border-r pr-2 mr-2`}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onToggleZoomLock}
               title={zoomLocked ? "Unlock Zoom" : "Lock Zoom"}
               className={`min-w-[44px] min-h-[44px] ${zoomLocked ? "text-primary" : ""}`}
             >
               {zoomLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
             </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={onZoomOut} 
-              title="Zoom Out" 
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onZoomOut}
+              title="Zoom Out"
               disabled={zoomLocked}
               className="min-w-[44px] min-h-[44px]"
             >
               <ZoomOut className="h-4 w-4" />
             </Button>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={onFitView} 
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onFitView}
               title="Fit to View"
               className="min-h-[44px]"
             >
               <Maximize className="h-4 w-4 mr-1" />
               {Math.round(zoom * 100)}%
             </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={onZoomIn} 
-              title="Zoom In" 
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onZoomIn}
+              title="Zoom In"
               disabled={zoomLocked}
               className="min-w-[44px] min-h-[44px]"
             >
               <ZoomIn className="h-4 w-4" />
             </Button>
           </div>
-          
+
           <Button
             variant="ghost"
             size="icon"
@@ -258,42 +292,68 @@ export const BottomPanel = ({
               </div>
             )}
 
+            {/* Undo/Redo */}
+            {onUndo && onRedo && (
+              <div className="ml-auto flex gap-1 items-center border-r pr-2 mr-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onUndo}
+                  disabled={!canUndo}
+                  className="min-w-[44px] min-h-[44px]"
+                  title="Undo (Ctrl+Z)"
+                >
+                  <Undo2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onRedo}
+                  disabled={!canRedo}
+                  className="min-w-[44px] min-h-[44px]"
+                  title="Redo (Ctrl+Y)"
+                >
+                  <Redo2 className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
             {/* Zoom Controls */}
-            <div className="ml-auto flex gap-1 items-center border-r pr-2 mr-2">
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={onToggleZoomLock} 
+            <div className={`${onUndo ? '' : 'ml-auto'} flex gap-1 items-center border-r pr-2 mr-2`}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onToggleZoomLock}
                 title={zoomLocked ? "Unlock Zoom" : "Lock Zoom"}
                 className={`min-w-[44px] min-h-[44px] ${zoomLocked ? "text-primary" : ""}`}
               >
                 {zoomLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
               </Button>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={onZoomOut} 
-                title="Zoom Out" 
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onZoomOut}
+                title="Zoom Out"
                 disabled={zoomLocked}
                 className="min-w-[44px] min-h-[44px]"
               >
                 <ZoomOut className="h-4 w-4" />
               </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={onFitView} 
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onFitView}
                 title="Fit to View"
                 className="min-h-[44px]"
               >
                 <Maximize className="h-4 w-4 mr-1" />
                 {Math.round(zoom * 100)}%
               </Button>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={onZoomIn} 
-                title="Zoom In" 
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onZoomIn}
+                title="Zoom In"
                 disabled={zoomLocked}
                 className="min-w-[44px] min-h-[44px]"
               >
@@ -301,8 +361,6 @@ export const BottomPanel = ({
               </Button>
             </div>
 
-            
-            
             {/* Collapse button */}
             <Button
               variant="ghost"

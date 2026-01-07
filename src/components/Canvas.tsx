@@ -66,6 +66,10 @@ export const Canvas = ({
   const [showPoolSelector, setShowPoolSelector] = useState(false);
   const [selectedPool, setSelectedPool] = useState<Pool | null>(null);
   const [pendingPoolPosition, setPendingPoolPosition] = useState<{ x: number; y: number } | null>(null);
+
+  // Pinch zoom state
+  const lastPinchDistRef = useRef<number | null>(null);
+  const lastPinchCenterRef = useRef<{ x: number; y: number } | null>(null);
   
   // Drawing state for boundary, house, paving area, and linear tools (wall/fence/drainage)
   const [drawingPoints, setDrawingPoints] = useState<Array<{ x: number; y: number }>>([]);
@@ -835,10 +839,10 @@ export const Canvas = ({
 
   const handleWheel = (e: any) => {
     e.evt.preventDefault();
-    
+
     // Don't zoom if locked
     if (zoomLocked) return;
-    
+
     const scaleBy = 1.05;
     const stage = e.target.getStage();
     const oldScale = stage.scaleX();
@@ -860,6 +864,75 @@ export const Canvas = ({
     };
 
     setPan(newPos);
+  };
+
+  // Two-finger gesture handlers for touch devices (pan + pinch zoom)
+  const handleTouchMove = (e: any) => {
+    const touches = e.evt.touches;
+    if (touches.length !== 2) return;
+
+    e.evt.preventDefault();
+
+    const touch1 = touches[0];
+    const touch2 = touches[1];
+
+    // Calculate distance between touches (for pinch zoom)
+    const dist = Math.sqrt(
+      Math.pow(touch2.clientX - touch1.clientX, 2) +
+      Math.pow(touch2.clientY - touch1.clientY, 2)
+    );
+
+    // Calculate center point (for pan)
+    const centerX = (touch1.clientX + touch2.clientX) / 2;
+    const centerY = (touch1.clientY + touch2.clientY) / 2;
+
+    if (lastPinchDistRef.current !== null && lastPinchCenterRef.current !== null) {
+      const stage = stageRef.current;
+      if (!stage) return;
+
+      // Get container rect for proper coordinates
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      // Calculate pan delta from center point movement
+      const panDeltaX = centerX - lastPinchCenterRef.current.x;
+      const panDeltaY = centerY - lastPinchCenterRef.current.y;
+
+      // Handle pinch zoom if not locked
+      if (!zoomLocked) {
+        const oldScale = zoom;
+        const scaleBy = dist / lastPinchDistRef.current;
+        const newScale = Math.max(0.1, Math.min(4, oldScale * scaleBy));
+
+        const pointerX = centerX - rect.left;
+        const pointerY = centerY - rect.top;
+
+        const mousePointTo = {
+          x: (pointerX - pan.x) / oldScale,
+          y: (pointerY - pan.y) / oldScale,
+        };
+
+        setZoom(newScale);
+        setPan({
+          x: pointerX - mousePointTo.x * newScale + panDeltaX,
+          y: pointerY - mousePointTo.y * newScale + panDeltaY,
+        });
+      } else {
+        // Just pan if zoom is locked
+        setPan({
+          x: pan.x + panDeltaX,
+          y: pan.y + panDeltaY,
+        });
+      }
+    }
+
+    lastPinchDistRef.current = dist;
+    lastPinchCenterRef.current = { x: centerX, y: centerY };
+  };
+
+  const handleTouchEnd = () => {
+    lastPinchDistRef.current = null;
+    lastPinchCenterRef.current = null;
   };
 
   const renderGrid = () => {
@@ -1134,8 +1207,10 @@ export const Canvas = ({
         onWheel={handleWheel}
         onClick={handleStageClick}
         onMouseMove={handleMouseMove}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         draggable={isDraggable}
-        style={{ cursor: isDraggable ? 'grab' : 'default' }}
+        style={{ cursor: isDraggable ? 'grab' : 'default', touchAction: 'none' }}
         onDragEnd={(e) => {
           if (isDraggable) {
             setPan({ x: e.target.x(), y: e.target.y() });

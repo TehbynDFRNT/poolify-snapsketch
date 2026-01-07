@@ -41,6 +41,10 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
   const [toolMenu, setToolMenu] = useState<{ open: boolean; x: number; y: number; tool: ToolType | 'area' | 'select' | null }>({ open: false, x: 0, y: 0, tool: null });
   const menuRef = useRef<HTMLDivElement | null>(null);
   const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggeredRef = useRef(false);
+
+  // Detect if on mobile/touch device
+  const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
   // Track selected sub-options
   const [selectedAreaType, setSelectedAreaType] = useState<'pavers' | 'concrete' | 'grass'>('pavers');
@@ -65,26 +69,20 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
   const handleTouchStart = useCallback((e: React.TouchEvent, tool: { id: ToolType | 'area' | 'select'; hasMenu?: boolean; disabled?: boolean }) => {
     if (!tool.hasMenu || tool.disabled) return;
 
-    const target = e.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
+    longPressTriggeredRef.current = false;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 
     longPressTimeoutRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
       setToolMenu({ open: true, x: rect.right + 4, y: rect.top, tool: tool.id });
-      // Prevent the click from firing after long-press
-      target.dataset.longPressed = 'true';
     }, LONG_PRESS_DURATION);
   }, []);
 
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+  const handleTouchEnd = useCallback(() => {
     if (longPressTimeoutRef.current) {
       clearTimeout(longPressTimeoutRef.current);
       longPressTimeoutRef.current = null;
     }
-    // Clear long-press flag after a short delay
-    const target = e.currentTarget as HTMLElement;
-    setTimeout(() => {
-      target.dataset.longPressed = 'false';
-    }, 50);
   }, []);
 
   const handleTouchMove = useCallback(() => {
@@ -93,6 +91,7 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
       clearTimeout(longPressTimeoutRef.current);
       longPressTimeoutRef.current = null;
     }
+    longPressTriggeredRef.current = false;
   }, []);
 
   // Helper to render a colored square with the original icon inside
@@ -188,7 +187,7 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
   };
 
   return (
-    <div className="w-[72px] border-r bg-background flex flex-col gap-2 p-2 flex-shrink-0 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+    <div className="w-[72px] border-r bg-background flex flex-col gap-2 p-2 flex-shrink-0 overflow-y-auto overflow-x-hidden" style={{ scrollbarWidth: 'thin' }}>
       {tools.map(tool => {
         const isActive = tool.id === 'select'
           ? (activeTool === 'select' || activeTool === 'hand')
@@ -205,12 +204,20 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
               size="icon"
               onClick={(e) => {
                 // Skip click if long-press just triggered
-                const target = e.currentTarget as HTMLElement;
-                if (target.dataset.longPressed === 'true') {
-                  target.dataset.longPressed = 'false';
+                if (longPressTriggeredRef.current) {
+                  longPressTriggeredRef.current = false;
                   return;
                 }
-                if (!tool.disabled) handleToolClick(tool.id);
+                if (tool.disabled) return;
+
+                // On touch devices, open menu directly for tools with options
+                if (isTouchDevice && tool.hasMenu) {
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  setToolMenu({ open: true, x: rect.right + 4, y: rect.top, tool: tool.id });
+                  return;
+                }
+
+                handleToolClick(tool.id);
               }}
               onContextMenu={(e) => {
                 if (tool.hasMenu && !tool.disabled) {
