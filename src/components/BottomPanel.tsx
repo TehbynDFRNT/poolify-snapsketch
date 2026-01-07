@@ -113,17 +113,17 @@ export const BottomPanel = ({
   return (
     <div
       className="border-t bg-background flex flex-col flex-shrink-0 relative z-20"
-      style={{ height: `${height}px`, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      style={{ height: `${height}px` }}
     >
       {/* Resize Handle */}
       <div
         onMouseDown={handleMouseDown}
-        className="h-2 bg-muted hover:bg-primary/40 cursor-ns-resize active:bg-primary/60 transition-colors"
+        className="h-2 bg-muted hover:bg-primary/40 cursor-ns-resize active:bg-primary/60 transition-colors flex-shrink-0"
       />
 
       {isCollapsed ? (
         // Collapsed state - show controls and expand button
-        <div className="flex items-center justify-between px-2 sm:px-4 h-12">
+        <div className="flex items-center justify-between px-2 sm:px-4 h-12 flex-shrink-0">
           {/* Show measurement info when drawing or measuring */}
           {(isDrawing && ghostDistance !== null) || (isMeasuring && measureStart && measureEnd) ? (
             <div className="bg-card border border-border rounded-lg px-2 py-1 shadow-sm">
