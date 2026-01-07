@@ -52,7 +52,7 @@ export const GateComponent = ({ component, isSelected, activeTool, onSelect, onD
         x={component.position.x}
         y={component.position.y}
         rotation={component.rotation}
-        draggable={activeTool !== 'hand'}
+        draggable={activeTool !== 'hand' && isSelected}
         onClick={onSelect}
         onTap={onSelect}
         onDragEnd={(e) => onDragEnd({ x: e.target.x(), y: e.target.y() })}

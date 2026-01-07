@@ -121,7 +121,7 @@ export const ReferenceLineComponent: React.FC<Props> = ({
 
   return (
     <Group
-      draggable={!dragIndex}
+      draggable={selected && !dragIndex}
       onClick={onSelect}
       onTap={onSelect}
       onContextMenu={handleRightClick}

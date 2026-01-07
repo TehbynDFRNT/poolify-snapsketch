@@ -94,7 +94,7 @@ export const DecorationComponent = ({
       x={component.position.x}
       y={component.position.y}
       rotation={component.rotation}
-      draggable={activeTool !== 'hand'}
+      draggable={activeTool !== 'hand' && isSelected}
       onClick={onSelect}
       onTap={onSelect}
       onContextMenu={handleContextMenuLocal}

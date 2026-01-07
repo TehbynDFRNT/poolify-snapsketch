@@ -935,7 +935,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
         x={component.position.x}
         y={component.position.y}
         rotation={component.rotation}
-        draggable={activeTool !== 'hand'}
+        draggable={activeTool !== 'hand' && isSelected}
         // Match PaverComponent: clicking the object simply selects it.
         // Tile clearing is handled when the component becomes deselected.
         onClick={onSelect}

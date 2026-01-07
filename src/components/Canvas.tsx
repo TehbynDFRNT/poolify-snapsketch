@@ -70,6 +70,9 @@ export const Canvas = ({
   // Pinch zoom state
   const lastPinchDistRef = useRef<number | null>(null);
   const lastPinchCenterRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Track active touch count to prevent component dragging during two-finger gestures
+  const activeTouchCountRef = useRef<number>(0);
   
   // Drawing state for boundary, house, paving area, and linear tools (wall/fence/drainage)
   const [drawingPoints, setDrawingPoints] = useState<Array<{ x: number; y: number }>>([]);
@@ -869,6 +872,8 @@ export const Canvas = ({
   // Two-finger gesture handlers for touch devices (pan + pinch zoom)
   const handleTouchMove = (e: any) => {
     const touches = e.evt.touches;
+    activeTouchCountRef.current = touches?.length || 0;
+
     if (touches.length !== 2) return;
 
     e.evt.preventDefault();
@@ -930,9 +935,33 @@ export const Canvas = ({
     lastPinchCenterRef.current = { x: centerX, y: centerY };
   };
 
-  const handleTouchEnd = () => {
-    lastPinchDistRef.current = null;
-    lastPinchCenterRef.current = null;
+  // Touch start handler - track touch count and stop component drags on multi-touch
+  const handleTouchStart = (e: any) => {
+    const touchCount = e.evt.touches?.length || 0;
+    activeTouchCountRef.current = touchCount;
+
+    // If two or more touches, stop any ongoing component drag
+    if (touchCount >= 2) {
+      const stage = stageRef.current;
+      if (stage) {
+        // Find any dragging nodes and stop their drag
+        const draggingNode = stage.findOne((node: any) => node.isDragging && node.isDragging());
+        if (draggingNode) {
+          draggingNode.stopDrag();
+        }
+      }
+    }
+  };
+
+  const handleTouchEnd = (e: any) => {
+    const touchCount = e.evt.touches?.length || 0;
+    activeTouchCountRef.current = touchCount;
+
+    // Reset pinch refs when all touches end
+    if (touchCount === 0) {
+      lastPinchDistRef.current = null;
+      lastPinchCenterRef.current = null;
+    }
   };
 
   const renderGrid = () => {
@@ -1207,6 +1236,7 @@ export const Canvas = ({
         onWheel={handleWheel}
         onClick={handleStageClick}
         onMouseMove={handleMouseMove}
+        onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         draggable={isDraggable}

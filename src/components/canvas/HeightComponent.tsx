@@ -47,7 +47,7 @@ export const HeightComponent = ({
     <Group
       x={component.position.x}
       y={component.position.y}
-      draggable={activeTool !== 'hand'}
+      draggable={activeTool !== 'hand' && isSelected}
       onClick={onSelect}
       onTap={onSelect}
       onDragEnd={(e) => {

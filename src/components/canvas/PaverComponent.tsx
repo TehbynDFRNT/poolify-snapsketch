@@ -351,7 +351,7 @@ export const PaverComponent = ({
       x={component.position.x}
       y={component.position.y}
       rotation={component.rotation}
-      draggable={activeTool !== 'hand' && !isDraggingHandle}
+      draggable={activeTool !== 'hand' && isSelected && !isDraggingHandle}
       onClick={onSelect}
       onTap={onSelect}
       onContextMenu={handleRightClick}
