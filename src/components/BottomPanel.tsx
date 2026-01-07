@@ -123,85 +123,69 @@ export const BottomPanel = ({
 
       {isCollapsed ? (
         // Collapsed state - show controls and expand button
-        <div className="flex items-center justify-between px-2 sm:px-4 h-12 flex-shrink-0">
-          {/* Show measurement info when drawing or measuring */}
-          {(isDrawing && ghostDistance !== null) || (isMeasuring && measureStart && measureEnd) ? (
-            <div className="bg-card border border-border rounded-lg px-2 py-1 shadow-sm">
-              {isDrawing && ghostDistance !== null && (
-                <span className="text-xs sm:text-sm text-foreground">
-                  📏 {(ghostDistance / 100).toFixed(1)}m
-                  {shiftPressed && ' 🔒'}
-                </span>
-              )}
-              {isMeasuring && measureStart && measureEnd && (
-                <span className="text-xs sm:text-sm text-foreground">
-                  📏 {(calculateDistance(measureStart, measureEnd) / 100).toFixed(1)}m
-                  {shiftPressed && ' 🔒'}
-                </span>
-              )}
-            </div>
-          ) : (
-            <span className="text-xs sm:text-sm text-muted-foreground hidden sm:block">
-              {activeTab === 'materials' ? 'Materials' : 'Notes'}
-            </span>
-          )}
-
-          {/* Undo/Redo */}
-          {onUndo && onRedo && (
-            <div className="ml-auto flex gap-0.5 sm:gap-1 items-center border-r pr-1 sm:pr-2 mr-1 sm:mr-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onUndo}
-                disabled={!canUndo}
-                className="w-9 h-9 sm:w-10 sm:h-10"
-                title="Undo"
-              >
-                <Undo2 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onRedo}
-                disabled={!canRedo}
-                className="w-9 h-9 sm:w-10 sm:h-10"
-                title="Redo"
-              >
-                <Redo2 className="h-4 w-4" />
-              </Button>
+        <div className="flex items-center justify-between px-2 sm:px-4 py-2 flex-1">
+          {/* Measurement info when drawing */}
+          {((isDrawing && ghostDistance !== null) || (isMeasuring && measureStart && measureEnd)) && (
+            <div className="bg-card border border-border rounded-lg px-2 py-1 shadow-sm mr-2">
+              <span className="text-xs text-foreground">
+                📏 {isDrawing && ghostDistance !== null
+                  ? `${(ghostDistance / 100).toFixed(1)}m`
+                  : `${(calculateDistance(measureStart!, measureEnd!) / 100).toFixed(1)}m`}
+                {shiftPressed && ' 🔒'}
+              </span>
             </div>
           )}
 
-          {/* Zoom Controls */}
-          <div className={`${onUndo ? '' : 'ml-auto'} flex gap-0.5 sm:gap-1 items-center border-r pr-1 sm:pr-2 mr-1 sm:mr-2`}>
+          {/* Spacer to push controls right */}
+          <div className="flex-1" />
+
+          {/* Undo/Redo - always show */}
+          <div className="flex gap-1 items-center mr-2">
             <Button
               variant="ghost"
               size="icon"
-              onClick={onToggleZoomLock}
-              title={zoomLocked ? "Unlock Zoom" : "Lock Zoom"}
-              className={`w-9 h-9 sm:w-10 sm:h-10 hidden sm:flex ${zoomLocked ? "text-primary" : ""}`}
+              onClick={onUndo}
+              disabled={!canUndo}
+              className="w-10 h-10"
+              title="Undo"
             >
-              {zoomLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+              <Undo2 className="h-5 w-5" />
             </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onRedo}
+              disabled={!canRedo}
+              className="w-10 h-10"
+              title="Redo"
+            >
+              <Redo2 className="h-5 w-5" />
+            </Button>
+          </div>
+
+          {/* Divider */}
+          <div className="h-6 w-px bg-border mr-2" />
+
+          {/* Zoom Controls */}
+          <div className="flex gap-1 items-center mr-2">
             <Button
               variant="ghost"
               size="icon"
               onClick={onZoomOut}
               title="Zoom Out"
               disabled={zoomLocked}
-              className="w-9 h-9 sm:w-10 sm:h-10"
+              className="w-10 h-10"
             >
-              <ZoomOut className="h-4 w-4" />
+              <ZoomOut className="h-5 w-5" />
             </Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={onFitView}
               title="Fit to View"
-              className="h-9 sm:h-10 px-2 text-xs"
+              className="h-10 px-2"
             >
-              <Maximize className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">{Math.round(zoom * 100)}%</span>
+              <Maximize className="h-5 w-5" />
             </Button>
             <Button
               variant="ghost"
@@ -209,19 +193,23 @@ export const BottomPanel = ({
               onClick={onZoomIn}
               title="Zoom In"
               disabled={zoomLocked}
-              className="w-9 h-9 sm:w-10 sm:h-10"
+              className="w-10 h-10"
             >
-              <ZoomIn className="h-4 w-4" />
+              <ZoomIn className="h-5 w-5" />
             </Button>
           </div>
 
+          {/* Divider */}
+          <div className="h-6 w-px bg-border mr-2" />
+
+          {/* Expand button */}
           <Button
             variant="ghost"
             size="icon"
             onClick={toggleCollapse}
-            className="w-9 h-9 sm:w-10 sm:h-10"
+            className="w-10 h-10"
           >
-            <ChevronUp className="w-4 h-4" />
+            <ChevronUp className="w-5 h-5" />
           </Button>
         </div>
       ) : (
