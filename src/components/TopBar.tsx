@@ -17,6 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { StageStatusBar } from './StageStatusBar';
 
 interface TopBarProps {
   projectName: string;
@@ -33,6 +34,7 @@ interface TopBarProps {
   onShare?: () => void;
   onExport: () => void;
   onMenuClick: () => void;
+  onHistoryClick?: () => void;
 }
 
 export const TopBar = ({
@@ -50,6 +52,7 @@ export const TopBar = ({
   onShare,
   onExport,
   onMenuClick,
+  onHistoryClick,
 }: TopBarProps) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -79,6 +82,11 @@ export const TopBar = ({
           <p className="text-xs text-muted-foreground hidden sm:block">
             Auto-saved: {formatLastSaved(lastSaved)}
           </p>
+        </div>
+
+        {/* Stage Status - visible on md+ screens */}
+        <div className="hidden md:block ml-4">
+          <StageStatusBar onHistoryClick={onHistoryClick} />
         </div>
       </div>
 
@@ -206,6 +214,14 @@ export const TopBar = ({
                   className="w-4 h-4 pointer-events-none"
                 />
               </button>
+
+              <div className="h-px bg-border my-2" />
+
+              {/* Stage Status */}
+              <div className="text-xs font-semibold text-muted-foreground px-3 py-1">Project Stage</div>
+              <div className="px-3 py-2">
+                <StageStatusBar onHistoryClick={() => { onHistoryClick?.(); setMobileMenuOpen(false); }} />
+              </div>
 
               <div className="h-px bg-border my-2" />
 

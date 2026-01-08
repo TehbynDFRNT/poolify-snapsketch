@@ -1,3 +1,23 @@
+// Project stages for workflow tracking
+export type ProjectStage = 'proposal' | 'contract_site_plan' | 'contract_variations';
+
+// Project status within each stage
+export type ProjectStatus = 'draft' | 'approved';
+
+// Stage display names for UI
+export const PROJECT_STAGE_LABELS: Record<ProjectStage, string> = {
+  proposal: 'Proposal',
+  contract_site_plan: 'Contract Site Plan',
+  contract_variations: 'Contract Variations',
+};
+
+// Stage order for auto-advance
+export const PROJECT_STAGE_ORDER: ProjectStage[] = [
+  'proposal',
+  'contract_site_plan',
+  'contract_variations',
+];
+
 export interface Project {
   id: string;
   customerName: string;
@@ -7,6 +27,20 @@ export interface Project {
   createdAt: Date | string;
   updatedAt: Date | string;
   components: Component[];
+  stage: ProjectStage;
+  status: ProjectStatus;
+}
+
+// Version snapshot for version history
+export interface ProjectVersion {
+  id: string;
+  projectId: string;
+  versionNumber: number;
+  stage: ProjectStage;
+  components: Component[];
+  notes?: string;
+  createdAt: Date | string;
+  createdBy?: string;
 }
 
 export type ToolType =

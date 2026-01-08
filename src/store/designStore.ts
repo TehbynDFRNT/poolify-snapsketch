@@ -1,8 +1,9 @@
 import { create } from 'zustand';
-import { Component, Project, Summary } from '@/types';
+import { Component, Project, Summary, ProjectStage, ProjectStatus, ProjectVersion, PROJECT_STAGE_ORDER } from '@/types';
 import { calculateMeasurements } from '@/utils/measurements';
 import { saveProject, loadProject, saveGridVisibility, loadGridVisibility, saveAnnotationsVisibility, loadAnnotationsVisibility, saveProjectViewState, loadProjectViewState, saveProjectHistory, loadProjectHistory } from '@/utils/storage';
 import { v4 as uuidv4 } from 'uuid';
+import { supabase } from '@/integrations/supabase/client';
 
 interface DesignStore {
   // Project
@@ -71,6 +72,12 @@ interface DesignStore {
   loadProjectById: (id: string) => void;
   clearAll: () => void;
   setTileSelection: (info: DesignStore['tileSelection']) => void;
+
+  // Staging & Versioning
+  changeStage: (stage: ProjectStage) => void;
+  approveProject: (notes?: string) => Promise<{ success: boolean; error?: string }>;
+  fetchVersions: () => Promise<ProjectVersion[]>;
+  restoreVersion: (versionId: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const useDesignStore = create<DesignStore>((set, get) => ({
@@ -449,5 +456,183 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
         selectedComponentId: null,
       };
     });
+  },
+
+  // Staging & Versioning Actions
+  changeStage: (stage: ProjectStage) => {
+    const { currentProject } = get();
+    if (!currentProject) return;
+
+    const updatedProject: Project = {
+      ...currentProject,
+      stage,
+      status: 'draft', // Reset to draft when changing stage
+      updatedAt: new Date(),
+    };
+
+    saveProject(updatedProject);
+    set({ currentProject: updatedProject });
+  },
+
+  approveProject: async (notes?: string) => {
+    const { currentProject, components } = get();
+    if (!currentProject?.id) {
+      return { success: false, error: 'No project loaded' };
+    }
+
+    try {
+      // Get current version count
+      const { data: existingVersions, error: fetchError } = await supabase
+        .from('project_versions')
+        .select('version_number')
+        .eq('project_id', currentProject.id)
+        .order('version_number', { ascending: false })
+        .limit(1);
+
+      if (fetchError) throw fetchError;
+
+      const nextVersionNumber = (existingVersions?.[0]?.version_number ?? 0) + 1;
+
+      // Save snapshot
+      const { error: insertError } = await supabase
+        .from('project_versions')
+        .insert({
+          project_id: currentProject.id,
+          version_number: nextVersionNumber,
+          stage: currentProject.stage,
+          components: components as unknown as Record<string, unknown>[],
+          notes: notes || `Approved at ${currentProject.stage}`,
+        });
+
+      if (insertError) throw insertError;
+
+      // Auto-advance to next stage
+      const currentStageIndex = PROJECT_STAGE_ORDER.indexOf(currentProject.stage);
+      const nextStage = currentStageIndex < PROJECT_STAGE_ORDER.length - 1
+        ? PROJECT_STAGE_ORDER[currentStageIndex + 1]
+        : currentProject.stage; // Stay at last stage
+
+      const updatedProject: Project = {
+        ...currentProject,
+        stage: nextStage,
+        status: 'draft',
+        updatedAt: new Date(),
+      };
+
+      // Update project in Supabase
+      const { error: updateError } = await supabase
+        .from('projects')
+        .update({
+          stage: nextStage,
+          status: 'draft',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', currentProject.id);
+
+      if (updateError) throw updateError;
+
+      saveProject(updatedProject);
+      set({ currentProject: updatedProject });
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Failed to approve project:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  fetchVersions: async () => {
+    const { currentProject } = get();
+    if (!currentProject?.id) return [];
+
+    try {
+      const { data, error } = await supabase
+        .from('project_versions')
+        .select('*')
+        .eq('project_id', currentProject.id)
+        .order('version_number', { ascending: false });
+
+      if (error) throw error;
+
+      return (data || []).map((v: any) => ({
+        id: v.id,
+        projectId: v.project_id,
+        versionNumber: v.version_number,
+        stage: v.stage as ProjectStage,
+        components: v.components as Component[],
+        notes: v.notes,
+        createdAt: v.created_at,
+        createdBy: v.created_by,
+      }));
+    } catch (error) {
+      console.error('Failed to fetch versions:', error);
+      return [];
+    }
+  },
+
+  restoreVersion: async (versionId: string) => {
+    const { currentProject } = get();
+    if (!currentProject?.id) {
+      return { success: false, error: 'No project loaded' };
+    }
+
+    try {
+      // Fetch the version
+      const { data: version, error: fetchError } = await supabase
+        .from('project_versions')
+        .select('*')
+        .eq('id', versionId)
+        .single();
+
+      if (fetchError) throw fetchError;
+      if (!version) throw new Error('Version not found');
+
+      const restoredComponents = version.components as Component[];
+      const restoredStage = version.stage as ProjectStage;
+
+      // Update local state
+      set((state) => {
+        const newHistory = state.history.slice(0, state.historyIndex + 1);
+        newHistory.push(restoredComponents);
+        const trimmedHistory = newHistory.slice(-50);
+        const newHistoryIndex = trimmedHistory.length - 1;
+
+        return {
+          components: restoredComponents,
+          history: trimmedHistory,
+          historyIndex: newHistoryIndex,
+          selectedComponentId: null,
+        };
+      });
+
+      const updatedProject: Project = {
+        ...currentProject,
+        components: restoredComponents,
+        stage: restoredStage,
+        status: 'draft',
+        updatedAt: new Date(),
+      };
+
+      // Update project in Supabase
+      const { error: updateError } = await supabase
+        .from('projects')
+        .update({
+          components: restoredComponents as unknown as Record<string, unknown>[],
+          stage: restoredStage,
+          status: 'draft',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', currentProject.id);
+
+      if (updateError) throw updateError;
+
+      saveProject(updatedProject);
+      set({ currentProject: updatedProject });
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Failed to restore version:', error);
+      return { success: false, error: error.message };
+    }
   },
 }));

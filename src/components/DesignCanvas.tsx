@@ -38,6 +38,7 @@ import { FloatingKeyboardShortcuts } from './FloatingKeyboardShortcuts';
 import { FloatingShiftToggle } from './FloatingShiftToggle';
 import { ExportDialog } from './ExportDialog';
 import { ShareProjectDialog } from './ShareProjectDialog';
+import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { exportToPDF } from '@/utils/pdfExport';
 import { exportAsImage } from '@/utils/imageExport';
@@ -98,6 +99,7 @@ export const DesignCanvas = () => {
   // Start collapsed by default (56px = 8px handle + 48px content)
   const [bottomPanelHeight, setBottomPanelHeight] = useState(56);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
   // Sidebar collapsed on mobile by default
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // Track which tool's sub-menu is open in mobile bubble menu
@@ -557,6 +559,7 @@ export const DesignCanvas = () => {
         onShare={permission === 'owner' ? () => setShareDialogOpen(true) : undefined}
         onExport={() => setExportDialogOpen(true)}
         onMenuClick={() => setMenuOpen(true)}
+        onHistoryClick={() => setHistoryPanelOpen(true)}
       />
 
       {/* Main content area with left toolbar and canvas */}
@@ -901,6 +904,11 @@ export const DesignCanvas = () => {
           }}
         />
       )}
+
+      <VersionHistoryPanel
+        open={historyPanelOpen}
+        onOpenChange={setHistoryPanelOpen}
+      />
 
       <AlertDialog open={clearAllDialogOpen} onOpenChange={setClearAllDialogOpen}>
         <AlertDialogContent>
