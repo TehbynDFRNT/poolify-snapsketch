@@ -1,6 +1,27 @@
 import { useState, useRef, useEffect } from 'react';
 import { RotateCw } from 'lucide-react';
 
+// Detect touch devices including iPads (which may report as desktop)
+function useIsTouchDevice() {
+  const [isTouch, setIsTouch] = useState(false);
+
+  useEffect(() => {
+    const checkTouch = () => {
+      const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      const isIPad = /iPad/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const isMobileUA = /Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      setIsTouch(hasTouch && (isIPad || isMobileUA || window.innerWidth < 1024));
+    };
+
+    checkTouch();
+    window.addEventListener('resize', checkTouch);
+    return () => window.removeEventListener('resize', checkTouch);
+  }, []);
+
+  return isTouch;
+}
+
 interface CompassRotatorProps {
   rotation: number; // Current rotation in degrees
   onChange: (rotation: number) => void;
@@ -12,6 +33,7 @@ export const CompassRotator = ({ rotation, onChange, visible }: CompassRotatorPr
   const compassRef = useRef<HTMLDivElement>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [draftValue, setDraftValue] = useState<string>('');
+  const isTouchDevice = useIsTouchDevice();
 
   useEffect(() => {
     if (!isDragging) return;
@@ -77,8 +99,8 @@ export const CompassRotator = ({ rotation, onChange, visible }: CompassRotatorPr
   if (!visible) return null;
 
   return (
-    // Position to the right on mobile (left-24) to avoid floating shift toggle, normal position on desktop
-    <div className="absolute bottom-4 left-24 lg:left-4 z-50 flex flex-col items-center gap-2">
+    // Position to the right on touch devices to avoid floating shift toggle
+    <div className={`absolute bottom-4 z-50 flex flex-col items-center gap-2 ${isTouchDevice ? 'left-24' : 'left-4'}`}>
       {/* Compass Circle */}
       <div
         ref={compassRef}

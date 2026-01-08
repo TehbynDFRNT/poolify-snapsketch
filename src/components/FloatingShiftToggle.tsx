@@ -1,9 +1,39 @@
 import { useDesignStore } from '@/store/designStore';
 import { cn } from '@/lib/utils';
+import { useState, useEffect } from 'react';
+
+// Detect touch devices including iPads (which may report as desktop)
+function useIsTouchDevice() {
+  const [isTouch, setIsTouch] = useState(false);
+
+  useEffect(() => {
+    const checkTouch = () => {
+      // Check for touch capability
+      const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      // Check for iPad specifically (iPadOS 13+ reports as Mac)
+      const isIPad = /iPad/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      // Check for mobile/tablet user agents
+      const isMobileUA = /Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+      setIsTouch(hasTouch && (isIPad || isMobileUA || window.innerWidth < 1024));
+    };
+
+    checkTouch();
+    window.addEventListener('resize', checkTouch);
+    return () => window.removeEventListener('resize', checkTouch);
+  }, []);
+
+  return isTouch;
+}
 
 export function FloatingShiftToggle() {
   const shiftPressed = useDesignStore((state) => state.shiftPressed);
   const setShiftPressed = useDesignStore((state) => state.setShiftPressed);
+  const isTouchDevice = useIsTouchDevice();
+
+  // Only show on touch devices (mobile, tablet, iPad)
+  if (!isTouchDevice) return null;
 
   return (
     <button
