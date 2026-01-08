@@ -77,8 +77,8 @@ export const CompassRotator = ({ rotation, onChange, visible }: CompassRotatorPr
   if (!visible) return null;
 
   return (
-    // Position higher on mobile (bottom-44) to avoid floating shift toggle, normal position on desktop
-    <div className="absolute bottom-44 lg:bottom-4 left-4 z-50 flex flex-col items-center gap-2">
+    // Position to the right on mobile (left-24) to avoid floating shift toggle, normal position on desktop
+    <div className="absolute bottom-4 left-24 lg:left-4 z-50 flex flex-col items-center gap-2">
       {/* Compass Circle */}
       <div
         ref={compassRef}
