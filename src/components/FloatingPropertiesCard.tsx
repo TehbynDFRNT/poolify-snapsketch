@@ -91,6 +91,37 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
                    component.properties.poolId}
                 </div>
               </div>
+              {/* Pool Rotation */}
+              <div>
+                <Label htmlFor="pool-rotation" className="text-xs">Rotation (degrees)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="pool-rotation"
+                    type="number"
+                    step="1"
+                    min="0"
+                    max="359"
+                    value={Math.round(component.rotation || 0)}
+                    onChange={(e) => {
+                      let rotation = parseFloat(e.target.value);
+                      if (isNaN(rotation)) rotation = 0;
+                      // Normalize to 0-359
+                      rotation = ((rotation % 360) + 360) % 360;
+                      updateComponent(component.id, { rotation });
+                    }}
+                    className="h-8 flex-1"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => updateComponent(component.id, { rotation: 0 })}
+                    title="Reset rotation"
+                  >
+                    Reset
+                  </Button>
+                </div>
+              </div>
               {/* Pool & Coping Area Statistics */}
               <div className="space-y-2 pt-2 border-t">
                 {(() => {
