@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { useParams, Navigate } from 'react-router-dom';
+import { useParams, useSearchParams, Navigate } from 'react-router-dom';
 import { Stage, Layer, Line } from 'react-konva';
 import { supabase } from '@/integrations/supabase/client';
 import { PublicProjectResponse } from '@/types/publicLinks';
@@ -7,6 +7,7 @@ import { Component } from '@/types';
 import { sortComponentsByRenderOrder } from '@/constants/renderOrder';
 import { GRID_CONFIG } from '@/constants/grid';
 import { useDesignStore } from '@/store/designStore';
+import { AcceptanceModal } from './AcceptanceModal';
 
 // Import all component renderers
 import { PoolComponent } from './canvas/PoolComponent';
@@ -27,6 +28,7 @@ const INITIAL_SCALE = 0.5; // 30% further out than 0.7
 
 export const PublicProjectView: React.FC = () => {
   const { token } = useParams<{ token: string }>();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [projectData, setProjectData] = useState<PublicProjectResponse | null>(null);
@@ -39,6 +41,13 @@ export const PublicProjectView: React.FC = () => {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [initialized, setInitialized] = useState(false);
 
+  // Acceptance flow state
+  const isAcceptanceMode = searchParams.get('acceptance') === 'true';
+  const [acceptanceModalOpen, setAcceptanceModalOpen] = useState(false);
+  const [acceptanceLoading, setAcceptanceLoading] = useState(false);
+  const [acceptanceAccepted, setAcceptanceAccepted] = useState(false);
+  const [acceptanceError, setAcceptanceError] = useState<string | null>(null);
+
   // View options from store (components read these directly)
   const gridVisible = useDesignStore((s) => s.gridVisible);
   const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
@@ -50,6 +59,46 @@ export const PublicProjectView: React.FC = () => {
   useEffect(() => {
     loadPublicProject();
   }, [token]);
+
+  // Open acceptance modal when in acceptance mode and project data is loaded
+  useEffect(() => {
+    if (isAcceptanceMode && projectData && !loading) {
+      setAcceptanceModalOpen(true);
+    }
+  }, [isAcceptanceMode, projectData, loading]);
+
+  const handleAccept = async () => {
+    if (!token) return;
+
+    setAcceptanceLoading(true);
+    setAcceptanceError(null);
+
+    try {
+      const { data, error } = await supabase.rpc('accept_project_via_share', {
+        p_token: token,
+      });
+
+      if (error) {
+        console.error('Error accepting project:', error);
+        setAcceptanceError('Failed to accept. Please try again.');
+        return;
+      }
+
+      const result = data as { success: boolean; error?: string; version_number?: number };
+
+      if (!result.success) {
+        setAcceptanceError(result.error || 'Failed to accept project.');
+        return;
+      }
+
+      setAcceptanceAccepted(true);
+    } catch (err) {
+      console.error('Error accepting project:', err);
+      setAcceptanceError('An unexpected error occurred.');
+    } finally {
+      setAcceptanceLoading(false);
+    }
+  };
 
   // Track container dimensions
   useEffect(() => {
@@ -249,6 +298,19 @@ export const PublicProjectView: React.FC = () => {
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
+      {/* Acceptance Modal */}
+      {isAcceptanceMode && (
+        <AcceptanceModal
+          open={acceptanceModalOpen}
+          projectName={projectData.project.customerName || 'Untitled Project'}
+          stage={(projectData.project as any).stage}
+          onAccept={handleAccept}
+          onClose={() => setAcceptanceModalOpen(false)}
+          isLoading={acceptanceLoading}
+          isAccepted={acceptanceAccepted}
+          error={acceptanceError}
+        />
+      )}
       <div ref={containerRef} className="flex-1 relative overflow-hidden" style={{ cursor: 'grab' }}>
         {/* Floating controls - top right */}
         <div className="absolute top-4 right-4 z-10 flex items-center gap-2 bg-white/90 backdrop-blur-sm rounded-lg shadow-md px-3 py-2">
