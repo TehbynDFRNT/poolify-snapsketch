@@ -21,6 +21,7 @@ interface ShareProjectDialogProps {
 export function ShareProjectDialog({ open, onOpenChange, project }: ShareProjectDialogProps) {
   const { user } = useAuth();
   const [publicLink, setPublicLink] = useState<ProjectPublicLink | null>(null);
+  const [includeAcceptance, setIncludeAcceptance] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -48,16 +49,24 @@ export function ShareProjectDialog({ open, onOpenChange, project }: ShareProject
     }
   };
 
+  const getShareUrl = () => {
+    if (!publicLink) return '';
+    const baseUrl = import.meta.env.VITE_BASE_URL || window.location.origin;
+    const url = `${baseUrl}/share/${publicLink.token}`;
+    return includeAcceptance ? `${url}?acceptance=true` : url;
+  };
+
   const copyPublicLink = () => {
     if (!publicLink) return;
 
-    const baseUrl = import.meta.env.VITE_BASE_URL || window.location.origin;
-    const url = `${baseUrl}/share/${publicLink.token}`;
+    const url = getShareUrl();
     navigator.clipboard.writeText(url);
 
     toast({
       title: 'Link copied!',
-      description: 'Share link copied to clipboard',
+      description: includeAcceptance
+        ? 'Acceptance link copied to clipboard'
+        : 'Share link copied to clipboard',
     });
   };
 
@@ -74,23 +83,34 @@ export function ShareProjectDialog({ open, onOpenChange, project }: ShareProject
         <div className="space-y-4 mt-4">
           {publicLink ? (
             <div className="space-y-4">
-              <div className="p-4 bg-muted rounded-lg">
-                <Label className="text-sm font-medium">Share Link</Label>
-                <div className="flex gap-2 mt-2">
-                  <Input
-                    readOnly
-                    value={`${import.meta.env.VITE_BASE_URL || window.location.origin}/share/${publicLink.token}`}
-                    className="font-mono text-sm"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={copyPublicLink}
-                    title="Copy link"
-                  >
-                    <Copy className="w-4 h-4" />
-                  </Button>
+              <div className="p-4 bg-muted rounded-lg space-y-3">
+                <div>
+                  <Label className="text-sm font-medium">Share Link</Label>
+                  <div className="flex gap-2 mt-2">
+                    <Input
+                      readOnly
+                      value={getShareUrl()}
+                      className="font-mono text-sm"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={copyPublicLink}
+                      title="Copy link"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includeAcceptance}
+                    onChange={(e) => setIncludeAcceptance(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm">Include acceptance button</span>
+                </label>
               </div>
 
               <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg text-sm">

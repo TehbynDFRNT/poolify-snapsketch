@@ -245,6 +245,8 @@ export const DesignCanvas = () => {
         createdAt: new Date(project.created_at),
         updatedAt: new Date(project.updated_at),
         components: (project.components as any) || [],
+        stage: project.stage || 'proposal',
+        status: project.status || 'draft',
       });
 
       // View state (zoom/pan) is restored per-project by the store (session-based)
@@ -276,6 +278,8 @@ export const DesignCanvas = () => {
             address: currentProject.address,
             notes: currentProject.notes,
             components: componentsRef.current as any,
+            stage: currentProject.stage,
+            status: currentProject.status,
             updated_at: new Date().toISOString(),
           })
           .eq('id', id);
@@ -325,6 +329,8 @@ export const DesignCanvas = () => {
           address: currentProject.address,
           notes: currentProject.notes,
           components: latestComponents as any,
+          stage: currentProject.stage,
+          status: currentProject.status,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id);
