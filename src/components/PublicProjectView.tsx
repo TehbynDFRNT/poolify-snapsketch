@@ -22,7 +22,7 @@ import { PavingAreaComponent } from './canvas/PavingAreaComponent';
 
 // Import UI components
 import { Button } from '@/components/ui/button';
-import { Home, Grid3X3, Tag, FileText, ZoomIn, ZoomOut } from 'lucide-react';
+import { Home, Grid3X3, Tag, FileText, ZoomIn, ZoomOut, CheckCircle } from 'lucide-react';
 
 const INITIAL_SCALE = 0.5; // 30% further out than 0.7
 
@@ -60,12 +60,6 @@ export const PublicProjectView: React.FC = () => {
     loadPublicProject();
   }, [token]);
 
-  // Open acceptance modal when in acceptance mode and project data is loaded
-  useEffect(() => {
-    if (isAcceptanceMode && projectData && !loading) {
-      setAcceptanceModalOpen(true);
-    }
-  }, [isAcceptanceMode, projectData, loading]);
 
   const handleAccept = async () => {
     if (!token) return;
@@ -314,6 +308,28 @@ export const PublicProjectView: React.FC = () => {
       <div ref={containerRef} className="flex-1 relative overflow-hidden" style={{ cursor: 'grab' }}>
         {/* Floating controls - top right */}
         <div className="absolute top-4 right-4 z-10 flex items-center gap-2 bg-white/90 backdrop-blur-sm rounded-lg shadow-md px-3 py-2">
+          {/* Accept button - only shown when ?acceptance=true */}
+          {isAcceptanceMode && !acceptanceAccepted && (
+            <>
+              <button
+                onClick={() => setAcceptanceModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
+              >
+                <CheckCircle className="h-4 w-4" />
+                <span>Accept Design</span>
+              </button>
+              <div className="w-px h-6 bg-gray-300 mx-1" />
+            </>
+          )}
+          {isAcceptanceMode && acceptanceAccepted && (
+            <>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium bg-green-100 text-green-700">
+                <CheckCircle className="h-4 w-4" />
+                <span>Accepted</span>
+              </div>
+              <div className="w-px h-6 bg-gray-300 mx-1" />
+            </>
+          )}
           <button
             onClick={toggleGrid}
             className={`flex items-center gap-1.5 px-2 py-1 rounded text-sm transition-colors ${
