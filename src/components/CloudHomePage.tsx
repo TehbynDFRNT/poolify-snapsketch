@@ -32,7 +32,6 @@ interface CloudProject {
   is_archived: boolean;
   profiles?: {
     full_name: string;
-    email: string;
   };
   project_shares?: Array<{
     permission: string;
@@ -140,9 +139,8 @@ export function CloudHomePage() {
         .from('projects')
         .select(`
           *,
-          profiles!owner_id (
-            full_name,
-            email
+          profiles!projects_owner_id_fkey (
+            full_name
           )
         `)
         .eq('is_archived', false)
@@ -600,9 +598,9 @@ export function CloudHomePage() {
                       <div className="flex-1">
                         <CardTitle className="text-lg">{project.customer_name}</CardTitle>
                         <CardDescription className="mt-1">{project.address}</CardDescription>
-                        {project.owner_id !== user?.id && project.profiles && (
+                        {project.owner_id !== user?.id && project.profiles?.full_name && (
                           <p className="text-xs text-muted-foreground mt-2">
-                            Owner: {project.profiles.full_name || project.profiles.email}
+                            Owner: {project.profiles.full_name}
                           </p>
                         )}
                       </div>
