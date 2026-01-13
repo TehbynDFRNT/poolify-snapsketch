@@ -32,6 +32,7 @@ interface CloudProject {
   is_archived: boolean;
   profiles?: {
     full_name: string;
+    email: string;
   };
   project_shares?: Array<{
     permission: string;
@@ -63,6 +64,7 @@ export function CloudHomePage() {
   const [editCheckingLink, setEditCheckingLink] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [projectFilter, setProjectFilter] = useState<'mine' | 'team'>('mine');
 
   useEffect(() => {
     loadProjects();
@@ -136,7 +138,13 @@ export function CloudHomePage() {
     try {
       const { data, error } = await supabase
         .from('projects')
-        .select('*')
+        .select(`
+          *,
+          profiles:owner_id (
+            full_name,
+            email
+          )
+        `)
         .eq('is_archived', false)
         .order('updated_at', { ascending: false });
 
@@ -430,12 +438,26 @@ export function CloudHomePage() {
   };
 
   const filterProjects = (projects: CloudProject[]) => {
-    if (!searchQuery) return projects;
-    return projects.filter(
-      (p) =>
-        p.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.address.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    let filtered = projects;
+
+    // Filter by ownership
+    if (projectFilter === 'mine') {
+      filtered = filtered.filter(p => p.owner_id === user?.id);
+    } else {
+      filtered = filtered.filter(p => p.owner_id !== user?.id);
+    }
+
+    // Filter by search query
+    if (searchQuery) {
+      filtered = filtered.filter(
+        (p) =>
+          p.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.profiles?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    return filtered;
   };
 
   const formatDate = (dateString: string) => {
@@ -526,9 +548,39 @@ export function CloudHomePage() {
           </div>
         </div>
 
-        <div className="mt-6">
+        {/* Tabs for My Projects vs Team Projects */}
+        <div className="flex gap-1 border-b mb-6">
+          <button
+            onClick={() => setProjectFilter('mine')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              projectFilter === 'mine'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            My Projects
+            <span className="ml-2 text-xs bg-muted px-2 py-0.5 rounded-full">
+              {projects.filter(p => p.owner_id === user?.id).length}
+            </span>
+          </button>
+          <button
+            onClick={() => setProjectFilter('team')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              projectFilter === 'team'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Team Projects
+            <span className="ml-2 text-xs bg-muted px-2 py-0.5 rounded-full">
+              {projects.filter(p => p.owner_id !== user?.id).length}
+            </span>
+          </button>
+        </div>
+
+        <div className="mt-2">
           <p className="text-sm text-muted-foreground mb-4">
-            {projects.length} project{projects.length !== 1 ? 's' : ''}
+            {filterProjects(projects).length} project{filterProjects(projects).length !== 1 ? 's' : ''}
           </p>
           {filterProjects(projects).length === 0 ? (
             <Card>
@@ -548,6 +600,11 @@ export function CloudHomePage() {
                       <div className="flex-1">
                         <CardTitle className="text-lg">{project.customer_name}</CardTitle>
                         <CardDescription className="mt-1">{project.address}</CardDescription>
+                        {project.owner_id !== user?.id && project.profiles && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Owner: {project.profiles.full_name || project.profiles.email}
+                          </p>
+                        )}
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
