@@ -140,7 +140,7 @@ export function CloudHomePage() {
         .from('projects')
         .select(`
           *,
-          profiles:owner_id (
+          profiles!owner_id (
             full_name,
             email
           )
