@@ -28,12 +28,21 @@ export function SupabaseAuthSync() {
         .eq('id', user.id)
         .single();
 
+      const email = user.primaryEmailAddress?.emailAddress || null;
+
       if (!data) {
         await supabase.from('profiles').insert({
           id: user.id,
           full_name: user.fullName || user.firstName || 'User',
+          email,
           role: 'sales_rep',
         });
+      } else {
+        // Keep email in sync with Clerk
+        await supabase
+          .from('profiles')
+          .update({ email })
+          .eq('id', user.id);
       }
       profileEnsured.current = true;
     };

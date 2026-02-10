@@ -1,9 +1,10 @@
 import { useMemo, useCallback } from 'react';
-import { useUser, useClerk, useAuth as useClerkAuth } from '@clerk/clerk-react';
+import { useUser, useClerk, useAuth as useClerkAuth, useOrganization } from '@clerk/clerk-react';
 
 interface AuthUser {
   id: string;
   email: string;
+  orgId: string | null;
 }
 
 interface AuthContextType {
@@ -15,14 +16,16 @@ interface AuthContextType {
 export function useAuth(): AuthContextType {
   const { user: clerkUser, isLoaded } = useUser();
   const { signOut } = useClerk();
+  const { organization } = useOrganization();
 
   const user: AuthUser | null = useMemo(() => {
     if (!clerkUser) return null;
     return {
       id: clerkUser.id,
       email: clerkUser.primaryEmailAddress?.emailAddress || '',
+      orgId: organization?.id ?? null,
     };
-  }, [clerkUser?.id, clerkUser?.primaryEmailAddress?.emailAddress]);
+  }, [clerkUser?.id, clerkUser?.primaryEmailAddress?.emailAddress, organization?.id]);
 
   const handleSignOut = useCallback(async () => {
     await signOut();

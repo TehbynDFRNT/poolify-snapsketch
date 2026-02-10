@@ -63,7 +63,7 @@ export function CloudHomePage() {
   const [editCheckingLink, setEditCheckingLink] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<any>(null);
-  const [projectFilter, setProjectFilter] = useState<'mine' | 'team'>('mine');
+  const [projectFilter, setProjectFilter] = useState<'mine' | 'org'>('mine');
 
   useEffect(() => {
     loadProjects();
@@ -173,6 +173,7 @@ export function CloudHomePage() {
         .from('projects')
         .insert({
           owner_id: user.id,
+          org_id: user.orgId ?? null,
           customer_name: data.customerName,
           address: data.address,
           notes: data.notes,
@@ -441,7 +442,7 @@ export function CloudHomePage() {
     // Filter by ownership
     if (projectFilter === 'mine') {
       filtered = filtered.filter(p => p.owner_id === user?.id);
-    } else {
+    } else if (projectFilter === 'org') {
       filtered = filtered.filter(p => p.owner_id !== user?.id);
     }
 
@@ -562,14 +563,14 @@ export function CloudHomePage() {
             </span>
           </button>
           <button
-            onClick={() => setProjectFilter('team')}
+            onClick={() => setProjectFilter('org')}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              projectFilter === 'team'
+              projectFilter === 'org'
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            Team Projects
+            Organisation Projects
             <span className="ml-2 text-xs bg-muted px-2 py-0.5 rounded-full">
               {projects.filter(p => p.owner_id !== user?.id).length}
             </span>

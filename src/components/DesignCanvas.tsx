@@ -223,9 +223,8 @@ export const DesignCanvas = () => {
         if (share) {
           setPermission(share.permission as any);
         } else {
-          toast.error('You do not have access to this project');
-          navigate('/projects');
-          return;
+          // No share record but RLS allowed the SELECT — user is an org member
+          setPermission('view');
         }
       }
 
