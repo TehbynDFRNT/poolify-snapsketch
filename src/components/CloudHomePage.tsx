@@ -432,7 +432,7 @@ export function CloudHomePage() {
 
   const handleSignOut = async () => {
     await signOut();
-    navigate('/login');
+    navigate('/sign-in');
   };
 
   const filterProjects = (projects: CloudProject[]) => {

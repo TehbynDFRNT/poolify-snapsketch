@@ -8,17 +8,15 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
 import { ArrowLeft, Save } from 'lucide-react';
+import { UserButton } from '@clerk/clerk-react';
 
 export function ProfileSettings() {
   const navigate = useNavigate();
-  const { user, updatePassword } = useAuth();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState('');
   const [company, setCompany] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
 
   useEffect(() => {
     loadProfile();
@@ -72,67 +70,15 @@ export function ProfileSettings() {
     }
   };
 
-  const handleChangePassword = async () => {
-    if (!newPassword || !confirmPassword) {
-      toast({
-        title: 'Missing fields',
-        description: 'Please fill in all password fields',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      toast({
-        title: "Passwords don't match",
-        description: 'Please make sure your passwords match',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      toast({
-        title: 'Weak password',
-        description: 'Password must be at least 8 characters',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const { error } = await updatePassword(newPassword);
-
-      if (error) throw error;
-
-      toast({
-        title: 'Password updated',
-        description: 'Your password has been changed successfully',
-      });
-
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-    } catch (error: any) {
-      toast({
-        title: 'Error updating password',
-        description: error.message,
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
-        <div className="container mx-auto px-4 py-4">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <Button variant="ghost" onClick={() => navigate('/projects')}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Projects
           </Button>
+          <UserButton />
         </div>
       </header>
 
@@ -182,41 +128,17 @@ export function ProfileSettings() {
             </CardContent>
           </Card>
 
-          {/* Change Password */}
+          {/* Account Management */}
           <Card>
             <CardHeader>
-              <CardTitle>Change Password</CardTitle>
-              <CardDescription>Update your password</CardDescription>
+              <CardTitle>Account Management</CardTitle>
+              <CardDescription>Manage your password and security settings</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="newPassword">New Password</Label>
-                <Input
-                  id="newPassword"
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="mt-1"
-                  minLength={8}
-                />
-                <p className="text-xs text-muted-foreground mt-1">Minimum 8 characters</p>
-              </div>
-
-              <div>
-                <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="mt-1"
-                  minLength={8}
-                />
-              </div>
-
-              <Button onClick={handleChangePassword} disabled={loading}>
-                Update Password
-              </Button>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Use the account button in the top-right corner to manage your password, security settings, and connected accounts.
+              </p>
+              <UserButton />
             </CardContent>
           </Card>
         </div>

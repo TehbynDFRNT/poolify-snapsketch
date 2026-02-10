@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 
 export interface PoolVariant {
   id: string;
@@ -70,11 +71,10 @@ export const usePoolVariant = (id: string) => {
 
 export const useCreatePoolVariant = () => {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (pool: Omit<PoolVariant, 'id' | 'created_at' | 'updated_at'>) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      
       const { data, error } = await supabase
         .from('pool_variants')
         .insert({
@@ -108,11 +108,10 @@ export const useCreatePoolVariant = () => {
 
 export const useUpdatePoolVariant = () => {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async ({ id, ...pool }: Partial<PoolVariant> & { id: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      
       const updates: any = {
         ...pool,
         updated_at: new Date().toISOString(),
@@ -195,10 +194,10 @@ export const useDeletePoolVariant = () => {
 
 export const useTogglePoolStatus = () => {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async ({ id, currentStatus }: { id: string; currentStatus: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
       const newStatus = currentStatus === 'published' ? 'draft' : 'published';
       
       const updates: any = {

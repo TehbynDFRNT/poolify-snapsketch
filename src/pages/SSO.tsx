@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { verifyJWT, decodeJWT, isTokenExpired, SSOPayload } from '@/utils/ssoVerify';
-import { storeAccessToken } from '@/utils/accessToken';
 
 const SSO_REDIRECT_KEY = 'sso_redirect_project';
 const SSO_EMAIL_KEY = 'sso_email';
@@ -65,18 +64,6 @@ export function SSO() {
       setPayload(decoded);
       setStatus('success');
 
-      // Store the access token so they can access login page
-      // Generate from the CPQ key (same as the access token logic)
-      const CPQ_API_KEY = import.meta.env.VITE_CPQ_API_KEY;
-      if (CPQ_API_KEY) {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(CPQ_API_KEY);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        storeAccessToken(hashHex.substring(0, 16));
-      }
-
       // Store redirect target and email for after login
       sessionStorage.setItem(SSO_REDIRECT_KEY, `/project/${decoded.snapsketchProjectId}`);
       sessionStorage.setItem(SSO_EMAIL_KEY, decoded.email);
@@ -94,9 +81,8 @@ export function SSO() {
       clearSSORedirect();
       navigate(`/project/${payload.snapsketchProjectId}`, { replace: true });
     } else {
-      // User not logged in - redirect to login
-      // The login page will use the stored SSO redirect after successful login
-      navigate('/login', { replace: true });
+      // User not logged in - redirect to sign-in
+      navigate('/sign-in', { replace: true });
     }
   }, [authLoading, user, status, payload, navigate]);
 
@@ -115,7 +101,7 @@ export function SSO() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="w-full max-w-md space-y-8 text-center">
-          <h1 className="text-3xl font-bold">🏊 Pool Design Tool</h1>
+          <h1 className="text-3xl font-bold">Pool Design Tool</h1>
           <div className="mt-8 p-6 border rounded-lg bg-destructive/10">
             <h2 className="text-xl font-semibold text-destructive">SSO Error</h2>
             <p className="mt-2 text-muted-foreground">{errorMessage}</p>
