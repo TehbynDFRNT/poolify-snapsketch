@@ -14,7 +14,7 @@ export function SupabaseAuthSync() {
   const profileEnsured = useRef(false);
 
   useEffect(() => {
-    setTokenGetter(async () => session?.getToken() ?? null);
+    setTokenGetter(async () => session?.getToken({ template: 'supabase' }) ?? null);
   }, [session]);
 
   // Auto-create profile row on first sign-in
