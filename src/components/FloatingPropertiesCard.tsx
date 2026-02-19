@@ -63,7 +63,6 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
         : component.type.replace('_', ' '));
 
   return (
-    <div className="absolute z-30 bottom-2 left-16 right-2 lg:bottom-4 lg:right-4 lg:left-auto lg:w-80 lg:max-h-[calc(100vh-200px)] lg:overflow-y-auto">
       <Card className="shadow-lg border-2">
         {/* Mobile compact header */}
         <div className="flex items-center gap-1.5 p-2 lg:hidden">
@@ -102,7 +101,7 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
 
         {/* Properties content - always on desktop, toggleable on mobile */}
         <div className={`${mobileExpanded ? 'block' : 'hidden'} lg:block`}>
-          <CardContent className="space-y-3 text-sm max-h-[40vh] overflow-y-auto lg:max-h-none lg:overflow-visible">
+          <CardContent className="space-y-3 text-sm max-h-[50vh] overflow-y-auto lg:max-h-[calc(100vh-250px)]">
             {/* Type label - desktop only (mobile shows in header) */}
             <div className="hidden lg:block">
               <Label className="text-xs">Type</Label>
@@ -816,6 +815,5 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
         </CardContent>
         </div>
       </Card>
-    </div>
   );
 };

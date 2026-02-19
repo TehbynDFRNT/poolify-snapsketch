@@ -596,10 +596,17 @@ export const DesignCanvas = () => {
               onDrawingStateChange={handleDrawingStateChange}
               onToolChange={handleToolChange}
             />
-
-            {/* Floating Properties Card */}
-            <FloatingPropertiesCard component={selectedComponent} />
           </main>
+
+          {/* Floating Properties Card - outside main to avoid overflow-hidden clipping */}
+          {selectedComponent && (
+            <div
+              className="absolute z-30 left-16 right-2 lg:right-4 lg:left-auto lg:w-80"
+              style={{ bottom: `${Math.max(bottomPanelHeight, 56) + 8}px` }}
+            >
+              <FloatingPropertiesCard component={selectedComponent} />
+            </div>
+          )}
 
           {/* Floating Keyboard Shortcuts - positioned above bottom panel, hidden on mobile */}
           <div
