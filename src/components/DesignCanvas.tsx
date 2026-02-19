@@ -598,10 +598,10 @@ export const DesignCanvas = () => {
             />
           </main>
 
-          {/* Floating Properties Card - outside main to avoid overflow-hidden clipping */}
+          {/* Floating Properties Card - fixed position escapes all overflow-hidden ancestors */}
           {selectedComponent && (
             <div
-              className="absolute z-30 left-16 right-2 lg:right-4 lg:left-auto lg:w-80"
+              className="fixed z-40 left-16 right-2 lg:right-4 lg:left-auto lg:w-80"
               style={{ bottom: `${Math.max(bottomPanelHeight, 56) + 8}px` }}
             >
               <FloatingPropertiesCard component={selectedComponent} />
