@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Component } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -6,13 +7,20 @@ import { Button } from '@/components/ui/button';
 import { useDesignStore } from '@/store/designStore';
 import { POOL_LIBRARY } from '@/constants/pools';
 import { SimpleCopingStats } from '@/types';
+import { ChevronUp, ChevronDown, Copy, Trash2 } from 'lucide-react';
 
 interface FloatingPropertiesCardProps {
   component: Component | null;
 }
 
 export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProps) => {
+  const [mobileExpanded, setMobileExpanded] = useState(false);
   const { updateComponent, deleteComponent, duplicateComponent, tileSelection } = useDesignStore();
+
+  // Reset mobile expanded state when selected component changes
+  useEffect(() => {
+    setMobileExpanded(false);
+  }, [component?.id]);
 
   if (!component) {
     return null; // Don't show the card when nothing is selected
@@ -25,36 +33,83 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
     tileSelection.componentId === component.id
   );
 
+  const handleDelete = () => {
+    if (tileSelection && tileSelection.scope === 'paver' && tileSelection.componentId === component.id) {
+      try {
+        const evt = new KeyboardEvent('keydown', { key: 'Delete' });
+        window.dispatchEvent(evt);
+        return;
+      } catch (_) {
+        // Fallback to component delete if dispatch fails
+      }
+    }
+    deleteComponent(component.id);
+  };
+
+  const typeBadge = isPaverSelectionActive
+    ? 'paver_selection'
+    : (component.type === 'paving_area'
+        ? (component.properties.areaSurface === 'concrete' ? 'concrete_area'
+          : component.properties.areaSurface === 'grass' ? 'grass_area'
+          : 'paving_area')
+        : component.type);
+
+  const typeName = isPaverSelectionActive
+    ? 'Paver Selection'
+    : (component.type === 'paving_area'
+        ? (component.properties.areaSurface === 'concrete' ? 'Concrete Area'
+          : component.properties.areaSurface === 'grass' ? 'Grass Area'
+          : 'Paving Area')
+        : component.type.replace('_', ' '));
+
   return (
-    <div className="absolute bottom-4 right-4 z-30 w-80 max-h-[calc(100vh-200px)] overflow-y-auto">
+    <div className="absolute z-30 bottom-2 left-16 right-2 lg:bottom-4 lg:right-4 lg:left-auto lg:w-80 lg:max-h-[calc(100vh-200px)] lg:overflow-y-auto">
       <Card className="shadow-lg border-2">
-        <CardHeader className="pb-3">
+        {/* Mobile compact header */}
+        <div className="flex items-center gap-1.5 p-2 lg:hidden">
+          <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full shrink-0">
+            {typeBadge}
+          </span>
+          <span className="text-xs text-muted-foreground truncate flex-1 capitalize">
+            {typeName}
+          </span>
+          {!isPaverSelectionActive && (
+            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+              onClick={() => duplicateComponent(component.id)} title="Duplicate">
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
+            onClick={handleDelete} title="Delete">
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+            onClick={() => setMobileExpanded(!mobileExpanded)}
+            title={mobileExpanded ? "Collapse" : "Expand"}>
+            {mobileExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+          </Button>
+        </div>
+
+        {/* Desktop header */}
+        <CardHeader className="pb-3 hidden lg:block">
           <CardTitle className="text-sm flex items-center justify-between">
             <span>Properties</span>
             <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-              {isPaverSelectionActive
-                ? 'paver_selection'
-                : (component.type === 'paving_area'
-                    ? (component.properties.areaSurface === 'concrete' ? 'concrete_area'
-                      : component.properties.areaSurface === 'grass' ? 'grass_area'
-                      : 'paving_area')
-                    : component.type)}
+              {typeBadge}
             </span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <div>
-            <Label className="text-xs">Type</Label>
-            <div className="text-sm font-medium capitalize">
-              {isPaverSelectionActive
-                ? 'Paver Selection'
-                : (component.type === 'paving_area'
-                    ? (component.properties.areaSurface === 'concrete' ? 'Concrete Area'
-                      : component.properties.areaSurface === 'grass' ? 'Grass Area'
-                      : 'Paving Area')
-                    : component.type.replace('_', ' '))}
+
+        {/* Properties content - always on desktop, toggleable on mobile */}
+        <div className={`${mobileExpanded ? 'block' : 'hidden'} lg:block`}>
+          <CardContent className="space-y-3 text-sm max-h-[40vh] overflow-y-auto lg:max-h-none lg:overflow-visible">
+            {/* Type label - desktop only (mobile shows in header) */}
+            <div className="hidden lg:block">
+              <Label className="text-xs">Type</Label>
+              <div className="text-sm font-medium capitalize">
+                {typeName}
+              </div>
             </div>
-          </div>
 
           {/* Paver Selection Card */}
           {isPaverSelectionActive && (
@@ -737,7 +792,8 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
             </div>
           )}
 
-          <div className="flex gap-2 pt-2 border-t">
+          {/* Action buttons - desktop only (mobile has them in compact header) */}
+          <div className="hidden lg:flex gap-2 pt-2 border-t">
             {!isPaverSelectionActive && (
             <Button
               variant="outline"
@@ -751,25 +807,14 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
             <Button
               variant="destructive"
               size="sm"
-              onClick={() => {
-                // If a paver selection is active for this component, delete selection only
-                if (tileSelection && tileSelection.scope === 'paver' && tileSelection.componentId === component.id) {
-                  try {
-                    const evt = new KeyboardEvent('keydown', { key: 'Delete' });
-                    window.dispatchEvent(evt);
-                    return;
-                  } catch (_) {
-                    // Fallback to component delete if dispatch fails
-                  }
-                }
-                deleteComponent(component.id);
-              }}
+              onClick={handleDelete}
               className="flex-1"
             >
               Delete
             </Button>
           </div>
         </CardContent>
+        </div>
       </Card>
     </div>
   );

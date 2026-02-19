@@ -1235,6 +1235,7 @@ export const Canvas = ({
         y={pan.y}
         onWheel={handleWheel}
         onClick={handleStageClick}
+        onTap={handleStageClick}
         onMouseMove={handleMouseMove}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
