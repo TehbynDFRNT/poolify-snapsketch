@@ -65,6 +65,22 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
     return () => document.removeEventListener('click', onDoc);
   }, [toolMenu.open]);
 
+  // Clamp menu position to viewport after it renders
+  useEffect(() => {
+    if (!toolMenu.open || !menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let { x, y } = toolMenu;
+    if (rect.right > vw - 8) x = vw - rect.width - 8;
+    if (rect.bottom > vh - 8) y = vh - rect.height - 8;
+    if (x < 8) x = 8;
+    if (y < 8) y = 8;
+    if (x !== toolMenu.x || y !== toolMenu.y) {
+      setToolMenu(prev => ({ ...prev, x, y }));
+    }
+  }, [toolMenu.open, toolMenu.x, toolMenu.y, toolMenu.tool]);
+
   // Long-press handlers for touch devices
   const handleTouchStart = useCallback((e: React.TouchEvent, tool: { id: ToolType | 'area' | 'select'; hasMenu?: boolean; disabled?: boolean }) => {
     if (!tool.hasMenu || tool.disabled) return;
@@ -173,8 +189,6 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
       } else {
         onToolChange('hand');
       }
-    } else if (toolId === 'area') {
-      onToolChange('paving_area', { areaType: selectedAreaType });
     } else if (toolId === 'area') {
       onToolChange('paving_area', { areaType: selectedAreaType });
     } else if (toolId === 'drainage') {

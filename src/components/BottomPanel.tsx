@@ -67,6 +67,11 @@ export const BottomPanel = ({
 
   const handleMouseDown = () => setIsResizing(true);
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
   useEffect(() => {
     if (!isResizing) return;
 
@@ -75,14 +80,25 @@ export const BottomPanel = ({
       onHeightChange(Math.max(40, Math.min(600, newHeight)));
     };
 
+    const handleTouchMove = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      const newHeight = window.innerHeight - touch.clientY - 60;
+      onHeightChange(Math.max(40, Math.min(600, newHeight)));
+    };
+
     const handleMouseUp = () => setIsResizing(false);
+    const handleTouchEnd = () => setIsResizing(false);
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('touchmove', handleTouchMove, { passive: true });
+    document.addEventListener('touchend', handleTouchEnd);
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
     };
   }, [isResizing, onHeightChange]);
 
@@ -118,7 +134,8 @@ export const BottomPanel = ({
       {/* Resize Handle */}
       <div
         onMouseDown={handleMouseDown}
-        className="h-2 bg-muted hover:bg-primary/40 cursor-ns-resize active:bg-primary/60 transition-colors flex-shrink-0"
+        onTouchStart={handleTouchStart}
+        className="h-2 bg-muted hover:bg-primary/40 cursor-ns-resize active:bg-primary/60 transition-colors flex-shrink-0 touch-none"
       />
 
       {isCollapsed ? (
