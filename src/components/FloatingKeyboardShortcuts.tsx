@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Kbd, KbdGroup } from '@/components/ui/kbd';
-import { getActiveShortcuts, SELECTION_SHORTCUTS, POLYSHAPE_SELECTION_SHORTCUTS, POOL_SELECTION_SHORTCUTS, isPolyshapeType } from '@/config/keyboardShortcuts';
+import { getActiveShortcuts, SELECTION_SHORTCUTS, POLYSHAPE_SELECTION_SHORTCUTS, POOL_SELECTION_SHORTCUTS, OPEN_BOUNDARY_SELECTION_SHORTCUTS, isPolyshapeType } from '@/config/keyboardShortcuts';
 import { cn } from '@/lib/utils';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ToolType } from '@/types';
@@ -9,9 +9,10 @@ interface FloatingKeyboardShortcutsProps {
   activeTool: ToolType;
   hasSelection?: boolean;
   selectedComponentType?: string;
+  selectedComponentClosed?: boolean;
 }
 
-export const FloatingKeyboardShortcuts = ({ activeTool, hasSelection = false, selectedComponentType }: FloatingKeyboardShortcutsProps) => {
+export const FloatingKeyboardShortcuts = ({ activeTool, hasSelection = false, selectedComponentType, selectedComponentClosed }: FloatingKeyboardShortcutsProps) => {
   const [pressedKeys, setPressedKeys] = useState<Set<string>>(new Set());
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -19,9 +20,11 @@ export const FloatingKeyboardShortcuts = ({ activeTool, hasSelection = false, se
   const rawShortcuts = hasSelection
     ? (selectedComponentType === 'pool'
         ? POOL_SELECTION_SHORTCUTS
-        : selectedComponentType && isPolyshapeType(selectedComponentType)
-          ? POLYSHAPE_SELECTION_SHORTCUTS
-          : SELECTION_SHORTCUTS)
+        : selectedComponentType === 'boundary' && !selectedComponentClosed
+          ? OPEN_BOUNDARY_SELECTION_SHORTCUTS
+          : selectedComponentType && isPolyshapeType(selectedComponentType)
+            ? POLYSHAPE_SELECTION_SHORTCUTS
+            : SELECTION_SHORTCUTS)
     : getActiveShortcuts(activeTool).filter(shortcut => {
         // For select tool, hide Shift+Click shortcut when object is selected (already filtered above)
         if (activeTool === 'select' && shortcut.action === 'temp_pan' && hasSelection) {

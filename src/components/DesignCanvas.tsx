@@ -619,6 +619,7 @@ export const DesignCanvas = () => {
               activeTool={activeTool}
               hasSelection={!!selectedComponentId}
               selectedComponentType={selectedComponent?.type}
+              selectedComponentClosed={selectedComponent?.properties?.closed}
             />
           </div>
 

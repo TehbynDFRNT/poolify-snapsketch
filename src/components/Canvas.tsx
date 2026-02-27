@@ -79,8 +79,16 @@ export const Canvas = ({
   const [ghostPoint, setGhostPoint] = useState<{ x: number; y: number } | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   
-  // Removed extend-from-pool right-click mode and context menu
-  
+  // Boundary extension state - allows extending an existing open boundary from its endpoints
+  const [extensionState, setExtensionState] = useState<{
+    componentId: string;
+    endpoint: 'first' | 'last';
+    originalPoints: Array<{ x: number; y: number }>;
+  } | null>(null);
+
+  // When extending, treat drawing as if boundary tool is active
+  const effectiveDrawingTool = extensionState ? 'boundary' : activeTool;
+
   // Measurement tool states
   const [measureStart, setMeasureStart] = useState<{ x: number; y: number } | null>(null);
   const [measureEnd, setMeasureEnd] = useState<{ x: number; y: number } | null>(null);
@@ -212,7 +220,8 @@ export const Canvas = ({
       activeTool === 'area' ||
       activeTool === 'wall' ||
       activeTool === 'fence' ||
-      activeTool === 'drainage';
+      activeTool === 'drainage' ||
+      !!extensionState;
 
     if (isPolylineTool) {
       const pos = e.target.getStage().getPointerPosition();
@@ -413,6 +422,21 @@ export const Canvas = ({
       return;
     }
 
+    // Handle clicks during boundary extension mode
+    if (extensionState && isDrawing) {
+      const smart = smartSnap({ x: canvasX, y: canvasY }, components);
+      let pointToAdd = { x: smart.x, y: smart.y };
+
+      if (shiftPressed && drawingPoints.length > 0) {
+        const last = drawingPoints[drawingPoints.length - 1];
+        const locked = lockToAxis(last, pointToAdd);
+        pointToAdd = { x: locked.x, y: locked.y };
+      }
+
+      setDrawingPoints([...drawingPoints, pointToAdd]);
+      return;
+    }
+
     // For other tools, only handle clicks on empty canvas area
     if (e.target === stage) {
       handleBackgroundPrimaryClick(canvasX, canvasY);
@@ -542,6 +566,58 @@ export const Canvas = ({
     onToolChange?.('select');
   };
 
+  // Finish boundary extension — merge new points into existing boundary
+  const finishExtension = () => {
+    if (!extensionState || drawingPoints.length < 2) {
+      cancelExtension();
+      return;
+    }
+
+    const comp = components.find(c => c.id === extensionState.componentId);
+    if (!comp) {
+      cancelExtension();
+      return;
+    }
+
+    // drawingPoints[0] is the anchor (existing endpoint), so new points are slice(1)
+    const newPoints = drawingPoints.slice(1);
+    if (newPoints.length === 0) {
+      cancelExtension();
+      return;
+    }
+
+    const existingPoints = extensionState.originalPoints;
+    let mergedPoints: Array<{ x: number; y: number }>;
+
+    if (extensionState.endpoint === 'last') {
+      mergedPoints = [...existingPoints, ...newPoints];
+    } else {
+      // Extending from first: new points were drawn outward from first point,
+      // so reverse them and prepend
+      mergedPoints = [...newPoints.reverse(), ...existingPoints];
+    }
+
+    updateComponent(extensionState.componentId, {
+      properties: { ...comp.properties, points: mergedPoints },
+    });
+
+    // Clean up and re-select
+    const compId = extensionState.componentId;
+    setExtensionState(null);
+    setDrawingPoints([]);
+    setIsDrawing(false);
+    setGhostPoint(null);
+    selectComponent(compId);
+  };
+
+  // Cancel boundary extension without modifying the boundary
+  const cancelExtension = () => {
+    setExtensionState(null);
+    setDrawingPoints([]);
+    setIsDrawing(false);
+    setGhostPoint(null);
+  };
+
   // Keyboard shortcuts for drawing
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -588,8 +664,26 @@ export const Canvas = ({
         toggleZoomLock();
       }
 
+      // Extension mode shortcuts (takes priority over normal drawing shortcuts)
+      if (extensionState && isDrawing) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finishExtension();
+          return;
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cancelExtension();
+          return;
+        } else if (e.key === 'z' && drawingPoints.length > 1) {
+          // Undo last extension point but can't remove the anchor
+          e.preventDefault();
+          setDrawingPoints(drawingPoints.slice(0, -1));
+          return;
+        }
+      }
+
       // Drawing shortcuts
-      if (isDrawing) {
+      if (isDrawing && !extensionState) {
         if (e.key === 'Enter') {
           if (activeTool === 'boundary') {
             // Allow boundary to finish as open polyline (2+ points) or closed shape (3+ points near start)
@@ -624,6 +718,10 @@ export const Canvas = ({
 
       // Escape always resets to select tool (handles stuck shift-pan, hand tool, etc.)
       if (e.key === 'Escape') {
+        // Cancel extension if active
+        if (extensionState) {
+          cancelExtension();
+        }
         // Clear any drawing/measuring state
         setDrawingPoints([]);
         setIsDrawing(false);
@@ -649,10 +747,14 @@ export const Canvas = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [isDrawing, drawingPoints, isMeasuring, toggleZoomLock, selectedComponentId, components, updateComponent]);
+  }, [isDrawing, drawingPoints, isMeasuring, toggleZoomLock, selectedComponentId, components, updateComponent, extensionState]);
 
   // Reset drawing when tool changes
   useEffect(() => {
+    // Cancel extension if tool changes away from select
+    if (extensionState && activeTool !== 'select') {
+      cancelExtension();
+    }
     if (
       activeTool !== 'boundary' &&
       activeTool !== 'house' &&
@@ -660,7 +762,8 @@ export const Canvas = ({
       activeTool !== 'area' &&
       activeTool !== 'wall' &&
       activeTool !== 'fence' &&
-      activeTool !== 'drainage'
+      activeTool !== 'drainage' &&
+      !extensionState
     ) {
       setDrawingPoints([]);
       setIsDrawing(false);
@@ -1112,15 +1215,15 @@ export const Canvas = ({
     if (!isDrawing || !ghostPoint || drawingPoints.length === 0) return null;
 
     const lastPoint = drawingPoints[drawingPoints.length - 1];
-    const isClosedCandidate = (activeTool === 'boundary' || activeTool === 'house' || activeTool === 'paving_area');
+    const isClosedCandidate = !extensionState && (activeTool === 'boundary' || activeTool === 'house' || activeTool === 'paving_area');
 
     return (
       <>
-        {renderSegmentGhost(lastPoint, ghostPoint, activeTool)}
+        {renderSegmentGhost(lastPoint, ghostPoint, effectiveDrawingTool)}
         {/* Snap indicator */}
         <Circle x={ghostPoint.x} y={ghostPoint.y} radius={5} fill="#3B82F6" opacity={0.6} listening={false} />
 
-        {/* Close indicator if near first point (only for closeable tools) */}
+        {/* Close indicator if near first point (only for closeable tools, not during extension) */}
         {isClosedCandidate && drawingPoints.length >= 3 && isNearFirstPoint(ghostPoint) && (
           <Circle x={drawingPoints[0].x} y={drawingPoints[0].y} radius={20} stroke="#10B981" strokeWidth={2} opacity={0.5} listening={false} />
         )}
@@ -1136,13 +1239,13 @@ export const Canvas = ({
       <>
         {/* Render segment ghosts */}
         {drawingPoints.slice(1).map((point, i) =>
-          renderSegmentGhost(drawingPoints[i], point, activeTool, `sg-${i}`)
+          renderSegmentGhost(drawingPoints[i], point, effectiveDrawingTool, `sg-${i}`)
         )}
 
         {/* Points */}
         <Group key="drawing-points" listening={false}>
           {drawingPoints.map((point, index) => {
-            const pointColor = activeTool === 'boundary' ? 'hsl(220, 80%, 30%)' : '#92400E';
+            const pointColor = effectiveDrawingTool === 'boundary' ? 'hsl(220, 80%, 30%)' : '#92400E';
             return (
               <Circle key={`drawing-point-${index}`} x={point.x} y={point.y} radius={5} fill={pointColor} stroke="#fff" strokeWidth={2} listening={false} />
             );
@@ -1220,7 +1323,7 @@ export const Canvas = ({
     ]);
     // Block selection when in shift-pan mode (select tool + keyboard shift + no selection)
     const isShiftPanning = activeTool === 'select' && keyboardShiftPressed && !selectedComponentId;
-    return isDrawing || isMeasuring || polylineTools.has(activeTool) || isShiftPanning;
+    return isDrawing || isMeasuring || polylineTools.has(activeTool) || isShiftPanning || !!extensionState;
   })();
 
   return (
@@ -1501,6 +1604,24 @@ export const Canvas = ({
                         updateComponent(component.id, { position: snapped });
                       }}
                       onContextMenu={handleComponentContextMenu}
+                      onStartExtension={(componentId, endpoint) => {
+                        const pts = component.properties.points || [];
+                        if (pts.length < 2) return;
+
+                        // The anchor is the endpoint the user clicked
+                        const anchor = endpoint === 'last'
+                          ? pts[pts.length - 1]
+                          : pts[0];
+
+                        setExtensionState({
+                          componentId,
+                          endpoint,
+                          originalPoints: [...pts],
+                        });
+                        setDrawingPoints([{ x: anchor.x, y: anchor.y }]);
+                        setIsDrawing(true);
+                        setGhostPoint(null);
+                      }}
                     />
                   );
                   

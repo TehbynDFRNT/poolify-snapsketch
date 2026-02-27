@@ -29,6 +29,32 @@ export const SELECTION_SHORTCUTS: KeyboardShortcut[] = [
 ];
 
 /**
+ * Shortcuts for selected open boundary (not closed) — shows extension hint
+ */
+export const OPEN_BOUNDARY_SELECTION_SHORTCUTS: KeyboardShortcut[] = [
+  {
+    keys: ['Click'],
+    description: 'Click endpoint to extend',
+    action: 'extend_boundary',
+  },
+  {
+    keys: ['Shift', 'Click'],
+    description: 'Click a node to edit',
+    action: 'edit_node',
+  },
+  {
+    keys: ['↑↓←→'],
+    description: 'Move object',
+    action: 'move_object',
+  },
+  {
+    keys: ['Shift', '↑↓←→'],
+    description: 'Move object faster',
+    action: 'move_object_fast',
+  },
+];
+
+/**
  * Additional shortcuts for selected polyshape objects (boundary, house, fence, wall, drainage, reference_line)
  */
 export const POLYSHAPE_SELECTION_SHORTCUTS: KeyboardShortcut[] = [

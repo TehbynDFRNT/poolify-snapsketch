@@ -13,6 +13,7 @@ interface BoundaryComponentProps {
   onSelect: () => void;
   onDragEnd?: (pos: { x: number; y: number }) => void;
   onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
+  onStartExtension?: (componentId: string, endpoint: 'first' | 'last') => void;
 }
 
 export const BoundaryComponent = ({
@@ -22,6 +23,7 @@ export const BoundaryComponent = ({
   onSelect,
   onDragEnd,
   onContextMenu,
+  onStartExtension,
 }: BoundaryComponentProps) => {
   const points = component.properties.points || [];
   const closed = component.properties.closed || false;
@@ -332,6 +334,40 @@ export const BoundaryComponent = ({
           }}
         />
       ))}
+
+      {/* Extension endpoint indicators for open boundaries */}
+      {isSelected && !closed && !shiftPressed && activeTool === 'select' && onStartExtension && localPts.length >= 2 && (
+        <>
+          {[0, localPts.length - 1].map((idx) => (
+            <Circle
+              key={`ext-${idx}`}
+              x={localPts[idx].x}
+              y={localPts[idx].y}
+              radius={7}
+              fill="transparent"
+              stroke="#10B981"
+              strokeWidth={3}
+              onClick={(e) => {
+                e.cancelBubble = true;
+                onStartExtension(component.id, idx === 0 ? 'first' : 'last');
+              }}
+              onTap={(e) => {
+                e.cancelBubble = true;
+                onStartExtension(component.id, idx === 0 ? 'first' : 'last');
+              }}
+              hitStrokeWidth={10}
+              onMouseEnter={(e) => {
+                const stage = e.target.getStage();
+                if (stage) stage.container().style.cursor = 'pointer';
+              }}
+              onMouseLeave={(e) => {
+                const stage = e.target.getStage();
+                if (stage) stage.container().style.cursor = 'default';
+              }}
+            />
+          ))}
+        </>
+      )}
 
       {/* Measurements */}
       {renderMeasurements()}
