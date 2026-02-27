@@ -1,40 +1,29 @@
-import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
 import { UserProfile, UserButton, OrganizationProfile } from '@clerk/clerk-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft } from 'lucide-react';
 import { PoolConfigContent } from './PoolManagement';
 
+const clerkAppearance = {
+  elements: {
+    rootBox: 'w-full',
+    cardBox: 'w-full shadow-none',
+    card: 'w-full shadow-none border-0 rounded-none',
+    navbar: 'hidden',
+    pageScrollBox: 'p-0',
+    page: 'gap-0',
+  },
+};
+
 export function Settings() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const [role, setRole] = useState<string>('');
-  const [loading, setLoading] = useState(true);
+  const { user, loading } = useAuth();
 
-  useEffect(() => {
-    if (!user) return;
-
-    const loadRole = async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-      if (!error && data) {
-        setRole(data.role);
-      }
-      setLoading(false);
-    };
-
-    loadRole();
-  }, [user]);
-
-  const isAdmin = role === 'admin';
-  const canManagePools = ['admin', 'manager'].includes(role);
+  const orgRole = user?.orgRole ?? '';
+  const isAdmin = orgRole === 'org:admin';
+  const canManagePools = ['org:admin', 'org:manager'].includes(orgRole);
 
   if (loading) {
     return (
@@ -70,16 +59,12 @@ export function Settings() {
           </TabsList>
 
           <TabsContent value="account" className="mt-6">
-            <div className="[&_.cl-rootBox]:w-full [&_.cl-card]:shadow-none [&_.cl-card]:border">
-              <UserProfile />
-            </div>
+            <UserProfile appearance={clerkAppearance} />
           </TabsContent>
 
           {isAdmin && (
             <TabsContent value="team" className="mt-6">
-              <div className="[&_.cl-rootBox]:w-full [&_.cl-card]:shadow-none [&_.cl-card]:border">
-                <OrganizationProfile />
-              </div>
+              <OrganizationProfile appearance={clerkAppearance} />
             </TabsContent>
           )}
 

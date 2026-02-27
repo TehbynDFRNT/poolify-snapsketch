@@ -5,6 +5,7 @@ interface AuthUser {
   id: string;
   email: string;
   orgId: string | null;
+  orgRole: string | null;
 }
 
 interface AuthContextType {
@@ -16,7 +17,7 @@ interface AuthContextType {
 export function useAuth(): AuthContextType {
   const { user: clerkUser, isLoaded } = useUser();
   const { signOut } = useClerk();
-  const { organization } = useOrganization();
+  const { organization, membership } = useOrganization();
 
   const user: AuthUser | null = useMemo(() => {
     if (!clerkUser) return null;
@@ -24,8 +25,9 @@ export function useAuth(): AuthContextType {
       id: clerkUser.id,
       email: clerkUser.primaryEmailAddress?.emailAddress || '',
       orgId: organization?.id ?? null,
+      orgRole: membership?.role ?? null,
     };
-  }, [clerkUser?.id, clerkUser?.primaryEmailAddress?.emailAddress, organization?.id]);
+  }, [clerkUser?.id, clerkUser?.primaryEmailAddress?.emailAddress, organization?.id, membership?.role]);
 
   const handleSignOut = useCallback(async () => {
     await signOut();
