@@ -643,7 +643,7 @@ export const Canvas = ({
           return;
         }
         e.preventDefault();
-        const moveAmount = e.shiftKey ? 10 : 1; // mm
+        const moveAmount = e.shiftKey ? 25 : 2.5; // mm
         let dx = 0;
         let dy = 0;
         switch (e.key) {

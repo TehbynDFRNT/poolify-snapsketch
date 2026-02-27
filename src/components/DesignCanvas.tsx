@@ -172,7 +172,8 @@ export const DesignCanvas = () => {
       if (e.key === 'v' || e.key === 'V') setActiveTool('select');
       if (e.key === 'h' || e.key === 'H') setActiveTool('hand');
       if (e.key === 'b' || e.key === 'B') setActiveTool('boundary');
-      if (e.key === 'p' || e.key === 'P') setActiveTool('pool');
+      if (e.key === 'u' || e.key === 'U') setActiveTool('house');
+      if (e.key === 'o' || e.key === 'O') setActiveTool('pool');
       if (e.key === 'a' || e.key === 'A') setActiveTool('paver');
       if (e.key === 'd' || e.key === 'D') setActiveTool('drainage');
       if (e.key === 'f' || e.key === 'F') setActiveTool('fence');

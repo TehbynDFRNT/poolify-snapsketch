@@ -252,16 +252,8 @@ Draws a filled polygon representing a surface area.
 ### After Placement
 
 - Displays total area (m^2) and perimeter (linear meters)
-- Paver counts and order quantities auto-calculated (with wastage)
 - **Shift + drag vertices** to modify the shape
 - Measurements update in real-time during editing
-
-### Paver Fill System
-
-For paver areas, the system uses a scanline fill algorithm:
-- **Full pavers**: All corners inside the polygon
-- **Edge pavers**: Partially outside, requiring cutting (cut percentage calculated)
-- **Wastage**: Order quantity includes extra pavers based on wastage percentage
 
 ---
 
@@ -347,7 +339,7 @@ Draws retaining walls. Right-click to choose material: **Timber**, **Concrete**,
 
 ### After Placement
 
-- Per-segment and total length measurements
+- Per-segment length measurements
 - Height annotations can be stored per node (displayed as A:, B:, C: labels)
 - **Shift + drag nodes** to edit the path
 - Drag right handle to extend straight walls
@@ -441,9 +433,6 @@ When a pool is placed with coping enabled, a ring of tiles renders around the po
 - **Select the pool** to see the green coping boundary polygon
 - **Drag boundary nodes** to extend or contract the coping area
 - **Shift + click on a boundary edge** to insert a new node
-- **Shift + click on a coping tile** to select an individual tile
-- **Right-click a selected tile** to delete it
-- Deleted tiles and rows are tracked and persisted
 
 ### Coping Statistics
 
@@ -612,8 +601,7 @@ Components are rendered in a fixed order (bottom to top). You cannot manually ch
 7. Drainage
 8. Fences
 9. Houses
-10. Reference Lines / Measurements
-11. Decorations
-12. Height Annotations
+10. Decorations
+11. Reference Lines / Measurements / Heights
 
 The currently selected component always renders on top regardless of type.
