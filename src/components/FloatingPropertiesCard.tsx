@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { useDesignStore } from '@/store/designStore';
 import { POOL_LIBRARY } from '@/constants/pools';
 import { SimpleCopingStats } from '@/types';
-import { ChevronUp, ChevronDown, Copy, Trash2 } from 'lucide-react';
+import { ChevronUp, ChevronDown, Copy, Trash2, Plus } from 'lucide-react';
+import { expandPolygon } from '@/utils/copingCalculation';
 
 interface FloatingPropertiesCardProps {
   component: Component | null;
@@ -226,6 +227,30 @@ export const FloatingPropertiesCard = ({ component }: FloatingPropertiesCardProp
                   );
                 })()}
               </div>
+              {/* Expand boundary by one paver row (410mm) */}
+              {component.properties.showCoping && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    const boundary = component.properties.copingBoundary as Array<{x: number; y: number}> | undefined;
+                    if (!boundary || boundary.length < 3) return;
+                    const ROW_MM = 410;
+                    const SCALE = 0.1;
+                    const expanded = expandPolygon(boundary, ROW_MM * SCALE);
+                    updateComponent(component.id, {
+                      properties: {
+                        ...component.properties,
+                        copingBoundary: expanded,
+                      }
+                    });
+                  }}
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  1 Row
+                </Button>
+              )}
             </>
           )}
 
