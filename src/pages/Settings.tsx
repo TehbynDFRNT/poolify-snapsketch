@@ -10,10 +10,7 @@ const clerkAppearance = {
   elements: {
     rootBox: 'w-full',
     cardBox: 'w-full shadow-none',
-    card: 'w-full shadow-none border-0 rounded-none',
-    navbar: 'hidden',
-    pageScrollBox: 'p-0',
-    page: 'gap-0',
+    card: 'w-full rounded-lg border shadow-sm',
   },
 };
 
