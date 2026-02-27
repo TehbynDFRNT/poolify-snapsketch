@@ -28,6 +28,7 @@ interface CloudProject {
   created_at: string;
   updated_at: string;
   owner_id: string;
+  org_id?: string | null;
   components: any[];
   is_archived: boolean;
   profiles?: {
@@ -443,7 +444,9 @@ export function CloudHomePage() {
     if (projectFilter === 'mine') {
       filtered = filtered.filter(p => p.owner_id === user?.id);
     } else if (projectFilter === 'org') {
-      filtered = filtered.filter(p => p.org_id != null && p.org_id === user?.orgId && p.owner_id !== user?.id);
+      // RLS already limits visibility to own + shared + same-org projects,
+      // so "org" tab just shows everything the user doesn't own.
+      filtered = filtered.filter(p => p.owner_id !== user?.id);
     }
 
     // Filter by search query
