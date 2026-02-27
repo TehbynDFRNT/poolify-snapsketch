@@ -12,9 +12,7 @@ import { PublicProjectView } from "./components/PublicProjectView";
 import { CpqTestPage } from "./components/CpqTestPage";
 import { SignInPage } from "./pages/SignInPage";
 import { SignUpPage } from "./pages/SignUpPage";
-import { ProfileSettings } from "./pages/ProfileSettings";
-import { TeamManagement } from "./pages/TeamManagement";
-import { PoolManagement } from "./pages/PoolManagement";
+import { Settings } from "./pages/Settings";
 import { SSO } from "./pages/SSO";
 import { SupabaseAuthSync } from "./integrations/supabase/SupabaseAuthSync";
 import NotFound from "./pages/NotFound";
@@ -47,19 +45,9 @@ const App = () => (
               <DesignCanvas />
             </ProtectedRoute>
           } />
-          <Route path="/settings/profile" element={
+          <Route path="/settings" element={
             <ProtectedRoute>
-              <ProfileSettings />
-            </ProtectedRoute>
-          } />
-          <Route path="/settings/team" element={
-            <ProtectedRoute>
-              <TeamManagement />
-            </ProtectedRoute>
-          } />
-          <Route path="/settings/pools" element={
-            <ProtectedRoute>
-              <PoolManagement />
+              <Settings />
             </ProtectedRoute>
           } />
 

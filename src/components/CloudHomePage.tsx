@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { NewProjectModal } from './NewProjectModal';
 import { ShareProjectDialog } from './ShareProjectDialog';
 import { toast } from '@/hooks/use-toast';
-import { Plus, Search, MoreVertical, Share2, Trash2, User, Settings, LogOut, Database, Pencil, Loader2, CheckCircle, Link } from 'lucide-react';
+import { Plus, Search, MoreVertical, Share2, Trash2, User, Settings, LogOut, Pencil, Loader2, CheckCircle, Link } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -504,22 +504,10 @@ export function CloudHomePage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => navigate('/settings/profile')}>
+              <DropdownMenuItem onClick={() => navigate('/settings')}>
                 <Settings className="w-4 h-4 mr-2" />
-                Profile Settings
+                Settings
               </DropdownMenuItem>
-              {userProfile?.role === 'admin' && (
-                <>
-                  <DropdownMenuItem onClick={() => navigate('/settings/team')}>
-                    <User className="w-4 h-4 mr-2" />
-                    Team Management
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate('/settings/pools')}>
-                    <Database className="w-4 h-4 mr-2" />
-                    Pool Management
-                  </DropdownMenuItem>
-                </>
-              )}
               <DropdownMenuItem onClick={handleSignOut}>
                 <LogOut className="w-4 h-4 mr-2" />
                 Log Out
