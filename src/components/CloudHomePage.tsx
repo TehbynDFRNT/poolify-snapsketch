@@ -443,7 +443,7 @@ export function CloudHomePage() {
     if (projectFilter === 'mine') {
       filtered = filtered.filter(p => p.owner_id === user?.id);
     } else if (projectFilter === 'org') {
-      filtered = filtered.filter(p => p.owner_id !== user?.id);
+      filtered = filtered.filter(p => p.org_id != null && p.org_id === user?.orgId && p.owner_id !== user?.id);
     }
 
     // Filter by search query
