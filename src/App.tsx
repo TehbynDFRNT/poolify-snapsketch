@@ -13,6 +13,7 @@ import { CpqTestPage } from "./components/CpqTestPage";
 import { SignInPage } from "./pages/SignInPage";
 import { SignUpPage } from "./pages/SignUpPage";
 import { Settings } from "./pages/Settings";
+import { Docs } from "./pages/Docs";
 import { SSO } from "./pages/SSO";
 import { SupabaseAuthSync } from "./integrations/supabase/SupabaseAuthSync";
 import NotFound from "./pages/NotFound";
@@ -48,6 +49,11 @@ const App = () => (
           <Route path="/settings" element={
             <ProtectedRoute>
               <Settings />
+            </ProtectedRoute>
+          } />
+          <Route path="/docs" element={
+            <ProtectedRoute>
+              <Docs />
             </ProtectedRoute>
           } />
 

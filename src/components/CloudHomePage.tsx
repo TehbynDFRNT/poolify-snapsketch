@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { NewProjectModal } from './NewProjectModal';
 import { ShareProjectDialog } from './ShareProjectDialog';
 import { toast } from '@/hooks/use-toast';
-import { Plus, Search, MoreVertical, Share2, Trash2, User, Settings, LogOut, Pencil, Loader2, CheckCircle, Link } from 'lucide-react';
+import { Plus, Search, MoreVertical, Share2, Trash2, User, Settings, LogOut, Pencil, Loader2, CheckCircle, Link, BookOpen } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -507,6 +507,10 @@ export function CloudHomePage() {
               <DropdownMenuItem onClick={() => navigate('/settings')}>
                 <Settings className="w-4 h-4 mr-2" />
                 Settings
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/docs')}>
+                <BookOpen className="w-4 h-4 mr-2" />
+                Documentation
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleSignOut}>
                 <LogOut className="w-4 h-4 mr-2" />

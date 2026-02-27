@@ -24,6 +24,7 @@ import {
   Square,
   Pentagon,
   Ruler,
+  HelpCircle,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -36,6 +37,7 @@ import { BottomPanel } from './BottomPanel';
 import { FloatingPropertiesCard } from './FloatingPropertiesCard';
 import { FloatingKeyboardShortcuts } from './FloatingKeyboardShortcuts';
 import { FloatingShiftToggle } from './FloatingShiftToggle';
+import { FloatingHelpCard } from './FloatingHelpCard';
 import { ExportDialog } from './ExportDialog';
 import { ShareProjectDialog } from './ShareProjectDialog';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
@@ -100,6 +102,7 @@ export const DesignCanvas = () => {
   const [bottomPanelHeight, setBottomPanelHeight] = useState(56);
   const [menuOpen, setMenuOpen] = useState(false);
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   // Sidebar collapsed on mobile by default
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // Track which tool's sub-menu is open in mobile bubble menu
@@ -901,6 +904,24 @@ export const DesignCanvas = () => {
           />
         </div>
       </div>
+
+      {/* Help Button */}
+      <Button
+        variant="outline"
+        size="icon"
+        className="fixed top-[76px] right-4 z-40 h-9 w-9 rounded-full shadow-md bg-background"
+        onClick={() => setHelpOpen(!helpOpen)}
+        title="Help"
+      >
+        <HelpCircle className="w-4 h-4" />
+      </Button>
+
+      {/* Floating Help Card */}
+      <FloatingHelpCard
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        activeTool={activeTool}
+      />
 
       {/* Dialogs */}
       <ExportDialog
