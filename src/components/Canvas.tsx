@@ -29,7 +29,6 @@ import { WALL_MATERIALS, FENCE_TYPES, DRAINAGE_TYPES } from '@/constants/compone
 import { sortComponentsByRenderOrder } from '@/constants/renderOrder';
 import { ComponentContextMenu } from './ComponentContextMenu';
 import type { ContextMenuAction } from '@/types/contextMenu';
-import { useDesignStore as useStoreRef } from '@/store/designStore';
 import { CompassRotator } from './CompassRotator';
 
 export const Canvas = ({
@@ -64,7 +63,6 @@ export const Canvas = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [showPoolSelector, setShowPoolSelector] = useState(false);
-  const [selectedPool, setSelectedPool] = useState<Pool | null>(null);
   const [pendingPoolPosition, setPendingPoolPosition] = useState<{ x: number; y: number } | null>(null);
 
   // Pinch zoom state
