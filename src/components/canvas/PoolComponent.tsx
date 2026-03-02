@@ -1114,9 +1114,8 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
           ref={trRef}
           rotateEnabled={true}
           enabledAnchors={[]}
-          borderStroke="#3B82F6"
-          borderStrokeWidth={2}
-          borderDash={[6, 3]}
+          borderEnabled={false}
+
           anchorFill="#ffffff"
           anchorStroke="#3B82F6"
           rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
