@@ -1633,19 +1633,27 @@ export const Canvas = ({
                           ? pts[pts.length - 1]
                           : pts[0];
 
-                        // Compute pivot offset from local points bbox (same as BoundaryComponent)
-                        const localPts = pts.map(p => ({
-                          x: p.x - component.position.x,
-                          y: p.y - component.position.y,
-                        }));
-                        const xs = localPts.map(p => p.x);
-                        const ys = localPts.map(p => p.y);
-                        const pivotX = (Math.min(...xs) + Math.max(...xs)) / 2;
-                        const pivotY = (Math.min(...ys) + Math.max(...ys)) / 2;
+                        // Use stored pivot if component is rotated (prevents visual jumping),
+                        // otherwise compute from local points bbox
+                        const rot = component.rotation || 0;
+                        let pivotX: number;
+                        let pivotY: number;
+                        if (rot !== 0 && component.properties.rotationPivot) {
+                          pivotX = component.properties.rotationPivot.x;
+                          pivotY = component.properties.rotationPivot.y;
+                        } else {
+                          const localPts = pts.map(p => ({
+                            x: p.x - component.position.x,
+                            y: p.y - component.position.y,
+                          }));
+                          const xs = localPts.map(p => p.x);
+                          const ys = localPts.map(p => p.y);
+                          pivotX = (Math.min(...xs) + Math.max(...xs)) / 2;
+                          pivotY = (Math.min(...ys) + Math.max(...ys)) / 2;
+                        }
 
                         // Rotate anchor to its visual position if component is rotated
                         let visualAnchor = { x: anchor.x, y: anchor.y };
-                        const rot = component.rotation || 0;
                         if (rot !== 0) {
                           const rad = rot * Math.PI / 180;
                           const cos = Math.cos(rad);

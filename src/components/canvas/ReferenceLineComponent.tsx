@@ -46,10 +46,16 @@ export const ReferenceLineComponent: React.FC<Props> = ({
   if (points.length < 2) return null;
 
   const [start, end] = points;
-  const midPoint = {
+  const computedMidPoint = {
     x: (start.x + end.x) / 2,
     y: (start.y + end.y) / 2,
   };
+
+  // When rotated, use stored pivot to prevent visual jumping during endpoint edits
+  const rotation = component.rotation || 0;
+  const midPoint = (rotation !== 0 && component.properties.rotationPivot)
+    ? component.properties.rotationPivot
+    : computedMidPoint;
 
   // Calculate distance
   const dx = end.x - start.x;
@@ -151,11 +157,16 @@ export const ReferenceLineComponent: React.FC<Props> = ({
       onTransformEnd={() => {
         const node = groupRef.current;
         if (!node) return;
+        const newRotation = node.rotation();
         node.scaleX(1);
         node.scaleY(1);
         updateComponent(component.id, {
-          rotation: node.rotation(),
+          rotation: newRotation,
           position: { x: node.x() - midPoint.x, y: node.y() - midPoint.y },
+          properties: {
+            ...component.properties,
+            rotationPivot: newRotation !== 0 ? { x: midPoint.x, y: midPoint.y } : undefined,
+          },
         });
       }}
     >

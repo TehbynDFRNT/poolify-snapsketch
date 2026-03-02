@@ -184,13 +184,23 @@ export const HouseComponent = ({
   };
 
   // Compute center-pivot offset from local points bounding box
+  // When rotated, use stored pivot to prevent visual jumping during point edits/extensions
+  const rotation = component.rotation || 0;
   let pivotOffsetX = 0;
   let pivotOffsetY = 0;
   if (localPts.length > 0) {
     const xs = localPts.map(p => p.x);
     const ys = localPts.map(p => p.y);
-    pivotOffsetX = (Math.min(...xs) + Math.max(...xs)) / 2;
-    pivotOffsetY = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const computedPivotX = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const computedPivotY = (Math.min(...ys) + Math.max(...ys)) / 2;
+
+    if (rotation !== 0 && component.properties.rotationPivot) {
+      pivotOffsetX = component.properties.rotationPivot.x;
+      pivotOffsetY = component.properties.rotationPivot.y;
+    } else {
+      pivotOffsetX = computedPivotX;
+      pivotOffsetY = computedPivotY;
+    }
   }
 
   return (
@@ -209,11 +219,16 @@ export const HouseComponent = ({
       onTransformEnd={() => {
         const node = groupRef.current;
         if (!node) return;
+        const newRotation = node.rotation();
         node.scaleX(1);
         node.scaleY(1);
         updateComponent(component.id, {
-          rotation: node.rotation(),
+          rotation: newRotation,
           position: { x: node.x() - pivotOffsetX, y: node.y() - pivotOffsetY },
+          properties: {
+            ...component.properties,
+            rotationPivot: newRotation !== 0 ? { x: pivotOffsetX, y: pivotOffsetY } : undefined,
+          },
         });
       }}
       onDragStart={() => { dragStartPos.current = { x: component.position.x, y: component.position.y }; }}

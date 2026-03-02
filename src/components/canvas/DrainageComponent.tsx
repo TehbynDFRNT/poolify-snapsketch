@@ -124,8 +124,19 @@ export const DrainageComponent = ({
     };
 
     // Center-pivot for rotation
-    const polyCenterX = (minX + maxX) / 2;
-    const polyCenterY = (minY + maxY) / 2;
+    // When rotated, use stored pivot to prevent visual jumping during point edits
+    const rotation = component.rotation || 0;
+    const computedPolyCenterX = (minX + maxX) / 2;
+    const computedPolyCenterY = (minY + maxY) / 2;
+    let polyCenterX: number;
+    let polyCenterY: number;
+    if (rotation !== 0 && component.properties.rotationPivot) {
+      polyCenterX = component.properties.rotationPivot.x;
+      polyCenterY = component.properties.rotationPivot.y;
+    } else {
+      polyCenterX = computedPolyCenterX;
+      polyCenterY = computedPolyCenterY;
+    }
 
     return (
       <>
@@ -156,11 +167,16 @@ export const DrainageComponent = ({
         onTransformEnd={() => {
           const node = groupRef.current;
           if (!node) return;
+          const newRotation = node.rotation();
           node.scaleX(1);
           node.scaleY(1);
           updateComponent(component.id, {
-            rotation: node.rotation(),
+            rotation: newRotation,
             position: { x: node.x() - polyCenterX, y: node.y() - polyCenterY },
+            properties: {
+              ...component.properties,
+              rotationPivot: newRotation !== 0 ? { x: polyCenterX, y: polyCenterY } : undefined,
+            },
           });
         }}
       >
