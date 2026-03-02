@@ -7,27 +7,29 @@ A comprehensive guide to using the SnapSketch pool design and landscaping tool.
 ## Table of Contents
 
 1. [Getting Started](#getting-started)
-2. [Canvas Navigation](#canvas-navigation)
-3. [View Modes](#view-modes)
-4. [Tools Overview](#tools-overview)
-5. [Select & Pan](#select--pan-tool)
-6. [Boundary](#boundary-tool)
-7. [House](#house-tool)
-8. [Pool](#pool-tool)
-9. [Area (Pavers / Concrete / Grass)](#area-tool)
-10. [Fence](#fence-tool)
-11. [Drainage](#drainage-tool)
-12. [Wall](#wall-tool)
-13. [Measure](#measure-tool)
-14. [Height](#height-tool)
-15. [Decoration](#decoration-tool)
-16. [Pool Coping System](#pool-coping-system)
-17. [Properties Panel](#properties-panel)
-18. [Saving & Auto-Save](#saving--auto-save)
-19. [Undo & Redo](#undo--redo)
-20. [Exporting](#exporting)
-21. [Keyboard Shortcuts Reference](#keyboard-shortcuts-reference)
-22. [Mobile & Touch](#mobile--touch)
+2. [Onboarding Tour](#onboarding-tour)
+3. [Canvas Navigation](#canvas-navigation)
+4. [View Modes](#view-modes)
+5. [Tools Overview](#tools-overview)
+6. [Select & Pan](#select--pan-tool)
+7. [Boundary](#boundary-tool)
+8. [House](#house-tool)
+9. [Pool](#pool-tool)
+10. [Area (Pavers / Concrete / Grass)](#area-tool)
+11. [Fence](#fence-tool)
+12. [Drainage](#drainage-tool)
+13. [Wall](#wall-tool)
+14. [Measure](#measure-tool)
+15. [Height](#height-tool)
+16. [Decoration](#decoration-tool)
+17. [Pool Coping System](#pool-coping-system)
+18. [Rotation](#rotation)
+19. [Properties Panel](#properties-panel)
+20. [Saving & Auto-Save](#saving--auto-save)
+21. [Undo & Redo](#undo--redo)
+22. [Exporting](#exporting)
+23. [Keyboard Shortcuts Reference](#keyboard-shortcuts-reference)
+24. [Mobile & Touch](#mobile--touch)
 
 ---
 
@@ -36,6 +38,35 @@ A comprehensive guide to using the SnapSketch pool design and landscaping tool.
 SnapSketch is a browser-based pool design tool built on an interactive canvas. You place and draw components — pools, boundaries, fences, walls, paving, drainage — then export professional drawings as PDF or image files.
 
 All measurements are in **millimeters (mm)**. The canvas grid defaults to 100mm spacing with major lines every 1000mm (1 meter).
+
+---
+
+## Onboarding Tour
+
+First-time users are greeted with an 8-step spotlight tour that walks through all key UI areas.
+
+### How It Works
+
+- **Desktop only** (screen width >= 1024px) — on mobile, a welcome toast appears instead
+- Starts automatically 1 second after the canvas loads (first visit only)
+- Highlights each UI area with a dimmed overlay and spotlight cutout
+- Navigate with **Next** / **Back** buttons or press **Escape** to skip
+
+### Tour Steps
+
+1. **Your Design Canvas** — the main drawing area
+2. **View Toggles** — Grid, Satellite, Annotations, Blueprint switches
+3. **Save Your Work** — manual save button
+4. **Export Your Design** — PDF/image export
+5. **Design Tools** — left toolbar with all drawing tools
+6. **Bottom Panel** — materials summary, notes, measurements
+7. **Zoom & Navigation** — zoom controls and lock
+8. **Need Help?** — help card with guides and shortcuts
+
+### Replaying the Tour
+
+- Open the **Help** card (bottom-right) and click **Replay onboarding tour**
+- Keyboard shortcuts are disabled during the tour to prevent accidental tool switches
 
 ---
 
@@ -433,6 +464,7 @@ When a pool is placed with coping enabled, a ring of tiles renders around the po
 - **Select the pool** to see the green coping boundary polygon
 - **Drag boundary nodes** to extend or contract the coping area
 - **Shift + click on a boundary edge** to insert a new node
+- **+1 Row / -1 Row buttons** in the properties panel expand or contract the entire coping boundary by one paver row width
 
 ### Coping Statistics
 
@@ -441,6 +473,26 @@ Automatically calculated:
 - Extension area (m^2)
 - Total area (m^2)
 - Tile counts
+
+---
+
+## Rotation
+
+All canvas components support interactive rotation via a green rotation handle.
+
+### How to Rotate
+
+1. **Select** any component
+2. A **green circular handle** appears above the component, connected by a short pin line
+3. **Drag the handle** to rotate freely
+4. Rotation **snaps to 45-degree increments** (0, 45, 90, 135, 180, 225, 270, 315)
+
+### Details
+
+- Rotation pivots around the **center** of the component (center of bounding box for polygon-based components, center of dimensions for pools/decorations)
+- All component types support rotation: pools, boundaries, houses, fences, drainage, walls, paving areas, decorations, reference lines, and gates
+- The rotation handle only appears when the component is selected
+- Rotation is preserved when dragging, editing nodes, or extending boundaries
 
 ---
 
