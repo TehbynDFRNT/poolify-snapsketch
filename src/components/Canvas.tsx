@@ -84,6 +84,9 @@ export const Canvas = ({
     componentId: string;
     endpoint: 'first' | 'last';
     originalPoints: Array<{ x: number; y: number }>;
+    rotation: number;
+    position: { x: number; y: number };
+    pivotOffset: { x: number; y: number };
   } | null>(null);
 
   // When extending, treat drawing as if boundary tool is active
@@ -586,15 +589,34 @@ export const Canvas = ({
       return;
     }
 
+    // If the boundary is rotated, inverse-rotate new points from visual canvas space
+    // back to stored (unrotated) coordinate space
+    const rot = extensionState.rotation || 0;
+    let transformedNewPoints = newPoints;
+    if (rot !== 0) {
+      const rad = -rot * Math.PI / 180; // negative = inverse rotation
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const { position, pivotOffset } = extensionState;
+      transformedNewPoints = newPoints.map(p => {
+        const lx = p.x - position.x - pivotOffset.x;
+        const ly = p.y - position.y - pivotOffset.y;
+        return {
+          x: lx * cos - ly * sin + pivotOffset.x + position.x,
+          y: lx * sin + ly * cos + pivotOffset.y + position.y,
+        };
+      });
+    }
+
     const existingPoints = extensionState.originalPoints;
     let mergedPoints: Array<{ x: number; y: number }>;
 
     if (extensionState.endpoint === 'last') {
-      mergedPoints = [...existingPoints, ...newPoints];
+      mergedPoints = [...existingPoints, ...transformedNewPoints];
     } else {
       // Extending from first: new points were drawn outward from first point,
       // so reverse them and prepend
-      mergedPoints = [...newPoints.reverse(), ...existingPoints];
+      mergedPoints = [...transformedNewPoints.reverse(), ...existingPoints];
     }
 
     updateComponent(extensionState.componentId, {
@@ -1613,12 +1635,40 @@ export const Canvas = ({
                           ? pts[pts.length - 1]
                           : pts[0];
 
+                        // Compute pivot offset from local points bbox (same as BoundaryComponent)
+                        const localPts = pts.map(p => ({
+                          x: p.x - component.position.x,
+                          y: p.y - component.position.y,
+                        }));
+                        const xs = localPts.map(p => p.x);
+                        const ys = localPts.map(p => p.y);
+                        const pivotX = (Math.min(...xs) + Math.max(...xs)) / 2;
+                        const pivotY = (Math.min(...ys) + Math.max(...ys)) / 2;
+
+                        // Rotate anchor to its visual position if component is rotated
+                        let visualAnchor = { x: anchor.x, y: anchor.y };
+                        const rot = component.rotation || 0;
+                        if (rot !== 0) {
+                          const rad = rot * Math.PI / 180;
+                          const cos = Math.cos(rad);
+                          const sin = Math.sin(rad);
+                          const lx = anchor.x - component.position.x - pivotX;
+                          const ly = anchor.y - component.position.y - pivotY;
+                          visualAnchor = {
+                            x: lx * cos - ly * sin + pivotX + component.position.x,
+                            y: lx * sin + ly * cos + pivotY + component.position.y,
+                          };
+                        }
+
                         setExtensionState({
                           componentId,
                           endpoint,
                           originalPoints: [...pts],
+                          rotation: rot,
+                          position: { ...component.position },
+                          pivotOffset: { x: pivotX, y: pivotY },
                         });
-                        setDrawingPoints([{ x: anchor.x, y: anchor.y }]);
+                        setDrawingPoints([visualAnchor]);
                         setIsDrawing(true);
                         setGhostPoint(null);
                       }}
