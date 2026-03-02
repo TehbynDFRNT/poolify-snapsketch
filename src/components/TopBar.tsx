@@ -93,45 +93,47 @@ export const TopBar = ({
       {/* Right: Actions */}
       <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
         {/* Desktop: Inline layer checkboxes */}
-        <label className="hidden lg:flex items-center gap-2 px-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={gridVisible}
-            onChange={() => onGridToggle()}
-            className="w-4 h-4"
-          />
-          <span className="text-sm">Grid</span>
-        </label>
+        <div data-tour="topbar-views" className="hidden lg:flex items-center gap-1">
+          <label className="flex items-center gap-2 px-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={gridVisible}
+              onChange={() => onGridToggle()}
+              className="w-4 h-4"
+            />
+            <span className="text-sm">Grid</span>
+          </label>
 
-        <label className="hidden lg:flex items-center gap-2 px-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={satelliteVisible}
-            onChange={() => onSatelliteToggle()}
-            className="w-4 h-4"
-          />
-          <span className="text-sm">Satellite</span>
-        </label>
+          <label className="flex items-center gap-2 px-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={satelliteVisible}
+              onChange={() => onSatelliteToggle()}
+              className="w-4 h-4"
+            />
+            <span className="text-sm">Satellite</span>
+          </label>
 
-        <label className="hidden lg:flex items-center gap-2 px-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={annotationsVisible}
-            onChange={() => onAnnotationsToggle()}
-            className="w-4 h-4"
-          />
-          <span className="text-sm">Annotations</span>
-        </label>
+          <label className="flex items-center gap-2 px-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={annotationsVisible}
+              onChange={() => onAnnotationsToggle()}
+              className="w-4 h-4"
+            />
+            <span className="text-sm">Annotations</span>
+          </label>
 
-        <label className="hidden lg:flex items-center gap-2 px-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={blueprintMode}
-            onChange={() => onBlueprintToggle()}
-            className="w-4 h-4"
-          />
-          <span className="text-sm">Blueprint</span>
-        </label>
+          <label className="flex items-center gap-2 px-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={blueprintMode}
+              onChange={() => onBlueprintToggle()}
+              className="w-4 h-4"
+            />
+            <span className="text-sm">Blueprint</span>
+          </label>
+        </div>
 
         {/* Share button - always visible if available */}
         {onShare && (
@@ -258,6 +260,7 @@ export const TopBar = ({
           onClick={onSave}
           className="hidden lg:flex min-w-[44px] min-h-[44px]"
           title="Save (Ctrl+S)"
+          data-tour="topbar-save"
         >
           <Save className="w-5 h-5" />
         </Button>
@@ -265,6 +268,7 @@ export const TopBar = ({
         <Button
           onClick={onExport}
           className="hidden lg:flex min-h-[44px] gap-2"
+          data-tour="topbar-export"
         >
           <Download className="w-4 h-4" />
           <span>Export</span>

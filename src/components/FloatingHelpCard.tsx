@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { X, Search, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { DOC_SECTIONS, searchDocs, getToolSection, type DocSection } from '@/lib/docs';
 import { cn } from '@/lib/utils';
+import { restartTour } from '@/hooks/useOnboardingTour';
 
 interface FloatingHelpCardProps {
   open: boolean;
@@ -90,41 +90,48 @@ export function FloatingHelpCard({ open, onClose, activeTool }: FloatingHelpCard
           />
         </div>
       </CardHeader>
-      <CardContent className="flex-1 overflow-hidden p-0">
-        <ScrollArea className="h-full max-h-[calc(70vh-130px)]">
-          <div className="px-4 pb-4">
-            {selectedSection ? (
-              <div className="prose prose-sm prose-slate dark:prose-invert max-w-none prose-table:border prose-th:border prose-th:px-2 prose-th:py-1 prose-th:bg-muted prose-th:text-xs prose-td:border prose-td:px-2 prose-td:py-1 prose-td:text-xs prose-tr:even:bg-muted/50 prose-kbd:bg-muted prose-kbd:px-1 prose-kbd:py-0.5 prose-kbd:rounded prose-kbd:text-xs prose-kbd:font-mono prose-kbd:border prose-headings:text-sm">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {selectedSection.content}
-                </ReactMarkdown>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {results.map((section) => (
-                  <button
-                    key={section.id}
-                    onClick={() => setSelectedSection(section)}
-                    className={cn(
-                      'w-full text-left px-3 py-2 rounded-md text-sm transition-colors',
-                      'text-foreground hover:bg-muted'
-                    )}
-                  >
-                    <div className="font-medium">{section.title}</div>
-                    <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-                      {section.content.slice(0, 100).replace(/[#*|`\-\[\]]/g, '')}
-                    </div>
-                  </button>
-                ))}
-                {results.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No results found.
-                  </p>
-                )}
-              </div>
-            )}
+      <CardContent className="min-h-0 overflow-y-auto p-0">
+        <div className="px-4 pb-4">
+          {selectedSection ? (
+            <div className="prose prose-sm prose-slate dark:prose-invert max-w-none prose-table:border prose-th:border prose-th:px-2 prose-th:py-1 prose-th:bg-muted prose-th:text-xs prose-td:border prose-td:px-2 prose-td:py-1 prose-td:text-xs prose-tr:even:bg-muted/50 prose-kbd:bg-muted prose-kbd:px-1 prose-kbd:py-0.5 prose-kbd:rounded prose-kbd:text-xs prose-kbd:font-mono prose-kbd:border prose-headings:text-sm">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {selectedSection.content}
+              </ReactMarkdown>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {results.map((section) => (
+                <button
+                  key={section.id}
+                  onClick={() => setSelectedSection(section)}
+                  className={cn(
+                    'w-full text-left px-3 py-2 rounded-md text-sm transition-colors',
+                    'text-foreground hover:bg-muted'
+                  )}
+                >
+                  <div className="font-medium">{section.title}</div>
+                  <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                    {section.content.slice(0, 100).replace(/[#*|`\-\[\]]/g, '')}
+                  </div>
+                </button>
+              ))}
+              {results.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No results found.
+                </p>
+              )}
+            </div>
+          )}
+          {/* Replay tour link */}
+          <div className="border-t pt-3 mt-3">
+            <button
+              onClick={restartTour}
+              className="text-xs text-primary hover:underline"
+            >
+              Replay onboarding tour
+            </button>
           </div>
-        </ScrollArea>
+        </div>
       </CardContent>
     </Card>
   );

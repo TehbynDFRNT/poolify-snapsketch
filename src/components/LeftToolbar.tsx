@@ -201,7 +201,7 @@ export const LeftToolbar = ({ activeTool, components, onToolChange }: LeftToolba
   };
 
   return (
-    <div className="w-[72px] border-r bg-background flex flex-col gap-2 p-2 flex-shrink-0 overflow-y-auto overflow-x-hidden" style={{ scrollbarWidth: 'thin' }}>
+    <div data-tour="toolbar-tools" className="w-[72px] border-r bg-background flex flex-col gap-2 p-2 flex-shrink-0 overflow-y-auto overflow-x-hidden" style={{ scrollbarWidth: 'thin' }}>
       {tools.map(tool => {
         const isActive = tool.id === 'select'
           ? (activeTool === 'select' || activeTool === 'hand')

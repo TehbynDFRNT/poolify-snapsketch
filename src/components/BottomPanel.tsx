@@ -128,6 +128,7 @@ export const BottomPanel = ({
   const materialsSummary = calculateMeasurements(components);
   return (
     <div
+      data-tour="bottom-panel"
       className="border-t bg-background flex flex-col flex-shrink-0 relative z-20"
       style={{ height: `${height}px`, minHeight: '56px' }}
     >
@@ -184,7 +185,7 @@ export const BottomPanel = ({
           <div className="h-6 w-px bg-border mr-2" />
 
           {/* Zoom Controls */}
-          <div className="flex gap-1 items-center mr-2">
+          <div data-tour="zoom-controls" className="flex gap-1 items-center mr-2">
             <Button
               variant="ghost"
               size="icon"

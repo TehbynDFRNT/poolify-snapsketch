@@ -41,11 +41,13 @@ import { FloatingHelpCard } from './FloatingHelpCard';
 import { ExportDialog } from './ExportDialog';
 import { ShareProjectDialog } from './ShareProjectDialog';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
+import { OnboardingTour } from './OnboardingTour';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { exportToPDF } from '@/utils/pdfExport';
 import { exportAsImage } from '@/utils/imageExport';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { geocodeAddress } from '@/utils/geocoding';
+import { TOUR_STORAGE_KEY } from '@/config/tourSteps';
 import type { ToolType, ExportOptions } from '@/types';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
@@ -138,7 +140,18 @@ export const DesignCanvas = () => {
   });
   
   useKeyboardShortcuts(); // Enable keyboard shortcuts
-  
+
+  // Mobile: show one-time welcome toast instead of tour
+  useEffect(() => {
+    if (loading) return;
+    if (window.innerWidth >= 1024) return;
+    if (localStorage.getItem(TOUR_STORAGE_KEY) === 'true') return;
+    toast('Welcome to SnapSketch! Use the tool bubble at the bottom-left to start designing.', {
+      duration: 5000,
+    });
+    localStorage.setItem(TOUR_STORAGE_KEY, 'true');
+  }, [loading]);
+
   const {
     currentProject,
     setCurrentProject,
@@ -167,6 +180,8 @@ export const DesignCanvas = () => {
       if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') {
         return;
       }
+      // Don't trigger during onboarding tour
+      if (document.body.dataset.tourActive) return;
 
       // Tool shortcuts
       if (e.key === 'v' || e.key === 'V') setActiveTool('select');
@@ -586,6 +601,7 @@ export const DesignCanvas = () => {
         <div className="flex-1 flex flex-col relative">
           {/* Canvas - takes remaining space */}
           <main
+            data-tour="canvas-area"
             className="flex-1 overflow-hidden relative"
             style={{ height: `calc(100dvh - 60px - ${bottomPanelHeight}px)` }}
           >
@@ -913,6 +929,7 @@ export const DesignCanvas = () => {
         className="fixed top-[76px] right-4 z-40 h-9 w-9 rounded-full shadow-md bg-background"
         onClick={() => setHelpOpen(!helpOpen)}
         title="Help"
+        data-tour="help-button"
       >
         <HelpCircle className="w-4 h-4" />
       </Button>
@@ -946,6 +963,9 @@ export const DesignCanvas = () => {
         open={historyPanelOpen}
         onOpenChange={setHistoryPanelOpen}
       />
+
+      {/* Onboarding Tour (desktop only) */}
+      <OnboardingTour isReady={!loading} />
 
       <AlertDialog open={clearAllDialogOpen} onOpenChange={setClearAllDialogOpen}>
         <AlertDialogContent>
