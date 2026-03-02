@@ -1116,8 +1116,12 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
           enabledAnchors={[]}
           borderEnabled={false}
 
-          anchorFill="#ffffff"
-          anchorStroke="#3B82F6"
+          anchorFill="#22c55e"
+          anchorStroke="#16a34a"
+          anchorCornerRadius={50}
+          anchorSize={10}
+          rotateAnchorOffset={20}
+          rotateLineEnabled={true}
           rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
           boundBoxFunc={(oldBox, newBox) => {
             return { ...newBox, width: oldBox.width, height: oldBox.height };
