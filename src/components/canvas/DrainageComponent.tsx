@@ -1,4 +1,4 @@
-import { Group, Rect, Circle, Line, Text } from 'react-konva';
+import { Group, Rect, Circle, Line, Text, Transformer } from 'react-konva';
 import { Component } from '@/types';
 import { DRAINAGE_TYPES } from '@/constants/components';
 import { useState, useRef, useEffect, useMemo } from 'react';
@@ -29,6 +29,7 @@ export const DrainageComponent = ({
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
 
   const groupRef = useRef<any>(null);
+  const trRef = useRef<any>(null);
 
   const scale = 0.1;
   const drainageType = component.properties.drainageType || 'ultradrain';
@@ -85,6 +86,18 @@ export const DrainageComponent = ({
     }
   }, [liveTotalLM, isPolyline, component.id, component.properties.totalLM, updateComponentSilent]);
 
+  // Attach/detach transformer when selection changes
+  useEffect(() => {
+    if (!trRef.current) return;
+    if (isSelected && groupRef.current) {
+      trRef.current.nodes([groupRef.current]);
+      trRef.current.getLayer()?.batchDraw();
+    } else {
+      trRef.current.nodes([]);
+      trRef.current.getLayer()?.batchDraw();
+    }
+  }, [isSelected]);
+
   if (isPolyline) {
     const localPts = ghostLocal
       ? ghostLocal
@@ -110,11 +123,18 @@ export const DrainageComponent = ({
       return tr.point(local);
     };
 
+    // Center-pivot for rotation
+    const polyCenterX = (minX + maxX) / 2;
+    const polyCenterY = (minY + maxY) / 2;
+
     return (
+      <>
       <Group
         ref={groupRef}
-        x={component.position.x}
-        y={component.position.y}
+        x={component.position.x + polyCenterX}
+        y={component.position.y + polyCenterY}
+        offsetX={polyCenterX}
+        offsetY={polyCenterY}
         rotation={component.rotation}
         draggable={activeTool !== 'hand' && isSelected && !shiftPressed}
         onClick={onSelect}
@@ -132,6 +152,16 @@ export const DrainageComponent = ({
           const translated = polyPoints.map((p) => ({ x: p.x + dx, y: p.y + dy }));
           updateComponent(component.id, { position: { x: newX, y: newY }, properties: { ...component.properties, points: translated } });
           dragStartPos.current = null;
+        }}
+        onTransformEnd={() => {
+          const node = groupRef.current;
+          if (!node) return;
+          node.scaleX(1);
+          node.scaleY(1);
+          updateComponent(component.id, {
+            rotation: node.rotation(),
+            position: { x: node.x() - polyCenterX, y: node.y() - polyCenterY },
+          });
         }}
       >
         {localPts.map((p, i) => {
@@ -373,6 +403,23 @@ export const DrainageComponent = ({
           />
         ))}
       </Group>
+      {isSelected && (
+        <Transformer
+          ref={trRef}
+          rotateEnabled={true}
+          enabledAnchors={[]}
+          borderStroke="#3B82F6"
+          borderStrokeWidth={2}
+          borderDash={[6, 3]}
+          anchorFill="#ffffff"
+          anchorStroke="#3B82F6"
+          rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+          boundBoxFunc={(oldBox, newBox) => {
+            return { ...newBox, width: oldBox.width, height: oldBox.height };
+          }}
+        />
+      )}
+      </>
     );
   }
 
@@ -386,17 +433,30 @@ export const DrainageComponent = ({
   };
 
   return (
+    <>
     <Group
       ref={groupRef}
-      x={component.position.x}
+      x={component.position.x + length / 2}
       y={component.position.y}
+      offsetX={length / 2}
+      offsetY={0}
       rotation={component.rotation}
       draggable={activeTool !== 'hand' && !isDraggingHandle}
       onClick={onSelect}
       onTap={onSelect}
       onContextMenu={handleRightClick}
       onDragEnd={(e) => {
-        onDragEnd({ x: e.target.x(), y: e.target.y() });
+        onDragEnd({ x: e.target.x() - length / 2, y: e.target.y() });
+      }}
+      onTransformEnd={() => {
+        const node = groupRef.current;
+        if (!node) return;
+        node.scaleX(1);
+        node.scaleY(1);
+        updateComponent(component.id, {
+          rotation: node.rotation(),
+          position: { x: node.x() - length / 2, y: node.y() },
+        });
       }}
     >
       {/* No broad hit area; rely on thick stroke and hitStrokeWidth */}
@@ -509,5 +569,22 @@ export const DrainageComponent = ({
         </>
       )}
     </Group>
+      {isSelected && (
+        <Transformer
+          ref={trRef}
+          rotateEnabled={true}
+          enabledAnchors={[]}
+          borderStroke="#3B82F6"
+          borderStrokeWidth={2}
+          borderDash={[6, 3]}
+          anchorFill="#ffffff"
+          anchorStroke="#3B82F6"
+          rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+          boundBoxFunc={(oldBox, newBox) => {
+            return { ...newBox, width: oldBox.width, height: oldBox.height };
+          }}
+        />
+      )}
+    </>
   );
 };

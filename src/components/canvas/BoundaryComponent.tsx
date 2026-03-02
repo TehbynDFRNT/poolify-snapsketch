@@ -1,4 +1,4 @@
-import { Group, Line, Circle, Text } from 'react-konva';
+import { Group, Line, Circle, Text, Transformer } from 'react-konva';
 import { Component } from '@/types';
 import { useEffect, useRef, useState } from 'react';
 import { useDesignStore } from '@/store/designStore';
@@ -29,6 +29,7 @@ export const BoundaryComponent = ({
   const closed = component.properties.closed || false;
 
   const groupRef = useRef<any>(null);
+  const trRef = useRef<any>(null);
   const updateComponent = useDesignStore((s) => s.updateComponent);
   const updateComponentSilent = useDesignStore((s) => s.updateComponentSilent);
   const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
@@ -90,6 +91,18 @@ export const BoundaryComponent = ({
   // shiftPressed from store (supports touch toggle button)
   const shiftPressed = useDesignStore((s) => s.shiftPressed);
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
+
+  // Attach/detach transformer when selection changes
+  useEffect(() => {
+    if (!trRef.current) return;
+    if (isSelected && groupRef.current) {
+      trRef.current.nodes([groupRef.current]);
+      trRef.current.getLayer()?.batchDraw();
+    } else {
+      trRef.current.nodes([]);
+      trRef.current.getLayer()?.batchDraw();
+    }
+  }, [isSelected]);
 
   const handleRightClick = (e: any) => {
     e.evt.preventDefault();
@@ -244,21 +257,46 @@ export const BoundaryComponent = ({
     );
   };
 
+  // Compute center-pivot offset from local points bounding box
+  let pivotOffsetX = 0;
+  let pivotOffsetY = 0;
+  if (localPts.length > 0) {
+    const xs = localPts.map(p => p.x);
+    const ys = localPts.map(p => p.y);
+    pivotOffsetX = (Math.min(...xs) + Math.max(...xs)) / 2;
+    pivotOffsetY = (Math.min(...ys) + Math.max(...ys)) / 2;
+  }
+
   return (
+    <>
     <Group
       ref={groupRef}
-      x={component.position.x}
-      y={component.position.y}
+      x={component.position.x + pivotOffsetX}
+      y={component.position.y + pivotOffsetY}
+      offsetX={pivotOffsetX}
+      offsetY={pivotOffsetY}
       rotation={component.rotation}
       draggable={activeTool !== 'hand' && isSelected && !shiftPressed}
       onContextMenu={handleRightClick}
+      onTransformEnd={() => {
+        const node = groupRef.current;
+        if (!node) return;
+        node.scaleX(1);
+        node.scaleY(1);
+        updateComponent(component.id, {
+          rotation: node.rotation(),
+          position: { x: node.x() - pivotOffsetX, y: node.y() - pivotOffsetY },
+        });
+      }}
       onDragStart={() => {
         dragStartPos.current = { x: component.position.x, y: component.position.y };
       }}
       onDragEnd={(e) => {
         const spacing = GRID_CONFIG.spacing;
-        const newX = Math.round(e.target.x() / spacing) * spacing;
-        const newY = Math.round(e.target.y() / spacing) * spacing;
+        const rawX = e.target.x() - pivotOffsetX;
+        const rawY = e.target.y() - pivotOffsetY;
+        const newX = Math.round(rawX / spacing) * spacing;
+        const newY = Math.round(rawY / spacing) * spacing;
         const start = dragStartPos.current || { x: component.position.x, y: component.position.y };
         const dx = newX - start.x;
         const dy = newY - start.y;
@@ -372,5 +410,22 @@ export const BoundaryComponent = ({
       {/* Measurements */}
       {renderMeasurements()}
     </Group>
+    {isSelected && (
+      <Transformer
+        ref={trRef}
+        rotateEnabled={true}
+        enabledAnchors={[]}
+        borderStroke="#3B82F6"
+        borderStrokeWidth={2}
+        borderDash={[6, 3]}
+        anchorFill="#ffffff"
+        anchorStroke="#3B82F6"
+        rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+        boundBoxFunc={(oldBox, newBox) => {
+          return { ...newBox, width: oldBox.width, height: oldBox.height };
+        }}
+      />
+    )}
+    </>
   );
 };

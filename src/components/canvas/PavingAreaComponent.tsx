@@ -1,4 +1,4 @@
-import { Group, Line, Text, Circle } from 'react-konva';
+import { Group, Line, Text, Circle, Transformer } from 'react-konva';
 import { Component } from '@/types';
 import { useMemo, useEffect, useRef, useState, useCallback } from 'react';
 import { useDesignStore } from '@/store/designStore';
@@ -52,6 +52,7 @@ export const PavingAreaComponent = ({
   const areaSurface = (component.properties as any).areaSurface || 'pavers';
 
   const groupRef = useRef<any>(null);
+  const trRef = useRef<any>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [localPreview, setLocalPreview] = useState<Pt[] | null>(null);
   const [selectedNodes, setSelectedNodes] = useState<number[]>([]);
@@ -113,6 +114,18 @@ export const PavingAreaComponent = ({
       });
     }
   }, [liveAreaM2, livePerimeterLM, component.id, component.properties.statistics, updateComponentSilent]);
+
+  // Attach/detach transformer when selection changes
+  useEffect(() => {
+    if (!trRef.current) return;
+    if (isSelected && groupRef.current) {
+      trRef.current.nodes([groupRef.current]);
+      trRef.current.getLayer()?.batchDraw();
+    } else {
+      trRef.current.nodes([]);
+      trRef.current.getLayer()?.batchDraw();
+    }
+  }, [isSelected]);
 
   // Node selection
   const isNodeSelected = (i: number) => selectedNodes.includes(i);
@@ -213,8 +226,8 @@ export const PavingAreaComponent = ({
   const handleDragEnd = () => {
     const node = groupRef.current;
     if (!node) return;
-    const nextX = node.x();
-    const nextY = node.y();
+    const nextX = node.x() - pivotOffsetX;
+    const nextY = node.y() - pivotOffsetY;
     const dx = nextX - bbox.x;
     const dy = nextY - bbox.y;
 
@@ -378,18 +391,50 @@ export const PavingAreaComponent = ({
     return TILE_COLORS.extendedTile; // Lighter sandstone to match coping extension
   };
 
+  // Compute center-pivot offset from local points bounding box
+  let pivotOffsetX = 0;
+  let pivotOffsetY = 0;
+  if (boundaryLocal.length > 0) {
+    const xs = boundaryLocal.map(p => p.x);
+    const ys = boundaryLocal.map(p => p.y);
+    pivotOffsetX = (Math.min(...xs) + Math.max(...xs)) / 2;
+    pivotOffsetY = (Math.min(...ys) + Math.max(...ys)) / 2;
+  }
+
   const displayBoundary = localPreview || boundaryLocal;
 
   return (
+    <>
     <Group
       ref={groupRef}
-      x={bbox.x}
-      y={bbox.y}
+      x={bbox.x + pivotOffsetX}
+      y={bbox.y + pivotOffsetY}
+      offsetX={pivotOffsetX}
+      offsetY={pivotOffsetY}
+      rotation={component.rotation}
       onClick={onSelect}
       onTap={onSelect}
       onContextMenu={handleRightClick}
       draggable={activeTool !== 'hand' && isSelected && !localPreview}
       onDragEnd={handleDragEnd}
+      onTransformEnd={() => {
+        const node = groupRef.current;
+        if (!node) return;
+        node.scaleX(1);
+        node.scaleY(1);
+        const newBboxX = node.x() - pivotOffsetX;
+        const newBboxY = node.y() - pivotOffsetY;
+        const dx = newBboxX - bbox.x;
+        const dy = newBboxY - bbox.y;
+        const movedBoundary = boundaryStage.map((p) => ({
+          x: p.x + dx,
+          y: p.y + dy,
+        }));
+        updateComponent(component.id, {
+          rotation: node.rotation(),
+          properties: { ...component.properties, boundary: movedBoundary },
+        });
+      }}
     >
       {/* Filled polygon - use Line with fill for reliable rendering */}
       <Line
@@ -484,5 +529,20 @@ export const PavingAreaComponent = ({
           />
         ))}
     </Group>
+    {isSelected && (
+      <Transformer
+        ref={trRef}
+        rotateEnabled={true}
+        enabledAnchors={[]}
+        borderStroke="#3B82F6"
+        borderStrokeWidth={2}
+        borderDash={[6, 3]}
+        anchorFill="#ffffff"
+        anchorStroke="#3B82F6"
+        rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+        boundBoxFunc={(oldBox, newBox) => ({ ...newBox, width: oldBox.width, height: oldBox.height })}
+      />
+    )}
+    </>
   );
 };

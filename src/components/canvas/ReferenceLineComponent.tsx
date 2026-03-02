@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Group, Line, Circle, Label, Tag, Text } from 'react-konva';
+import React, { useState, useRef, useEffect } from 'react';
+import { Group, Line, Circle, Label, Tag, Text, Transformer } from 'react-konva';
 import { Component } from '@/types';
 import { useDesignStore } from '@/store/designStore';
 import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
@@ -26,6 +26,20 @@ export const ReferenceLineComponent: React.FC<Props> = ({
   const blueprintMode = useDesignStore((s) => s.blueprintMode);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [isDraggingNode, setIsDraggingNode] = useState(false);
+  const groupRef = useRef<any>(null);
+  const trRef = useRef<any>(null);
+
+  // Attach/detach transformer when selection changes
+  useEffect(() => {
+    if (!trRef.current) return;
+    if (selected && groupRef.current) {
+      trRef.current.nodes([groupRef.current]);
+      trRef.current.getLayer()?.batchDraw();
+    } else {
+      trRef.current.nodes([]);
+      trRef.current.getLayer()?.batchDraw();
+    }
+  }, [selected]);
   // shiftPressed from store (supports touch toggle button for hinge mode)
   const shiftPressed = useDesignStore((s) => s.shiftPressed);
   const points = component.properties.points || [];
@@ -120,13 +134,30 @@ export const ReferenceLineComponent: React.FC<Props> = ({
   };
 
   return (
+    <>
     <Group
+      ref={groupRef}
+      x={midPoint.x}
+      y={midPoint.y}
+      offsetX={midPoint.x}
+      offsetY={midPoint.y}
+      rotation={component.rotation}
       draggable={selected && !dragIndex}
       onClick={onSelect}
       onTap={onSelect}
       onContextMenu={handleRightClick}
       onDragStart={() => setIsDraggingNode(true)}
       onDragEnd={handleNodeDragEnd}
+      onTransformEnd={() => {
+        const node = groupRef.current;
+        if (!node) return;
+        node.scaleX(1);
+        node.scaleY(1);
+        updateComponent(component.id, {
+          rotation: node.rotation(),
+          position: { x: node.x() - midPoint.x, y: node.y() - midPoint.y },
+        });
+      }}
     >
       {/* Main line - extends 5mm past slashes, measurement points remain at start/end */}
       <Line
@@ -311,5 +342,22 @@ export const ReferenceLineComponent: React.FC<Props> = ({
         </>
       )}
     </Group>
+    {selected && (
+      <Transformer
+        ref={trRef}
+        rotateEnabled={true}
+        enabledAnchors={[]}
+        borderStroke="#3B82F6"
+        borderStrokeWidth={2}
+        borderDash={[6, 3]}
+        anchorFill="#ffffff"
+        anchorStroke="#3B82F6"
+        rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+        boundBoxFunc={(oldBox, newBox) => {
+          return { ...newBox, width: oldBox.width, height: oldBox.height };
+        }}
+      />
+    )}
+    </>
   );
 };

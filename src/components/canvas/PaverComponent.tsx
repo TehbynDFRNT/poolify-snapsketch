@@ -1,4 +1,4 @@
-import { Group, Rect, Line, Circle } from 'react-konva';
+import { Group, Rect, Line, Circle, Transformer } from 'react-konva';
 import { Component } from '@/types';
 import { TILE_SIZES, TILE_COLORS, TILE_GAP, TileSize } from '@/constants/tileConfig';
 import { useEffect, useMemo, useState, useRef } from 'react';
@@ -31,8 +31,21 @@ export const PaverComponent = ({
   onContextMenu,
 }: PaverComponentProps) => {
   const groupRef = useRef<any>(null);
+  const trRef = useRef<any>(null);
   const addComponent = useDesignStore(state => state.addComponent);
   const updateComponentStore = useDesignStore(state => state.updateComponent);
+
+  // Attach/detach transformer when selection changes
+  useEffect(() => {
+    if (!trRef.current) return;
+    if (isSelected && groupRef.current) {
+      trRef.current.nodes([groupRef.current]);
+      trRef.current.getLayer()?.batchDraw();
+    } else {
+      trRef.current.nodes([]);
+      trRef.current.getLayer()?.batchDraw();
+    }
+  }, [isSelected]);
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
   const [previewCount, setPreviewCount] = useState<{ rows: number; cols: number; offsetX: number; offsetY: number } | null>(null);
   const [previewMeta, setPreviewMeta] = useState<
@@ -345,18 +358,35 @@ export const PaverComponent = ({
     }
   };
 
+  // Center-pivot offset for rotation
+  const centerOffsetX = (component.dimensions.width * scale) / 2;
+  const centerOffsetY = (component.dimensions.height * scale) / 2;
+
   return (
+    <>
     <Group
       ref={groupRef}
-      x={component.position.x}
-      y={component.position.y}
+      x={component.position.x + centerOffsetX}
+      y={component.position.y + centerOffsetY}
+      offsetX={centerOffsetX}
+      offsetY={centerOffsetY}
       rotation={component.rotation}
       draggable={activeTool !== 'hand' && isSelected && !isDraggingHandle}
       onClick={onSelect}
       onTap={onSelect}
       onContextMenu={handleRightClick}
       onDragEnd={(e) => {
-        onDragEnd({ x: e.target.x(), y: e.target.y() });
+        onDragEnd({ x: e.target.x() - centerOffsetX, y: e.target.y() - centerOffsetY });
+      }}
+      onTransformEnd={() => {
+        const node = groupRef.current;
+        if (!node) return;
+        node.scaleX(1);
+        node.scaleY(1);
+        updateComponentStore(component.id, {
+          rotation: node.rotation(),
+          position: { x: node.x() - centerOffsetX, y: node.y() - centerOffsetY },
+        });
       }}
     >
       {/* Invisible hit area covering full paver union */}
@@ -860,5 +890,22 @@ export const PaverComponent = ({
         </>
       )}
     </Group>
+    {isSelected && (
+      <Transformer
+        ref={trRef}
+        rotateEnabled={true}
+        enabledAnchors={[]}
+        borderStroke="#3B82F6"
+        borderStrokeWidth={2}
+        borderDash={[6, 3]}
+        anchorFill="#ffffff"
+        anchorStroke="#3B82F6"
+        rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+        boundBoxFunc={(oldBox, newBox) => {
+          return { ...newBox, width: oldBox.width, height: oldBox.height };
+        }}
+      />
+    )}
+    </>
   );
 };

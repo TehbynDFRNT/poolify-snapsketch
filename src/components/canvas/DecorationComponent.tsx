@@ -1,4 +1,4 @@
-import { Group, Rect, Image as KonvaImage } from 'react-konva';
+import { Group, Rect, Image as KonvaImage, Transformer } from 'react-konva';
 import { Component } from '@/types';
 import { useEffect, useRef, useState } from 'react';
 import { GRID_CONFIG } from '@/constants/grid';
@@ -59,7 +59,22 @@ export const DecorationComponent = ({
 }: DecorationComponentProps) => {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const imageRef = useRef<any>(null);
+  const groupRef = useRef<any>(null);
+  const trRef = useRef<any>(null);
   const blueprintMode = useDesignStore((s) => s.blueprintMode);
+  const updateComponent = useDesignStore((s) => s.updateComponent);
+
+  // Attach/detach transformer when selection changes
+  useEffect(() => {
+    if (!trRef.current) return;
+    if (isSelected && groupRef.current) {
+      trRef.current.nodes([groupRef.current]);
+      trRef.current.getLayer()?.batchDraw();
+    } else {
+      trRef.current.nodes([]);
+      trRef.current.getLayer()?.batchDraw();
+    }
+  }, [isSelected]);
 
   const decorationType = component.properties.decorationType || 'bush';
   const config = DECORATION_CONFIG[decorationType];
@@ -89,10 +104,18 @@ export const DecorationComponent = ({
     }
   };
 
+  // Center-pivot offset for rotation
+  const centerOffsetX = width / 2;
+  const centerOffsetY = height / 2;
+
   return (
+    <>
     <Group
-      x={component.position.x}
-      y={component.position.y}
+      ref={groupRef}
+      x={component.position.x + centerOffsetX}
+      y={component.position.y + centerOffsetY}
+      offsetX={centerOffsetX}
+      offsetY={centerOffsetY}
       rotation={component.rotation}
       draggable={activeTool !== 'hand' && isSelected}
       onClick={onSelect}
@@ -100,9 +123,19 @@ export const DecorationComponent = ({
       onContextMenu={handleContextMenuLocal}
       onDragEnd={(e) => {
         const spacing = GRID_CONFIG.spacing;
-        const newX = Math.round(e.target.x() / spacing) * spacing;
-        const newY = Math.round(e.target.y() / spacing) * spacing;
+        const newX = Math.round((e.target.x() - centerOffsetX) / spacing) * spacing;
+        const newY = Math.round((e.target.y() - centerOffsetY) / spacing) * spacing;
         onDragEnd({ x: newX, y: newY });
+      }}
+      onTransformEnd={() => {
+        const node = groupRef.current;
+        if (!node) return;
+        node.scaleX(1);
+        node.scaleY(1);
+        updateComponent(component.id, {
+          rotation: node.rotation(),
+          position: { x: node.x() - centerOffsetX, y: node.y() - centerOffsetY },
+        });
       }}
     >
       {/* Invisible hit rectangle for reliable clicking */}
@@ -139,5 +172,22 @@ export const DecorationComponent = ({
         />
       )}
     </Group>
+    {isSelected && (
+      <Transformer
+        ref={trRef}
+        rotateEnabled={true}
+        enabledAnchors={[]}
+        borderStroke="#3B82F6"
+        borderStrokeWidth={2}
+        borderDash={[6, 3]}
+        anchorFill="#ffffff"
+        anchorStroke="#3B82F6"
+        rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+        boundBoxFunc={(oldBox, newBox) => {
+          return { ...newBox, width: oldBox.width, height: oldBox.height };
+        }}
+      />
+    )}
+    </>
   );
 };

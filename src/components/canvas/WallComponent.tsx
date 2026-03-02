@@ -1,4 +1,4 @@
-import { Group, Line, Rect, Circle, Text } from 'react-konva';
+import { Group, Line, Rect, Circle, Text, Transformer } from 'react-konva';
 import { Component } from '@/types';
 import { WALL_MATERIALS } from '@/constants/components';
 import { useState, useRef, useEffect } from 'react';
@@ -29,6 +29,7 @@ export const WallComponent = ({
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
 
   const groupRef = useRef<any>(null);
+  const trRef = useRef<any>(null);
 
   const wallType = component.properties.wallMaterial || 'timber';
   const wallData = WALL_MATERIALS[wallType as keyof typeof WALL_MATERIALS];
@@ -60,6 +61,18 @@ export const WallComponent = ({
     }
   };
 
+  // Attach/detach transformer when selection changes
+  useEffect(() => {
+    if (!trRef.current) return;
+    if (isSelected && groupRef.current) {
+      trRef.current.nodes([groupRef.current]);
+      trRef.current.getLayer()?.batchDraw();
+    } else {
+      trRef.current.nodes([]);
+      trRef.current.getLayer()?.batchDraw();
+    }
+  }, [isSelected]);
+
   if (isPolyline) {
     // Compute local points (relative to group position)
     const localPts = ghostLocal
@@ -88,11 +101,18 @@ export const WallComponent = ({
       return tr.point(local);
     };
 
+    // Center-pivot for rotation
+    const polyCenterX = (minX + maxX) / 2;
+    const polyCenterY = (minY + maxY) / 2;
+
     return (
+      <>
       <Group
         ref={groupRef}
-        x={component.position.x}
-        y={component.position.y}
+        x={component.position.x + polyCenterX}
+        y={component.position.y + polyCenterY}
+        offsetX={polyCenterX}
+        offsetY={polyCenterY}
         rotation={component.rotation}
         draggable={activeTool !== 'hand' && isSelected && !shiftPressed}
         onClick={onSelect}
@@ -111,6 +131,16 @@ export const WallComponent = ({
           const translated = polyPoints.map((p) => ({ x: p.x + dx, y: p.y + dy }));
           updateComponent(component.id, { position: { x: newX, y: newY }, properties: { ...component.properties, points: translated } });
           dragStartPos.current = null;
+        }}
+        onTransformEnd={() => {
+          const node = groupRef.current;
+          if (!node) return;
+          node.scaleX(1);
+          node.scaleY(1);
+          updateComponent(component.id, {
+            rotation: node.rotation(),
+            position: { x: node.x() - polyCenterX, y: node.y() - polyCenterY },
+          });
         }}
       >
         {/* Render each segment as a rect with proper rotation */}
@@ -311,21 +341,51 @@ export const WallComponent = ({
           );
         })}
       </Group>
+      {isSelected && (
+        <Transformer
+          ref={trRef}
+          rotateEnabled={true}
+          enabledAnchors={[]}
+          borderStroke="#3B82F6"
+          borderStrokeWidth={2}
+          borderDash={[6, 3]}
+          anchorFill="#ffffff"
+          anchorStroke="#3B82F6"
+          rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+          boundBoxFunc={(oldBox, newBox) => {
+            return { ...newBox, width: oldBox.width, height: oldBox.height };
+          }}
+        />
+      )}
+      </>
     );
   }
 
   return (
+    <>
       <Group
         ref={groupRef}
-        x={component.position.x}
-        y={component.position.y}
+        x={component.position.x + (component.dimensions.width || 1000) / 2}
+        y={component.position.y + height / 2}
+        offsetX={(component.dimensions.width || 1000) / 2}
+        offsetY={height / 2}
         rotation={component.rotation}
         draggable={activeTool !== 'hand' && !isDraggingHandle}
         onClick={onSelect}
         onTap={onSelect}
         onContextMenu={handleRightClick}
         onDragEnd={(e) => {
-          onDragEnd({ x: e.target.x(), y: e.target.y() });
+          onDragEnd({ x: e.target.x() - (component.dimensions.width || 1000) / 2, y: e.target.y() - height / 2 });
+        }}
+        onTransformEnd={() => {
+          const node = groupRef.current;
+          if (!node) return;
+          node.scaleX(1);
+          node.scaleY(1);
+          updateComponent(component.id, {
+            rotation: node.rotation(),
+            position: { x: node.x() - (component.dimensions.width || 1000) / 2, y: node.y() - height / 2 },
+          });
         }}
       >
       {/* Invisible hit area for easier clicking */}
@@ -405,5 +465,22 @@ export const WallComponent = ({
         </>
       )}
     </Group>
+      {isSelected && (
+        <Transformer
+          ref={trRef}
+          rotateEnabled={true}
+          enabledAnchors={[]}
+          borderStroke="#3B82F6"
+          borderStrokeWidth={2}
+          borderDash={[6, 3]}
+          anchorFill="#ffffff"
+          anchorStroke="#3B82F6"
+          rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+          boundBoxFunc={(oldBox, newBox) => {
+            return { ...newBox, width: oldBox.width, height: oldBox.height };
+          }}
+        />
+      )}
+    </>
   );
 };

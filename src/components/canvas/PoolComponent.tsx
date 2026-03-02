@@ -1,5 +1,5 @@
 import { useRef, useMemo, useState, useEffect } from 'react';
-import { Group, Line, Text, Circle, Rect } from 'react-konva';
+import { Group, Line, Text, Circle, Rect, Transformer } from 'react-konva';
 import type Konva from 'konva';
 import type { Vector2d } from 'konva/lib/types';
 import { Component, SimpleCopingConfig } from '@/types';
@@ -125,8 +125,21 @@ interface PoolComponentProps {
 
 export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onDragEnd, onTileContextMenu }: PoolComponentProps) => {
   const groupRef = useRef<Konva.Group | null>(null);
+  const trRef = useRef<any>(null);
   const { components: allComponents, updateComponent, updateComponentSilent, zoom, annotationsVisible, blueprintMode } = useDesignStore();
   const [patternImage, setPatternImage] = useState<CanvasImageSource | null>(null);
+
+  // Attach/detach transformer when selection changes
+  useEffect(() => {
+    if (!trRef.current) return;
+    if (isSelected && groupRef.current) {
+      trRef.current.nodes([groupRef.current]);
+      trRef.current.getLayer()?.batchDraw();
+    } else {
+      trRef.current.nodes([]);
+      trRef.current.getLayer()?.batchDraw();
+    }
+  }, [isSelected]);
 
   // --- Boundary (outer limit) for auto-extensions ---
 
@@ -929,11 +942,18 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
   };
 
 
+  // Center-pivot offset for rotation
+  const centerOffsetX = (poolData.length * scale) / 2;
+  const centerOffsetY = (poolData.width * scale) / 2;
+
   return (
+    <>
     <Group
         ref={groupRef}
-        x={component.position.x}
-        y={component.position.y}
+        x={component.position.x + centerOffsetX}
+        y={component.position.y + centerOffsetY}
+        offsetX={centerOffsetX}
+        offsetY={centerOffsetY}
         rotation={component.rotation}
         draggable={activeTool !== 'hand' && isSelected}
         // Match PaverComponent: clicking the object simply selects it.
@@ -941,6 +961,17 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
         onClick={onSelect}
         onTap={onSelect}
         onDragEnd={handleDragEnd}
+        onTransformEnd={() => {
+          const node = groupRef.current;
+          if (!node) return;
+          // Prevent any accidental scale; we only want rotation
+          node.scaleX(1);
+          node.scaleY(1);
+          updateComponent(component.id, {
+            rotation: node.rotation(),
+            position: { x: node.x() - centerOffsetX, y: node.y() - centerOffsetY },
+          });
+        }}
       >
         {/* Pool outline - render here only when coping is disabled; otherwise pool is drawn inside coping render */}
         {(!showCoping || copingBandWidth <= 0) && (
@@ -1078,5 +1109,22 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
           })()
         )}
       </Group>
+      {isSelected && (
+        <Transformer
+          ref={trRef}
+          rotateEnabled={true}
+          enabledAnchors={[]}
+          borderStroke="#3B82F6"
+          borderStrokeWidth={2}
+          borderDash={[6, 3]}
+          anchorFill="#ffffff"
+          anchorStroke="#3B82F6"
+          rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+          boundBoxFunc={(oldBox, newBox) => {
+            return { ...newBox, width: oldBox.width, height: oldBox.height };
+          }}
+        />
+      )}
+    </>
   );
 };

@@ -1,6 +1,6 @@
-import { Group, Line, Circle, Text } from 'react-konva';
+import { Group, Line, Circle, Text, Transformer } from 'react-konva';
 import { Component } from '@/types';
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
 import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
@@ -33,11 +33,24 @@ export const HouseComponent = ({
   const closed = component.properties.closed || false;
 
   const groupRef = useRef<any>(null);
+  const trRef = useRef<any>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [ghostLocal, setGhostLocal] = useState<Array<{ x: number; y: number }> | null>(null);
   // shiftPressed from store (supports touch toggle button)
   const shiftPressed = useDesignStore((s) => s.shiftPressed);
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
+
+  // Attach/detach transformer when selection changes
+  useEffect(() => {
+    if (!trRef.current) return;
+    if (isSelected && groupRef.current) {
+      trRef.current.nodes([groupRef.current]);
+      trRef.current.getLayer()?.batchDraw();
+    } else {
+      trRef.current.nodes([]);
+      trRef.current.getLayer()?.batchDraw();
+    }
+  }, [isSelected]);
 
   const handleRightClick = (e: any) => {
     e.evt.preventDefault();
@@ -170,22 +183,45 @@ export const HouseComponent = ({
     );
   };
 
+  // Compute center-pivot offset from local points bounding box
+  let pivotOffsetX = 0;
+  let pivotOffsetY = 0;
+  if (localPts.length > 0) {
+    const xs = localPts.map(p => p.x);
+    const ys = localPts.map(p => p.y);
+    pivotOffsetX = (Math.min(...xs) + Math.max(...xs)) / 2;
+    pivotOffsetY = (Math.min(...ys) + Math.max(...ys)) / 2;
+  }
+
   return (
+    <>
     <Group
       ref={groupRef}
-      x={component.position.x}
-      y={component.position.y}
+      x={component.position.x + pivotOffsetX}
+      y={component.position.y + pivotOffsetY}
+      offsetX={pivotOffsetX}
+      offsetY={pivotOffsetY}
       rotation={component.rotation}
       draggable={activeTool !== 'hand' && isSelected && !shiftPressed}
       onClick={onSelect}
       onTap={onSelect}
       onContextMenu={handleRightClick}
+      onTransformEnd={() => {
+        const node = groupRef.current;
+        if (!node) return;
+        node.scaleX(1);
+        node.scaleY(1);
+        updateComponent(component.id, {
+          rotation: node.rotation(),
+          position: { x: node.x() - pivotOffsetX, y: node.y() - pivotOffsetY },
+        });
+      }}
       onDragStart={() => { dragStartPos.current = { x: component.position.x, y: component.position.y }; }}
       onDragEnd={(e) => {
         if (onDragEnd) {
           const s = GRID_CONFIG.spacing;
-          const nx = Math.round(e.target.x() / s) * s;
-          const ny = Math.round(e.target.y() / s) * s;
+          const nx = Math.round((e.target.x() - pivotOffsetX) / s) * s;
+          const ny = Math.round((e.target.y() - pivotOffsetY) / s) * s;
           const start = dragStartPos.current || { x: component.position.x, y: component.position.y };
           const dx = nx - start.x; const dy = ny - start.y;
           const translated = pointsAbs.map(p => ({ x: p.x + dx, y: p.y + dy }));
@@ -297,5 +333,22 @@ export const HouseComponent = ({
         );
       })()}
     </Group>
+    {isSelected && (
+      <Transformer
+        ref={trRef}
+        rotateEnabled={true}
+        enabledAnchors={[]}
+        borderStroke="#3B82F6"
+        borderStrokeWidth={2}
+        borderDash={[6, 3]}
+        anchorFill="#ffffff"
+        anchorStroke="#3B82F6"
+        rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+        boundBoxFunc={(oldBox, newBox) => {
+          return { ...newBox, width: oldBox.width, height: oldBox.height };
+        }}
+      />
+    )}
+    </>
   );
 };
