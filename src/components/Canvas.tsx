@@ -77,7 +77,7 @@ export const Canvas = ({
   const [ghostPoint, setGhostPoint] = useState<{ x: number; y: number } | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   
-  // Boundary extension state - allows extending an existing open boundary from its endpoints
+  // Extension state - allows extending an existing open polyline component from its endpoints
   const [extensionState, setExtensionState] = useState<{
     componentId: string;
     endpoint: 'first' | 'last';
@@ -85,10 +85,11 @@ export const Canvas = ({
     rotation: number;
     position: { x: number; y: number };
     pivotOffset: { x: number; y: number };
+    componentType: string;
   } | null>(null);
 
-  // When extending, treat drawing as if boundary tool is active
-  const effectiveDrawingTool = extensionState ? 'boundary' : activeTool;
+  // When extending, treat drawing as if the source component's tool is active
+  const effectiveDrawingTool = extensionState ? extensionState.componentType : activeTool;
 
   // Measurement tool states
   const [measureStart, setMeasureStart] = useState<{ x: number; y: number } | null>(null);
@@ -567,7 +568,7 @@ export const Canvas = ({
     onToolChange?.('select');
   };
 
-  // Finish boundary extension — merge new points into existing boundary
+  // Finish extension — merge new points into existing polyline component
   const finishExtension = () => {
     if (!extensionState || drawingPoints.length < 2) {
       cancelExtension();
@@ -630,11 +631,62 @@ export const Canvas = ({
     selectComponent(compId);
   };
 
-  // Cancel boundary extension without modifying the boundary
+  // Cancel extension without modifying the component
   const cancelExtension = () => {
     setExtensionState(null);
     setDrawingPoints([]);
     setIsDrawing(false);
+    setGhostPoint(null);
+  };
+
+  // Shared handler to start extending any polyline component (boundary/fence/wall/drainage) from an endpoint
+  const handleStartExtension = (component: Component, componentId: string, endpoint: 'first' | 'last') => {
+    const pts = component.properties.points || [];
+    if (pts.length < 2) return;
+
+    const anchor = endpoint === 'last' ? pts[pts.length - 1] : pts[0];
+
+    const rot = component.rotation || 0;
+    let pivotX: number;
+    let pivotY: number;
+    if (rot !== 0 && component.properties.rotationPivot) {
+      pivotX = component.properties.rotationPivot.x;
+      pivotY = component.properties.rotationPivot.y;
+    } else {
+      const localPts = pts.map((p: { x: number; y: number }) => ({
+        x: p.x - component.position.x,
+        y: p.y - component.position.y,
+      }));
+      const xs = localPts.map((p: { x: number }) => p.x);
+      const ys = localPts.map((p: { y: number }) => p.y);
+      pivotX = (Math.min(...xs) + Math.max(...xs)) / 2;
+      pivotY = (Math.min(...ys) + Math.max(...ys)) / 2;
+    }
+
+    let visualAnchor = { x: anchor.x, y: anchor.y };
+    if (rot !== 0) {
+      const rad = rot * Math.PI / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const lx = anchor.x - component.position.x - pivotX;
+      const ly = anchor.y - component.position.y - pivotY;
+      visualAnchor = {
+        x: lx * cos - ly * sin + pivotX + component.position.x,
+        y: lx * sin + ly * cos + pivotY + component.position.y,
+      };
+    }
+
+    setExtensionState({
+      componentId,
+      endpoint,
+      originalPoints: [...pts],
+      rotation: rot,
+      position: { ...component.position },
+      pivotOffset: { x: pivotX, y: pivotY },
+      componentType: component.type,
+    });
+    setDrawingPoints([visualAnchor]);
+    setIsDrawing(true);
     setGhostPoint(null);
   };
 
@@ -1543,9 +1595,10 @@ export const Canvas = ({
                         })
                       }
                       onContextMenu={handleComponentContextMenu}
+                      onStartExtension={(componentId, endpoint) => handleStartExtension(component, componentId, endpoint)}
                     />
                   );
-                  
+
                 case 'fence':
                   return (
                     <FenceComponent
@@ -1567,6 +1620,7 @@ export const Canvas = ({
                         })
                       }
                       onContextMenu={handleComponentContextMenu}
+                      onStartExtension={(componentId, endpoint) => handleStartExtension(component, componentId, endpoint)}
                     />
                   );
                 case 'gate':
@@ -1583,7 +1637,7 @@ export const Canvas = ({
                       }}
                     />
                   );
-                  
+
                 case 'wall':
                   return (
                     <WallComponent
@@ -1605,6 +1659,7 @@ export const Canvas = ({
                         })
                       }
                       onContextMenu={handleComponentContextMenu}
+                      onStartExtension={(componentId, endpoint) => handleStartExtension(component, componentId, endpoint)}
                     />
                   );
                   
@@ -1624,63 +1679,10 @@ export const Canvas = ({
                         updateComponent(component.id, { position: snapped });
                       }}
                       onContextMenu={handleComponentContextMenu}
-                      onStartExtension={(componentId, endpoint) => {
-                        const pts = component.properties.points || [];
-                        if (pts.length < 2) return;
-
-                        // The anchor is the endpoint the user clicked
-                        const anchor = endpoint === 'last'
-                          ? pts[pts.length - 1]
-                          : pts[0];
-
-                        // Use stored pivot if component is rotated (prevents visual jumping),
-                        // otherwise compute from local points bbox
-                        const rot = component.rotation || 0;
-                        let pivotX: number;
-                        let pivotY: number;
-                        if (rot !== 0 && component.properties.rotationPivot) {
-                          pivotX = component.properties.rotationPivot.x;
-                          pivotY = component.properties.rotationPivot.y;
-                        } else {
-                          const localPts = pts.map(p => ({
-                            x: p.x - component.position.x,
-                            y: p.y - component.position.y,
-                          }));
-                          const xs = localPts.map(p => p.x);
-                          const ys = localPts.map(p => p.y);
-                          pivotX = (Math.min(...xs) + Math.max(...xs)) / 2;
-                          pivotY = (Math.min(...ys) + Math.max(...ys)) / 2;
-                        }
-
-                        // Rotate anchor to its visual position if component is rotated
-                        let visualAnchor = { x: anchor.x, y: anchor.y };
-                        if (rot !== 0) {
-                          const rad = rot * Math.PI / 180;
-                          const cos = Math.cos(rad);
-                          const sin = Math.sin(rad);
-                          const lx = anchor.x - component.position.x - pivotX;
-                          const ly = anchor.y - component.position.y - pivotY;
-                          visualAnchor = {
-                            x: lx * cos - ly * sin + pivotX + component.position.x,
-                            y: lx * sin + ly * cos + pivotY + component.position.y,
-                          };
-                        }
-
-                        setExtensionState({
-                          componentId,
-                          endpoint,
-                          originalPoints: [...pts],
-                          rotation: rot,
-                          position: { ...component.position },
-                          pivotOffset: { x: pivotX, y: pivotY },
-                        });
-                        setDrawingPoints([visualAnchor]);
-                        setIsDrawing(true);
-                        setGhostPoint(null);
-                      }}
+                      onStartExtension={(componentId, endpoint) => handleStartExtension(component, componentId, endpoint)}
                     />
                   );
-                  
+
                 case 'house':
                   return (
                     <HouseComponent

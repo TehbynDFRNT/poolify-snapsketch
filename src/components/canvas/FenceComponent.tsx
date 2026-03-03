@@ -15,6 +15,7 @@ interface FenceComponentProps {
   onDragEnd: (pos: { x: number; y: number }) => void;
   onExtend?: (length: number) => void;
   onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
+  onStartExtension?: (componentId: string, endpoint: 'first' | 'last') => void;
 }
 
 export const FenceComponent = ({
@@ -25,6 +26,7 @@ export const FenceComponent = ({
   onDragEnd,
   onExtend,
   onContextMenu,
+  onStartExtension,
 }: FenceComponentProps) => {
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
   const [selectedSeg, setSelectedSeg] = useState<{ run: number; seg: number } | null>(null);
@@ -329,8 +331,10 @@ export const FenceComponent = ({
         }}
         onDragEnd={(e) => {
           const spacing = GRID_CONFIG.spacing;
-          const newX = Math.round(e.target.x() / spacing) * spacing;
-          const newY = Math.round(e.target.y() / spacing) * spacing;
+          const rawX = e.target.x() - polyCenterX;
+          const rawY = e.target.y() - polyCenterY;
+          const newX = Math.round(rawX / spacing) * spacing;
+          const newY = Math.round(rawY / spacing) * spacing;
           const start = dragStartPos.current || { x: component.position.x, y: component.position.y };
           const dx = newX - start.x;
           const dy = newY - start.y;
@@ -746,6 +750,40 @@ export const FenceComponent = ({
             }}
           />
         ))}
+
+        {/* Extension endpoint indicators for open polylines */}
+        {isSelected && !shiftPressed && activeTool === 'select' && onStartExtension && localPts.length >= 2 && (
+          <>
+            {[0, localPts.length - 1].map((idx) => (
+              <Circle
+                key={`ext-${idx}`}
+                x={localPts[idx].x}
+                y={localPts[idx].y}
+                radius={7}
+                fill="transparent"
+                stroke="#10B981"
+                strokeWidth={3}
+                onClick={(e) => {
+                  e.cancelBubble = true;
+                  onStartExtension(component.id, idx === 0 ? 'first' : 'last');
+                }}
+                onTap={(e) => {
+                  e.cancelBubble = true;
+                  onStartExtension(component.id, idx === 0 ? 'first' : 'last');
+                }}
+                hitStrokeWidth={10}
+                onMouseEnter={(e) => {
+                  const stage = e.target.getStage();
+                  if (stage) stage.container().style.cursor = 'pointer';
+                }}
+                onMouseLeave={(e) => {
+                  const stage = e.target.getStage();
+                  if (stage) stage.container().style.cursor = 'default';
+                }}
+              />
+            ))}
+          </>
+        )}
       </Group>
       {isSelected && (
         <Transformer
