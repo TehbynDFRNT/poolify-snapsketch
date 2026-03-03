@@ -12,11 +12,9 @@ interface BoundaryComponentProps {
   activeTool?: string;
   onSelect: () => void;
   onDragEnd?: (pos: { x: number; y: number }) => void;
-  onRotate?: (update: Partial<Component>) => void;
   onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
   onStartExtension?: (componentId: string, endpoint: 'first' | 'last') => void;
   pinCount?: number;
-  pinPivot?: { x: number; y: number };
 }
 
 export const BoundaryComponent = ({
@@ -25,11 +23,9 @@ export const BoundaryComponent = ({
   activeTool,
   onSelect,
   onDragEnd,
-  onRotate,
   onContextMenu,
   onStartExtension,
   pinCount = 0,
-  pinPivot,
 }: BoundaryComponentProps) => {
   const points = component.properties.points || [];
   const closed = component.properties.closed || false;
@@ -274,11 +270,7 @@ export const BoundaryComponent = ({
     const computedPivotX = (Math.min(...xs) + Math.max(...xs)) / 2;
     const computedPivotY = (Math.min(...ys) + Math.max(...ys)) / 2;
 
-    if (pinPivot) {
-      // Single-pin: rotate around the pin point
-      pivotOffsetX = pinPivot.x;
-      pivotOffsetY = pinPivot.y;
-    } else if (rotation !== 0 && component.properties.rotationPivot) {
+    if (rotation !== 0 && component.properties.rotationPivot) {
       pivotOffsetX = component.properties.rotationPivot.x;
       pivotOffsetY = component.properties.rotationPivot.y;
     } else {
@@ -304,16 +296,14 @@ export const BoundaryComponent = ({
         const newRotation = node.rotation();
         node.scaleX(1);
         node.scaleY(1);
-        const update = {
+        updateComponent(component.id, {
           rotation: newRotation,
           position: { x: node.x() - pivotOffsetX, y: node.y() - pivotOffsetY },
           properties: {
             ...component.properties,
             rotationPivot: newRotation !== 0 ? { x: pivotOffsetX, y: pivotOffsetY } : undefined,
           },
-        };
-        if (onRotate) onRotate(update);
-        else updateComponent(component.id, update);
+        });
       }}
       onDragStart={() => {
         dragStartPos.current = { x: component.position.x, y: component.position.y };
