@@ -4,6 +4,7 @@ import { Component } from '@/types';
 import { useDesignStore } from '@/store/designStore';
 import { getAnnotationOffsetPx, normalizeLabelAngle } from '@/utils/annotations';
 import { BLUEPRINT_COLORS } from '@/constants/blueprintColors';
+import { findNearestPinTarget } from '@/utils/pinSnap';
 
 interface Props {
   component: Component;
@@ -26,6 +27,7 @@ export const ReferenceLineComponent: React.FC<Props> = ({
   const blueprintMode = useDesignStore((s) => s.blueprintMode);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [isDraggingNode, setIsDraggingNode] = useState(false);
+  const [pendingPinSnap, setPendingPinSnap] = useState<{ index: number; worldPoint: { x: number; y: number } } | null>(null);
   const groupRef = useRef<any>(null);
   const trRef = useRef<any>(null);
 
@@ -62,6 +64,13 @@ export const ReferenceLineComponent: React.FC<Props> = ({
   const dy = end.y - start.y;
   const distance = Math.sqrt(dx * dx + dy * dy);
   const measurementMm = Math.round(distance * 10); // Convert to mm (1px = 10mm)
+
+  // Pin state
+  const pinStart = component.properties.pinStart;
+  const pinEnd = component.properties.pinEnd;
+  const hasPinStart = !!pinStart;
+  const hasPinEnd = !!pinEnd;
+  const bothPinned = hasPinStart && hasPinEnd;
 
   // Default colors based on component type
   const defaultColor = component.type === 'quick_measure' ? '#eab308' : '#dc2626';
@@ -128,16 +137,156 @@ export const ReferenceLineComponent: React.FC<Props> = ({
       y: p.y + dy
     }));
 
+    // Clear pins when whole line is dragged (pins no longer valid)
     updateComponent(component.id, {
       properties: {
         ...component.properties,
         points: newPoints,
+        pinStart: null,
+        pinEnd: null,
       }
     });
 
     // Reset Group position to 0,0
     e.target.position({ x: 0, y: 0 });
   };
+
+  // Double-click handler to unpin an endpoint
+  const handleEndpointDoubleClick = (index: number) => {
+    const pinKey = index === 0 ? 'pinStart' : 'pinEnd';
+    if (component.properties[pinKey]) {
+      updateComponent(component.id, {
+        properties: {
+          ...component.properties,
+          [pinKey]: null,
+        }
+      });
+    }
+  };
+
+  // Endpoint drag handlers with pin snap detection
+  const handleEndpointDragMove = (e: any, index: number) => {
+    e.cancelBubble = true;
+    const pos = e.target.position();
+    const otherPoint = index === 0 ? end : start;
+
+    if (shiftPressed) {
+      // Hinge mode: rotate around other point, maintain length
+      const angleToMouse = Math.atan2(pos.y - otherPoint.y, pos.x - otherPoint.x);
+      const constrained = {
+        x: otherPoint.x + Math.cos(angleToMouse) * distance,
+        y: otherPoint.y + Math.sin(angleToMouse) * distance,
+      };
+      e.target.position({ x: constrained.x, y: constrained.y });
+
+      const newPoints = index === 0 ? [constrained, end] : [start, constrained];
+      updateComponent(component.id, {
+        properties: {
+          ...component.properties,
+          points: newPoints,
+        }
+      });
+      setPendingPinSnap(null);
+    } else {
+      // Free movement - check for pin snap
+      const pinResult = findNearestPinTarget(
+        { x: pos.x, y: pos.y },
+        components,
+        [component.id],
+        15
+      );
+
+      if (pinResult) {
+        setPendingPinSnap({ index, worldPoint: pinResult.worldPoint });
+        e.target.position({ x: pinResult.worldPoint.x, y: pinResult.worldPoint.y });
+
+        const newPoints = [...points];
+        newPoints[index] = pinResult.worldPoint;
+        updateComponent(component.id, {
+          properties: {
+            ...component.properties,
+            points: newPoints,
+          }
+        });
+      } else {
+        setPendingPinSnap(null);
+        const newPoints = [...points];
+        newPoints[index] = { x: pos.x, y: pos.y };
+        updateComponent(component.id, {
+          properties: {
+            ...component.properties,
+            points: newPoints,
+          }
+        });
+      }
+    }
+  };
+
+  const handleEndpointDragEnd = (e: any, index: number) => {
+    e.cancelBubble = true;
+    const pos = e.target.position();
+
+    // Check for pin snap on release
+    const pinResult = findNearestPinTarget(
+      { x: pos.x, y: pos.y },
+      components,
+      [component.id],
+      15
+    );
+
+    const pinKey = index === 0 ? 'pinStart' : 'pinEnd';
+
+    if (pinResult) {
+      // Snap to pin and save attachment
+      const newPoints = [...points];
+      newPoints[index] = pinResult.worldPoint;
+      updateComponent(component.id, {
+        properties: {
+          ...component.properties,
+          points: newPoints,
+          [pinKey]: pinResult.attachment,
+        }
+      });
+    } else {
+      // Clear pin if endpoint was dragged away
+      if (component.properties[pinKey]) {
+        updateComponent(component.id, {
+          properties: {
+            ...component.properties,
+            [pinKey]: null,
+          }
+        });
+      }
+    }
+
+    setDragIndex(null);
+    setPendingPinSnap(null);
+  };
+
+  // Endpoint visual style based on pin state
+  const getEndpointStyle = (index: number) => {
+    const isPinned = index === 0 ? hasPinStart : hasPinEnd;
+    const isSnapPreview = pendingPinSnap?.index === index;
+    const isDragging = dragIndex === index;
+
+    if (isPinned || isSnapPreview) {
+      return {
+        fill: '#F59E0B',
+        stroke: '#D97706',
+        strokeWidth: 2,
+        radius: 7,
+      };
+    }
+    return {
+      fill: isDragging ? '#3B82F6' : '#ffffff',
+      stroke: '#3B82F6',
+      strokeWidth: 2,
+      radius: 6,
+    };
+  };
+
+  const startStyle = getEndpointStyle(0);
+  const endStyle = getEndpointStyle(1);
 
   return (
     <>
@@ -148,7 +297,7 @@ export const ReferenceLineComponent: React.FC<Props> = ({
       offsetX={midPoint.x}
       offsetY={midPoint.y}
       rotation={component.rotation}
-      draggable={selected && !dragIndex}
+      draggable={selected && !dragIndex && !bothPinned}
       onClick={onSelect}
       onTap={onSelect}
       onContextMenu={handleRightClick}
@@ -249,106 +398,38 @@ export const ReferenceLineComponent: React.FC<Props> = ({
           <Circle
             x={start.x}
             y={start.y}
-            radius={6}
-            fill={dragIndex === 0 ? '#3B82F6' : '#ffffff'}
-            stroke="#3B82F6"
-            strokeWidth={2}
+            radius={startStyle.radius}
+            fill={startStyle.fill}
+            stroke={startStyle.stroke}
+            strokeWidth={startStyle.strokeWidth}
             draggable
             onDragStart={(e) => {
               e.cancelBubble = true;
               setDragIndex(0);
             }}
-            onDragMove={(e) => {
-              e.cancelBubble = true;
-              const pos = e.target.position();
-
-              if (shiftPressed) {
-                // Hinge mode: rotate around end point, maintain length
-                const pivot = end;
-                const angleToMouse = Math.atan2(pos.y - pivot.y, pos.x - pivot.x);
-                const newStart = {
-                  x: pivot.x + Math.cos(angleToMouse) * distance,
-                  y: pivot.y + Math.sin(angleToMouse) * distance
-                };
-                // Reposition the circle to the constrained position
-                e.target.position({ x: newStart.x, y: newStart.y });
-
-                updateComponent(component.id, {
-                  properties: {
-                    ...component.properties,
-                    points: [newStart, end],
-                  }
-                });
-              } else {
-                // Free movement - extends the line
-                const newPoints = [...points];
-                newPoints[0] = { x: pos.x, y: pos.y };
-
-                updateComponent(component.id, {
-                  properties: {
-                    ...component.properties,
-                    points: newPoints,
-                  }
-                });
-              }
-            }}
-            onDragEnd={(e) => {
-              e.cancelBubble = true;
-              setDragIndex(null);
-            }}
+            onDragMove={(e) => handleEndpointDragMove(e, 0)}
+            onDragEnd={(e) => handleEndpointDragEnd(e, 0)}
+            onDblClick={() => handleEndpointDoubleClick(0)}
+            onDblTap={() => handleEndpointDoubleClick(0)}
           />
 
           {/* End point handle */}
           <Circle
             x={end.x}
             y={end.y}
-            radius={6}
-            fill={dragIndex === 1 ? '#3B82F6' : '#ffffff'}
-            stroke="#3B82F6"
-            strokeWidth={2}
+            radius={endStyle.radius}
+            fill={endStyle.fill}
+            stroke={endStyle.stroke}
+            strokeWidth={endStyle.strokeWidth}
             draggable
             onDragStart={(e) => {
               e.cancelBubble = true;
               setDragIndex(1);
             }}
-            onDragMove={(e) => {
-              e.cancelBubble = true;
-              const pos = e.target.position();
-
-              if (shiftPressed) {
-                // Hinge mode: rotate around start point, maintain length
-                const pivot = start;
-                const angleToMouse = Math.atan2(pos.y - pivot.y, pos.x - pivot.x);
-                const newEnd = {
-                  x: pivot.x + Math.cos(angleToMouse) * distance,
-                  y: pivot.y + Math.sin(angleToMouse) * distance
-                };
-                // Reposition the circle to the constrained position
-                e.target.position({ x: newEnd.x, y: newEnd.y });
-
-                updateComponent(component.id, {
-                  properties: {
-                    ...component.properties,
-                    points: [start, newEnd],
-                  }
-                });
-              } else {
-                // Free movement - extends the line
-                const newPoints = [...points];
-                newPoints[1] = { x: pos.x, y: pos.y };
-
-                updateComponent(component.id, {
-                  properties: {
-                    ...component.properties,
-                    points: newPoints,
-                  }
-                });
-              }
-            }}
-            onDragEnd={(e) => {
-              e.cancelBubble = true;
-              setDragIndex(null);
-            }}
+            onDragMove={(e) => handleEndpointDragMove(e, 1)}
+            onDragEnd={(e) => handleEndpointDragEnd(e, 1)}
+            onDblClick={() => handleEndpointDoubleClick(1)}
+            onDblTap={() => handleEndpointDoubleClick(1)}
           />
         </>
       )}

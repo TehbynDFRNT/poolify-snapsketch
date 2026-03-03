@@ -16,6 +16,7 @@ interface FenceComponentProps {
   onExtend?: (length: number) => void;
   onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
   onStartExtension?: (componentId: string, endpoint: 'first' | 'last') => void;
+  pinCount?: number;
 }
 
 export const FenceComponent = ({
@@ -27,6 +28,7 @@ export const FenceComponent = ({
   onExtend,
   onContextMenu,
   onStartExtension,
+  pinCount = 0,
 }: FenceComponentProps) => {
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
   const [selectedSeg, setSelectedSeg] = useState<{ run: number; seg: number } | null>(null);
@@ -788,7 +790,7 @@ export const FenceComponent = ({
       {isSelected && (
         <Transformer
           ref={trRef}
-          rotateEnabled={true}
+          rotateEnabled={pinCount < 2}
           enabledAnchors={[]}
           borderEnabled={false}
 
@@ -1002,7 +1004,7 @@ export const FenceComponent = ({
       {isSelected && (
         <Transformer
           ref={trRef}
-          rotateEnabled={true}
+          rotateEnabled={pinCount < 2}
           enabledAnchors={[]}
           borderEnabled={false}
 

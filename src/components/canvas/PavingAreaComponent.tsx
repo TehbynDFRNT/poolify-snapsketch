@@ -13,6 +13,8 @@ interface PavingAreaComponentProps {
   activeTool?: string;
   onSelect: () => void;
   onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
+  onDelete?: () => void;
+  pinCount?: number;
 }
 
 type Pt = { x: number; y: number };
@@ -39,6 +41,8 @@ export const PavingAreaComponent = ({
   activeTool,
   onSelect,
   onContextMenu,
+  onDelete,
+  pinCount = 0,
 }: PavingAreaComponentProps) => {
   const updateComponent = useDesignStore((s) => s.updateComponent);
   const updateComponentSilent = useDesignStore((s) => s.updateComponentSilent);
@@ -547,7 +551,7 @@ export const PavingAreaComponent = ({
     {isSelected && (
       <Transformer
         ref={trRef}
-        rotateEnabled={true}
+        rotateEnabled={pinCount < 2}
         enabledAnchors={[]}
         borderEnabled={false}
 

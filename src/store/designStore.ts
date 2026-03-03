@@ -52,6 +52,7 @@ interface DesignStore {
   duplicateComponent: (id: string) => void;
   rotateComponent: (id: string, degrees: number) => void;
   
+  updateComponentsBatch: (updates: Map<string, Partial<Component>>) => void;
   undo: () => void;
   redo: () => void;
   
@@ -234,9 +235,63 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     });
   },
 
+  // Batch update - applies multiple component updates in a SINGLE history entry
+  // Critical for constrained drag: moving one component that moves 3 others = 1 undo step
+  updateComponentsBatch: (updates) => {
+    set((state) => {
+      const newComponents = state.components.map(c => {
+        const upd = updates.get(c.id);
+        if (!upd) return c;
+        const mergedProperties = upd.properties
+          ? { ...c.properties, ...upd.properties }
+          : c.properties;
+        return { ...c, ...upd, properties: mergedProperties };
+      });
+      const newHistory = state.history.slice(0, state.historyIndex + 1);
+      newHistory.push(newComponents);
+      const trimmedHistory = newHistory.slice(-50);
+      const newHistoryIndex = Math.min(newHistory.length - 1, 49);
+
+      const projectId = state.currentProject?.id;
+      if (projectId) {
+        setTimeout(() => {
+          try {
+            saveProjectHistory(projectId, { history: trimmedHistory, historyIndex: newHistoryIndex });
+          } catch (e) {
+            console.error('Failed to save history:', e);
+          }
+        }, 0);
+      }
+
+      return {
+        components: newComponents,
+        history: trimmedHistory,
+        historyIndex: newHistoryIndex,
+      };
+    });
+  },
+
   deleteComponent: (id) => {
     set((state) => {
-      const newComponents = state.components.filter(c => c.id !== id);
+      // Remove the component and clean up orphaned pin references
+      let newComponents = state.components.filter(c => c.id !== id);
+      // Scan all quick_measure components for pins targeting the deleted component
+      newComponents = newComponents.map(c => {
+        if (c.type !== 'quick_measure') return c;
+        const pinStart = c.properties.pinStart;
+        const pinEnd = c.properties.pinEnd;
+        const startOrphaned = pinStart?.targetComponentId === id;
+        const endOrphaned = pinEnd?.targetComponentId === id;
+        if (!startOrphaned && !endOrphaned) return c;
+        return {
+          ...c,
+          properties: {
+            ...c.properties,
+            pinStart: startOrphaned ? null : pinStart,
+            pinEnd: endOrphaned ? null : pinEnd,
+          },
+        };
+      });
       const newHistory = state.history.slice(0, state.historyIndex + 1);
       newHistory.push(newComponents);
       const trimmedHistory = newHistory.slice(-50);

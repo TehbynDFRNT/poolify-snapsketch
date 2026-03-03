@@ -16,6 +16,7 @@ interface WallComponentProps {
   onExtend?: (length: number) => void;
   onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
   onStartExtension?: (componentId: string, endpoint: 'first' | 'last') => void;
+  pinCount?: number;
 }
 
 export const WallComponent = ({
@@ -27,6 +28,7 @@ export const WallComponent = ({
   onExtend,
   onContextMenu,
   onStartExtension,
+  pinCount = 0,
 }: WallComponentProps) => {
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
 
@@ -398,7 +400,7 @@ export const WallComponent = ({
       {isSelected && (
         <Transformer
           ref={trRef}
-          rotateEnabled={true}
+          rotateEnabled={pinCount < 2}
           enabledAnchors={[]}
           borderEnabled={false}
 
@@ -525,7 +527,7 @@ export const WallComponent = ({
       {isSelected && (
         <Transformer
           ref={trRef}
-          rotateEnabled={true}
+          rotateEnabled={pinCount < 2}
           enabledAnchors={[]}
           borderEnabled={false}
 

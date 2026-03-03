@@ -138,6 +138,15 @@ export interface CopingCalculation {
   totalArea: number;
 }
 
+export interface PinAttachment {
+  targetComponentId: string;
+  // Polyline lock: parametric position on a segment
+  segmentIndex?: number;
+  t?: number; // [0,1] along segment
+  // Closed shape lock: offset in LOCAL coords (pre-rotation, relative to component.position)
+  localOffset?: { x: number; y: number };
+}
+
 export interface ComponentProperties {
   // Pool
   poolId?: string;
@@ -252,6 +261,8 @@ export interface ComponentProperties {
   temporary?: boolean;
   createdAt?: number;
   measurement?: number;
+  pinStart?: PinAttachment | null;
+  pinEnd?: PinAttachment | null;
 
   // Height Marker
   heightValue?: number; // Height in millimeters

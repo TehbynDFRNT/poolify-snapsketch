@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { Stage, Layer, Line, Circle, Text, Label, Tag, Group, Rect } from 'react-konva';
 import { useDesignStore } from '@/store/designStore';
 import { GRID_CONFIG } from '@/constants/grid';
@@ -19,6 +19,8 @@ import { HeightComponent } from './canvas/HeightComponent';
 import { SatelliteLayer } from './canvas/SatelliteLayer';
 import { validateBoundary } from '@/utils/pavingFill';
 import { snapToGrid, smartSnap } from '@/utils/snap';
+import { findNearestPinTarget, type PinSnapResult } from '@/utils/pinSnap';
+import { buildPinGraph, getConnectedGroup, getPinCountMap, resolveAllMeasurementEndpoints } from '@/utils/constraintSolver';
 import { toast } from 'sonner';
 import { PAVER_SIZES } from '@/constants/components';
 import { PoolSelector } from './PoolSelector';
@@ -95,6 +97,9 @@ export const Canvas = ({
   const [measureStart, setMeasureStart] = useState<{ x: number; y: number } | null>(null);
   const [measureEnd, setMeasureEnd] = useState<{ x: number; y: number } | null>(null);
   const [isMeasuring, setIsMeasuring] = useState(false);
+  // Pin snap state for measurement tool
+  const [measurePinStart, setMeasurePinStart] = useState<PinSnapResult | null>(null);
+  const [measurePinEnd, setMeasurePinEnd] = useState<PinSnapResult | null>(null);
   // shiftPressed from store (for touch device toggle support - used for node editing)
   // keyboardShiftPressed is local state for canvas panning only (don't want touch toggle to enable pan)
   const [keyboardShiftPressed, setKeyboardShiftPressed] = useState(false);
@@ -138,6 +143,7 @@ export const Canvas = ({
     currentProject,
     shiftPressed,
     setShiftPressed,
+    updateComponentsBatch,
   } = useDesignStore();
 
   // Removed global clip wrapper; components render un-clipped
@@ -253,15 +259,22 @@ export const Canvas = ({
       const pos = e.target.getStage().getPointerPosition();
       const canvasX = (pos.x - pan.x) / zoom;
       const canvasY = (pos.y - pan.y) / zoom;
-      
+
       // Free measurement end point; only apply axis lock with Shift
       let endPoint = { x: canvasX, y: canvasY };
-      
+
       // Apply shift key axis locking
       if (shiftPressed) {
         endPoint = lockToAxis(measureStart, endPoint);
       }
-      
+
+      // Check for pin snap on endpoint
+      const pinResult = findNearestPinTarget(endPoint, components, [], 15);
+      setMeasurePinEnd(pinResult);
+      if (pinResult) {
+        endPoint = pinResult.worldPoint;
+      }
+
       setMeasureEnd(endPoint);
     }
   };
@@ -373,9 +386,16 @@ export const Canvas = ({
     // Always handle measurement tools regardless of click target (allow over shapes)
     if (activeTool === 'quick_measure') {
       if (!isMeasuring) {
-        // Start measuring (no snap)
-        setMeasureStart({ x: canvasX, y: canvasY });
-        setMeasureEnd({ x: canvasX, y: canvasY });
+        // Start measuring — check for pin snap on start point
+        let startPoint = { x: canvasX, y: canvasY };
+        const pinResult = findNearestPinTarget(startPoint, components, [], 15);
+        setMeasurePinStart(pinResult);
+        setMeasurePinEnd(null);
+        if (pinResult) {
+          startPoint = pinResult.worldPoint;
+        }
+        setMeasureStart(startPoint);
+        setMeasureEnd(startPoint);
         setIsMeasuring(true);
       } else {
         // Finish measuring
@@ -387,10 +407,16 @@ export const Canvas = ({
             finalEnd = lockToAxis(measureStart, measureEnd);
           }
 
+          // Use pin-snapped end if available
+          const endPinResult = measurePinEnd;
+          if (endPinResult) {
+            finalEnd = endPinResult.worldPoint;
+          }
+
           const distance = calculateDistance(measureStart, finalEnd);
           const locked = shiftPressed ? detectAxisLock(measureStart, finalEnd) : null;
 
-          // Create the component
+          // Create the component with pin attachments
           const component = {
             type: 'quick_measure' as const,
             position: { x: 0, y: 0 },
@@ -410,6 +436,8 @@ export const Canvas = ({
               exportToPDF: true,
               temporary: false,
               createdAt: Date.now(),
+              pinStart: measurePinStart?.attachment ?? null,
+              pinEnd: endPinResult?.attachment ?? null,
             },
           };
 
@@ -419,6 +447,8 @@ export const Canvas = ({
         setMeasureStart(null);
         setMeasureEnd(null);
         setIsMeasuring(false);
+        setMeasurePinStart(null);
+        setMeasurePinEnd(null);
         onToolChange?.('select');
       }
       return;
@@ -622,6 +652,29 @@ export const Canvas = ({
       properties: { ...comp.properties, points: mergedPoints },
     });
 
+    // If prepending points (extending from first), adjust segmentIndex on all pins
+    // targeting this component since new segments were inserted before existing ones
+    if (extensionState.endpoint === 'first' && transformedNewPoints.length > 0) {
+      const addedSegments = transformedNewPoints.length;
+      const targetId = extensionState.componentId;
+      for (const c of components) {
+        if (c.type !== 'quick_measure') continue;
+        let needsUpdate = false;
+        const newProps = { ...c.properties };
+        if (c.properties.pinStart?.targetComponentId === targetId && c.properties.pinStart.segmentIndex !== undefined) {
+          newProps.pinStart = { ...c.properties.pinStart, segmentIndex: c.properties.pinStart.segmentIndex + addedSegments };
+          needsUpdate = true;
+        }
+        if (c.properties.pinEnd?.targetComponentId === targetId && c.properties.pinEnd.segmentIndex !== undefined) {
+          newProps.pinEnd = { ...c.properties.pinEnd, segmentIndex: c.properties.pinEnd.segmentIndex + addedSegments };
+          needsUpdate = true;
+        }
+        if (needsUpdate) {
+          updateComponent(c.id, { properties: newProps });
+        }
+      }
+    }
+
     // Clean up and re-select
     const compId = extensionState.componentId;
     setExtensionState(null);
@@ -786,6 +839,8 @@ export const Canvas = ({
         setMeasureStart(null);
         setMeasureEnd(null);
         setIsMeasuring(false);
+        setMeasurePinStart(null);
+        setMeasurePinEnd(null);
       }
 
       // Escape always resets to select tool (handles stuck shift-pan, hand tool, etc.)
@@ -801,6 +856,8 @@ export const Canvas = ({
         setMeasureStart(null);
         setMeasureEnd(null);
         setIsMeasuring(false);
+        setMeasurePinStart(null);
+        setMeasurePinEnd(null);
         // Always switch back to select tool
         onToolChange?.('select');
       }
@@ -845,6 +902,8 @@ export const Canvas = ({
       setMeasureStart(null);
       setMeasureEnd(null);
       setIsMeasuring(false);
+      setMeasurePinStart(null);
+      setMeasurePinEnd(null);
     }
   }, [activeTool]);
 
@@ -1014,6 +1073,113 @@ export const Canvas = ({
         break;
     }
   };
+
+  // Compute pin count map for rotation constraints
+  const pinCountMap = useMemo(() => getPinCountMap(components), [components]);
+
+  // Constrained drag handler: propagates movement to all connected components
+  const handleConstrainedDragEnd = useCallback((componentId: string, newPosition: { x: number; y: number }) => {
+    const comp = components.find(c => c.id === componentId);
+    if (!comp) return;
+
+    const snapped = {
+      x: snapToGrid(newPosition.x),
+      y: snapToGrid(newPosition.y),
+    };
+    const deltaX = snapped.x - comp.position.x;
+    const deltaY = snapped.y - comp.position.y;
+
+    if (deltaX === 0 && deltaY === 0) return;
+
+    // Build constraint graph and find connected group
+    const graph = buildPinGraph(components);
+    const group = getConnectedGroup(componentId, graph);
+
+    // If no connections, just update this component normally
+    if (group.size <= 1) {
+      updateComponent(componentId, { position: snapped });
+      return;
+    }
+
+    // Build batch update: apply same delta to all components in the group
+    const batchUpdates = new Map<string, Partial<Component>>();
+
+    for (const id of group) {
+      const c = components.find(comp => comp.id === id);
+      if (!c) continue;
+
+      if (c.type === 'quick_measure') {
+        // Measurements don't have meaningful position — skip, they'll be resolved below
+        continue;
+      }
+
+      if (id === componentId) {
+        batchUpdates.set(id, { position: snapped });
+      } else {
+        // Translate polyline points if component uses absolute points
+        const hasAbsolutePoints = c.properties.points && (
+          c.type === 'fence' || c.type === 'wall' || c.type === 'drainage' ||
+          c.type === 'boundary' || c.type === 'house'
+        );
+        if (hasAbsolutePoints && c.properties.points) {
+          const newPoints = c.properties.points.map(p => ({
+            x: p.x + deltaX,
+            y: p.y + deltaY,
+          }));
+          batchUpdates.set(id, {
+            position: {
+              x: c.position.x + deltaX,
+              y: c.position.y + deltaY,
+            },
+            properties: {
+              ...c.properties,
+              points: newPoints,
+            },
+          });
+        } else if (c.type === 'paving_area' && c.properties.boundary) {
+          const newBoundary = c.properties.boundary.map(p => ({
+            x: p.x + deltaX,
+            y: p.y + deltaY,
+          }));
+          batchUpdates.set(id, {
+            position: {
+              x: c.position.x + deltaX,
+              y: c.position.y + deltaY,
+            },
+            properties: {
+              ...c.properties,
+              boundary: newBoundary,
+            },
+          });
+        } else {
+          batchUpdates.set(id, {
+            position: {
+              x: c.position.x + deltaX,
+              y: c.position.y + deltaY,
+            },
+          });
+        }
+      }
+    }
+
+    // Now resolve measurement endpoints from their pin attachments
+    // We need to apply the batch updates first conceptually, then resolve
+    const tempComponents = components.map(c => {
+      const upd = batchUpdates.get(c.id);
+      if (!upd) return c;
+      return {
+        ...c,
+        ...upd,
+        properties: upd.properties ? { ...c.properties, ...upd.properties } : c.properties,
+      };
+    });
+    const measureUpdates = resolveAllMeasurementEndpoints(tempComponents);
+    for (const [id, upd] of measureUpdates) {
+      batchUpdates.set(id, upd);
+    }
+
+    updateComponentsBatch(batchUpdates);
+  }, [components, updateComponent, updateComponentsBatch]);
 
   const handleWheel = (e: any) => {
     e.evt.preventDefault();
@@ -1362,21 +1528,25 @@ export const Canvas = ({
           );
         })()}
         
-        {/* Start point */}
+        {/* Start point — amber if pinned */}
         <Circle
           x={measureStart.x}
           y={measureStart.y}
-          radius={4}
-          fill={color}
+          radius={measurePinStart ? 6 : 4}
+          fill={measurePinStart ? '#F59E0B' : color}
+          stroke={measurePinStart ? '#D97706' : undefined}
+          strokeWidth={measurePinStart ? 2 : 0}
           listening={false}
         />
-        
-        {/* End point */}
+
+        {/* End point — amber if pinned */}
         <Circle
           x={measureEnd.x}
           y={measureEnd.y}
-          radius={4}
-          fill={color}
+          radius={measurePinEnd ? 6 : 4}
+          fill={measurePinEnd ? '#F59E0B' : color}
+          stroke={measurePinEnd ? '#D97706' : undefined}
+          strokeWidth={measurePinEnd ? 2 : 0}
           listening={false}
         />
       </>
@@ -1455,14 +1625,9 @@ export const Canvas = ({
                       activeTool={activeTool}
                       onTileContextMenu={(comp, tileKey, screenPos) => setTileMenuState({ open: true, x: screenPos.x, y: screenPos.y, component: comp, tileKey })}
                       onSelect={() => selectComponent(component.id)}
-                      onDragEnd={(pos) => {
-                        const snapped = {
-                          x: snapToGrid(pos.x),
-                          y: snapToGrid(pos.y),
-                        };
-                        updateComponent(component.id, { position: snapped });
-                      }}
+                      onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
                       onContextMenu={handleComponentContextMenu}
+                      pinCount={pinCountMap.get(component.id) || 0}
                     />
                   );
                   
@@ -1474,13 +1639,7 @@ export const Canvas = ({
                       isSelected={isSelected}
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
-                      onDragEnd={(pos) => {
-                        const snapped = {
-                          x: snapToGrid(pos.x),
-                          y: snapToGrid(pos.y),
-                        };
-                        updateComponent(component.id, { position: snapped });
-                      }}
+                      onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
                       onReplicateRight={(cols) => {
                         const base = component.properties.paverCount || { rows: 1, cols: 1 };
                         const safe = {
@@ -1581,13 +1740,8 @@ export const Canvas = ({
                       isSelected={isSelected}
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
-                      onDragEnd={(pos) => {
-                        const snapped = {
-                          x: snapToGrid(pos.x),
-                          y: snapToGrid(pos.y),
-                        };
-                        updateComponent(component.id, { position: snapped });
-                      }}
+                      onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
+                      pinCount={pinCountMap.get(component.id) || 0}
                       onExtend={(length) =>
                         updateComponent(component.id, {
                           properties: { ...component.properties, length },
@@ -1607,13 +1761,8 @@ export const Canvas = ({
                       isSelected={isSelected}
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
-                      onDragEnd={(pos) => {
-                        const snapped = {
-                          x: snapToGrid(pos.x),
-                          y: snapToGrid(pos.y),
-                        };
-                        updateComponent(component.id, { position: snapped });
-                      }}
+                      onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
+                      pinCount={pinCountMap.get(component.id) || 0}
                       onExtend={(length) =>
                         updateComponent(component.id, {
                           dimensions: { ...component.dimensions, width: length },
@@ -1631,10 +1780,7 @@ export const Canvas = ({
                       isSelected={isSelected}
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
-                      onDragEnd={(pos) => {
-                        const snapped = { x: snapToGrid(pos.x), y: snapToGrid(pos.y) };
-                        updateComponent(component.id, { position: snapped });
-                      }}
+                      onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
                     />
                   );
 
@@ -1646,13 +1792,8 @@ export const Canvas = ({
                       isSelected={isSelected}
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
-                      onDragEnd={(pos) => {
-                        const snapped = {
-                          x: snapToGrid(pos.x),
-                          y: snapToGrid(pos.y),
-                        };
-                        updateComponent(component.id, { position: snapped });
-                      }}
+                      onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
+                      pinCount={pinCountMap.get(component.id) || 0}
                       onExtend={(length) =>
                         updateComponent(component.id, {
                           dimensions: { ...component.dimensions, width: length },
@@ -1671,13 +1812,8 @@ export const Canvas = ({
                       isSelected={isSelected}
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
-                      onDragEnd={(pos) => {
-                        const snapped = {
-                          x: snapToGrid(pos.x),
-                          y: snapToGrid(pos.y),
-                        };
-                        updateComponent(component.id, { position: snapped });
-                      }}
+                      onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
+                      pinCount={pinCountMap.get(component.id) || 0}
                       onContextMenu={handleComponentContextMenu}
                       onStartExtension={(componentId, endpoint) => handleStartExtension(component, componentId, endpoint)}
                     />
@@ -1691,13 +1827,8 @@ export const Canvas = ({
                       isSelected={isSelected}
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
-                      onDragEnd={(pos) => {
-                        const snapped = {
-                          x: snapToGrid(pos.x),
-                          y: snapToGrid(pos.y),
-                        };
-                        updateComponent(component.id, { position: snapped });
-                      }}
+                      onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
+                      pinCount={pinCountMap.get(component.id) || 0}
                       onContextMenu={handleComponentContextMenu}
                     />
                   );
@@ -1708,7 +1839,6 @@ export const Canvas = ({
                       key={component.id}
                       component={component}
                       selected={isSelected}
-                      activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDelete={() => deleteComponent(component.id)}
                       onContextMenu={handleComponentContextMenu}
@@ -1737,9 +1867,7 @@ export const Canvas = ({
                       isSelected={isSelected}
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
-                      onDragEnd={(pos) => {
-                        updateComponent(component.id, { position: pos });
-                      }}
+                      onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
                       onContextMenu={handleComponentContextMenu}
                     />
                   );
@@ -1752,10 +1880,7 @@ export const Canvas = ({
                       isSelected={isSelected}
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
-                      onDragEnd={(pos) => {
-                        const snapped = { x: snapToGrid(pos.x), y: snapToGrid(pos.y) };
-                        updateComponent(component.id, { position: snapped });
-                      }}
+                      onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
                     />
                   );
 

@@ -14,6 +14,7 @@ interface BoundaryComponentProps {
   onDragEnd?: (pos: { x: number; y: number }) => void;
   onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
   onStartExtension?: (componentId: string, endpoint: 'first' | 'last') => void;
+  pinCount?: number;
 }
 
 export const BoundaryComponent = ({
@@ -24,6 +25,7 @@ export const BoundaryComponent = ({
   onDragEnd,
   onContextMenu,
   onStartExtension,
+  pinCount = 0,
 }: BoundaryComponentProps) => {
   const points = component.properties.points || [];
   const closed = component.properties.closed || false;
@@ -428,7 +430,7 @@ export const BoundaryComponent = ({
     {isSelected && (
       <Transformer
         ref={trRef}
-        rotateEnabled={true}
+        rotateEnabled={pinCount < 2}
         enabledAnchors={[]}
         borderEnabled={false}
 

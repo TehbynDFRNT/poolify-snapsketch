@@ -13,6 +13,7 @@ interface HouseComponentProps {
   onSelect: () => void;
   onDragEnd?: (pos: { x: number; y: number }) => void;
   onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
+  pinCount?: number;
 }
 
 export const HouseComponent = ({
@@ -22,6 +23,7 @@ export const HouseComponent = ({
   onSelect,
   onDragEnd,
   onContextMenu,
+  pinCount = 0,
 }: HouseComponentProps) => {
   const updateComponent = useDesignStore((s) => s.updateComponent);
   const annotationsVisible = useDesignStore((s) => s.annotationsVisible);
@@ -351,7 +353,7 @@ export const HouseComponent = ({
     {isSelected && (
       <Transformer
         ref={trRef}
-        rotateEnabled={true}
+        rotateEnabled={pinCount < 2}
         enabledAnchors={[]}
         borderEnabled={false}
 

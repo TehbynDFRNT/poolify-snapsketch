@@ -121,9 +121,11 @@ interface PoolComponentProps {
   onSelect: () => void;
   onDragEnd: (pos: { x: number; y: number }) => void;
   onTileContextMenu?: (component: Component, tileKey: string, screenPos: { x: number; y: number }) => void;
+  onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
+  pinCount?: number;
 }
 
-export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onDragEnd, onTileContextMenu }: PoolComponentProps) => {
+export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onDragEnd, onTileContextMenu, onContextMenu, pinCount = 0 }: PoolComponentProps) => {
   const groupRef = useRef<Konva.Group | null>(null);
   const trRef = useRef<any>(null);
   const { components: allComponents, updateComponent, updateComponentSilent, zoom, annotationsVisible, blueprintMode } = useDesignStore();
@@ -1112,7 +1114,7 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
       {isSelected && (
         <Transformer
           ref={trRef}
-          rotateEnabled={true}
+          rotateEnabled={pinCount < 2}
           enabledAnchors={[]}
           borderEnabled={false}
 

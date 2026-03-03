@@ -16,6 +16,7 @@ interface DrainageComponentProps {
   onExtend?: (length: number) => void;
   onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
   onStartExtension?: (componentId: string, endpoint: 'first' | 'last') => void;
+  pinCount?: number;
 }
 
 export const DrainageComponent = ({
@@ -27,6 +28,7 @@ export const DrainageComponent = ({
   onExtend,
   onContextMenu,
   onStartExtension,
+  pinCount = 0,
 }: DrainageComponentProps) => {
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
 
@@ -460,7 +462,7 @@ export const DrainageComponent = ({
       {isSelected && (
         <Transformer
           ref={trRef}
-          rotateEnabled={true}
+          rotateEnabled={pinCount < 2}
           enabledAnchors={[]}
           borderEnabled={false}
 
@@ -629,7 +631,7 @@ export const DrainageComponent = ({
       {isSelected && (
         <Transformer
           ref={trRef}
-          rotateEnabled={true}
+          rotateEnabled={pinCount < 2}
           enabledAnchors={[]}
           borderEnabled={false}
 
