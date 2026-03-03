@@ -163,11 +163,7 @@ export const DrainageComponent = ({
           const rawY = e.target.y() - polyCenterY;
           const newX = Math.round(rawX / spacing) * spacing;
           const newY = Math.round(rawY / spacing) * spacing;
-          const start = dragStartPos.current || { x: component.position.x, y: component.position.y };
-          const dx = newX - start.x;
-          const dy = newY - start.y;
-          const translated = polyPoints.map((p) => ({ x: p.x + dx, y: p.y + dy }));
-          updateComponent(component.id, { position: { x: newX, y: newY }, properties: { ...component.properties, points: translated } });
+          onDragEnd({ x: newX, y: newY });
           dragStartPos.current = null;
         }}
         onTransformEnd={() => {

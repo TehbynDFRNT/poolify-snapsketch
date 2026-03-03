@@ -12,6 +12,7 @@ interface PavingAreaComponentProps {
   isSelected: boolean;
   activeTool?: string;
   onSelect: () => void;
+  onDragEnd?: (pos: { x: number; y: number }) => void;
   onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
   onDelete?: () => void;
   pinCount?: number;
@@ -40,6 +41,7 @@ export const PavingAreaComponent = ({
   isSelected,
   activeTool,
   onSelect,
+  onDragEnd,
   onContextMenu,
   onDelete,
   pinCount = 0,
@@ -242,13 +244,10 @@ export const PavingAreaComponent = ({
     const snappedDx = Math.round(dx / grid) * grid;
     const snappedDy = Math.round(dy / grid) * grid;
 
-    const movedBoundary = boundaryStage.map((p) => ({
-      x: p.x + snappedDx,
-      y: p.y + snappedDy,
-    }));
-
-    updateComponent(component.id, {
-      properties: { ...component.properties, boundary: movedBoundary },
+    // Pass new effective position to parent handler (position tracks accumulated movement)
+    onDragEnd?.({
+      x: component.position.x + snappedDx,
+      y: component.position.y + snappedDy,
     });
   };
 

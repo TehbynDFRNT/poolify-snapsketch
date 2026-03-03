@@ -239,10 +239,6 @@ export const HouseComponent = ({
           const s = GRID_CONFIG.spacing;
           const nx = Math.round((e.target.x() - pivotOffsetX) / s) * s;
           const ny = Math.round((e.target.y() - pivotOffsetY) / s) * s;
-          const start = dragStartPos.current || { x: component.position.x, y: component.position.y };
-          const dx = nx - start.x; const dy = ny - start.y;
-          const translated = pointsAbs.map(p => ({ x: p.x + dx, y: p.y + dy }));
-          updateComponent(component.id, { position: { x: nx, y: ny }, properties: { ...component.properties, points: translated } });
           onDragEnd({ x: nx, y: ny });
         }
         dragStartPos.current = null;

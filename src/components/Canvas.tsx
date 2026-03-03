@@ -1078,6 +1078,33 @@ export const Canvas = ({
   const pinCountMap = useMemo(() => getPinCountMap(components), [components]);
 
   // Constrained drag handler: propagates movement to all connected components
+  // Build the correct store update for translating a component by (dx, dy)
+  const buildComponentDeltaUpdate = useCallback((c: Component, dx: number, dy: number): Partial<Component> => {
+    const hasAbsolutePoints = c.properties.points && (
+      c.type === 'fence' || c.type === 'wall' || c.type === 'drainage' ||
+      c.type === 'boundary' || c.type === 'house'
+    );
+    if (hasAbsolutePoints && c.properties.points) {
+      return {
+        position: { x: c.position.x + dx, y: c.position.y + dy },
+        properties: {
+          ...c.properties,
+          points: c.properties.points.map(p => ({ x: p.x + dx, y: p.y + dy })),
+        },
+      };
+    }
+    if (c.type === 'paving_area' && c.properties.boundary) {
+      return {
+        position: { x: c.position.x + dx, y: c.position.y + dy },
+        properties: {
+          ...c.properties,
+          boundary: c.properties.boundary.map(p => ({ x: p.x + dx, y: p.y + dy })),
+        },
+      };
+    }
+    return { position: { x: c.position.x + dx, y: c.position.y + dy } };
+  }, []);
+
   const handleConstrainedDragEnd = useCallback((componentId: string, newPosition: { x: number; y: number }) => {
     const comp = components.find(c => c.id === componentId);
     if (!comp) return;
@@ -1095,9 +1122,26 @@ export const Canvas = ({
     const graph = buildPinGraph(components);
     const group = getConnectedGroup(componentId, graph);
 
-    // If no connections, just update this component normally
+    // If no constraint connections, update this component and resolve any pinned measurements
     if (group.size <= 1) {
-      updateComponent(componentId, { position: snapped });
+      const compUpdate = buildComponentDeltaUpdate(comp, deltaX, deltaY);
+      // Check if any measurements are pinned to this component
+      const tempComponents = components.map(c =>
+        c.id === componentId
+          ? { ...c, ...compUpdate, properties: compUpdate.properties ? { ...c.properties, ...compUpdate.properties } : c.properties }
+          : c
+      );
+      const measureUpdates = resolveAllMeasurementEndpoints(tempComponents);
+      if (measureUpdates.size === 0) {
+        updateComponent(componentId, compUpdate);
+      } else {
+        const batchUpdates = new Map<string, Partial<Component>>();
+        batchUpdates.set(componentId, compUpdate);
+        for (const [id, upd] of measureUpdates) {
+          batchUpdates.set(id, upd);
+        }
+        updateComponentsBatch(batchUpdates);
+      }
       return;
     }
 
@@ -1109,61 +1153,14 @@ export const Canvas = ({
       if (!c) continue;
 
       if (c.type === 'quick_measure') {
-        // Measurements don't have meaningful position — skip, they'll be resolved below
+        // Measurements will be resolved from pin attachments below
         continue;
       }
 
-      if (id === componentId) {
-        batchUpdates.set(id, { position: snapped });
-      } else {
-        // Translate polyline points if component uses absolute points
-        const hasAbsolutePoints = c.properties.points && (
-          c.type === 'fence' || c.type === 'wall' || c.type === 'drainage' ||
-          c.type === 'boundary' || c.type === 'house'
-        );
-        if (hasAbsolutePoints && c.properties.points) {
-          const newPoints = c.properties.points.map(p => ({
-            x: p.x + deltaX,
-            y: p.y + deltaY,
-          }));
-          batchUpdates.set(id, {
-            position: {
-              x: c.position.x + deltaX,
-              y: c.position.y + deltaY,
-            },
-            properties: {
-              ...c.properties,
-              points: newPoints,
-            },
-          });
-        } else if (c.type === 'paving_area' && c.properties.boundary) {
-          const newBoundary = c.properties.boundary.map(p => ({
-            x: p.x + deltaX,
-            y: p.y + deltaY,
-          }));
-          batchUpdates.set(id, {
-            position: {
-              x: c.position.x + deltaX,
-              y: c.position.y + deltaY,
-            },
-            properties: {
-              ...c.properties,
-              boundary: newBoundary,
-            },
-          });
-        } else {
-          batchUpdates.set(id, {
-            position: {
-              x: c.position.x + deltaX,
-              y: c.position.y + deltaY,
-            },
-          });
-        }
-      }
+      batchUpdates.set(id, buildComponentDeltaUpdate(c, deltaX, deltaY));
     }
 
     // Now resolve measurement endpoints from their pin attachments
-    // We need to apply the batch updates first conceptually, then resolve
     const tempComponents = components.map(c => {
       const upd = batchUpdates.get(c.id);
       if (!upd) return c;
@@ -1179,7 +1176,7 @@ export const Canvas = ({
     }
 
     updateComponentsBatch(batchUpdates);
-  }, [components, updateComponent, updateComponentsBatch]);
+  }, [components, updateComponent, updateComponentsBatch, buildComponentDeltaUpdate]);
 
   const handleWheel = (e: any) => {
     e.evt.preventDefault();
@@ -1853,8 +1850,10 @@ export const Canvas = ({
                       isSelected={isSelected}
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
+                      onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
                       onDelete={() => deleteComponent(component.id)}
                       onContextMenu={handleComponentContextMenu}
+                      pinCount={pinCountMap.get(component.id) || 0}
                     />
                   );
 

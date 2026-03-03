@@ -557,20 +557,21 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
     const newPos = { x: e.target.x(), y: e.target.y() };
-    
+
     // Snap to paver grid if inside a paving area
     const snappedPos = snapPoolToPaverGrid(
       newPos,
       { length: poolData.length, width: poolData.width },
       allComponents
     );
-    
+
     // Update the position on the Konva node for immediate visual feedback
     e.target.x(snappedPos.x);
     e.target.y(snappedPos.y);
-    updateComponent(component.id, { position: snappedPos });
-    // Also notify parent if needed (safe redundancy)
-    onDragEnd(snappedPos);
+    // Pass component position (subtract center-pivot offset) to parent handler
+    const offsetX = (poolData.length * scale) / 2;
+    const offsetY = (poolData.width * scale) / 2;
+    onDragEnd({ x: snappedPos.x - offsetX, y: snappedPos.y - offsetY });
   };
 
   // Tile shift-selection and keyboard delete logic removed; only auto-extend boundary editing remains
