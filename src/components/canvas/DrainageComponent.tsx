@@ -16,7 +16,9 @@ interface DrainageComponentProps {
   onExtend?: (length: number) => void;
   onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
   onStartExtension?: (componentId: string, endpoint: 'first' | 'last') => void;
+  onRotate?: (update: Partial<Component>) => void;
   pinCount?: number;
+  pinPivot?: { x: number; y: number };
 }
 
 export const DrainageComponent = ({
@@ -28,7 +30,9 @@ export const DrainageComponent = ({
   onExtend,
   onContextMenu,
   onStartExtension,
+  onRotate,
   pinCount = 0,
+  pinPivot,
 }: DrainageComponentProps) => {
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
 
@@ -134,7 +138,10 @@ export const DrainageComponent = ({
     const computedPolyCenterY = (minY + maxY) / 2;
     let polyCenterX: number;
     let polyCenterY: number;
-    if (rotation !== 0 && component.properties.rotationPivot) {
+    if (pinPivot) {
+      polyCenterX = pinPivot.x;
+      polyCenterY = pinPivot.y;
+    } else if (rotation !== 0 && component.properties.rotationPivot) {
       polyCenterX = component.properties.rotationPivot.x;
       polyCenterY = component.properties.rotationPivot.y;
     } else {
@@ -172,14 +179,16 @@ export const DrainageComponent = ({
           const newRotation = node.rotation();
           node.scaleX(1);
           node.scaleY(1);
-          updateComponent(component.id, {
+          const update = {
             rotation: newRotation,
             position: { x: node.x() - polyCenterX, y: node.y() - polyCenterY },
             properties: {
               ...component.properties,
               rotationPivot: newRotation !== 0 ? { x: polyCenterX, y: polyCenterY } : undefined,
             },
-          });
+          };
+          if (onRotate) onRotate(update);
+          else updateComponent(component.id, update);
         }}
       >
         {localPts.map((p, i) => {
@@ -508,10 +517,12 @@ export const DrainageComponent = ({
         if (!node) return;
         node.scaleX(1);
         node.scaleY(1);
-        updateComponent(component.id, {
+        const update = {
           rotation: node.rotation(),
           position: { x: node.x() - length / 2, y: node.y() },
-        });
+        };
+        if (onRotate) onRotate(update);
+        else updateComponent(component.id, update);
       }}
     >
       {/* No broad hit area; rely on thick stroke and hitStrokeWidth */}

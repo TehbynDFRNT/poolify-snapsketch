@@ -122,10 +122,12 @@ interface PoolComponentProps {
   onDragEnd: (pos: { x: number; y: number }) => void;
   onTileContextMenu?: (component: Component, tileKey: string, screenPos: { x: number; y: number }) => void;
   onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
+  onRotate?: (update: Partial<Component>) => void;
   pinCount?: number;
+  pinPivot?: { x: number; y: number };
 }
 
-export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onDragEnd, onTileContextMenu, onContextMenu, pinCount = 0 }: PoolComponentProps) => {
+export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onDragEnd, onTileContextMenu, onContextMenu, onRotate, pinCount = 0, pinPivot }: PoolComponentProps) => {
   const groupRef = useRef<Konva.Group | null>(null);
   const trRef = useRef<any>(null);
   const { components: allComponents, updateComponent, updateComponentSilent, zoom, annotationsVisible, blueprintMode } = useDesignStore();
@@ -945,9 +947,9 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
   };
 
 
-  // Center-pivot offset for rotation
-  const centerOffsetX = (poolData.length * scale) / 2;
-  const centerOffsetY = (poolData.width * scale) / 2;
+  // Center-pivot offset for rotation (pin pivot overrides default center)
+  const centerOffsetX = pinPivot ? pinPivot.x : (poolData.length * scale) / 2;
+  const centerOffsetY = pinPivot ? pinPivot.y : (poolData.width * scale) / 2;
 
   return (
     <>
@@ -970,10 +972,12 @@ export const PoolComponent = ({ component, isSelected, activeTool, onSelect, onD
           // Prevent any accidental scale; we only want rotation
           node.scaleX(1);
           node.scaleY(1);
-          updateComponent(component.id, {
+          const update = {
             rotation: node.rotation(),
             position: { x: node.x() - centerOffsetX, y: node.y() - centerOffsetY },
-          });
+          };
+          if (onRotate) onRotate(update);
+          else updateComponent(component.id, update);
         }}
       >
         {/* Pool outline - render here only when coping is disabled; otherwise pool is drawn inside coping render */}

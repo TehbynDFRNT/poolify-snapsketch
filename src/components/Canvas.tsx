@@ -1074,8 +1074,43 @@ export const Canvas = ({
     }
   };
 
-  // Compute pin count map for rotation constraints
-  const pinCountMap = useMemo(() => getPinCountMap(components), [components]);
+  // Compute pin count map and single-pin pivot overrides for rotation constraints
+  const { pinCountMap, pinPivotMap } = useMemo(() => {
+    const counts = getPinCountMap(components);
+    const pivots = new Map<string, { x: number; y: number }>();
+
+    // For components with exactly 1 pin, compute the pin's local position as rotation pivot
+    for (const c of components) {
+      if (c.type !== 'quick_measure') continue;
+      const pins = [c.properties.pinStart, c.properties.pinEnd];
+      for (const pin of pins) {
+        if (!pin) continue;
+        const targetId = pin.targetComponentId;
+        if (counts.get(targetId) !== 1 || pivots.has(targetId)) continue;
+
+        const target = components.find(comp => comp.id === targetId);
+        if (!target) continue;
+
+        // Polyline pin: parametric position on segment → local coords
+        if (pin.segmentIndex !== undefined && pin.t !== undefined) {
+          const pts = target.properties.points;
+          if (!pts || pin.segmentIndex >= pts.length - 1) continue;
+          const a = pts[pin.segmentIndex];
+          const b = pts[pin.segmentIndex + 1];
+          pivots.set(targetId, {
+            x: (a.x + pin.t * (b.x - a.x)) - target.position.x,
+            y: (a.y + pin.t * (b.y - a.y)) - target.position.y,
+          });
+        }
+        // Shape pin: localOffset is already in local coords
+        else if (pin.localOffset) {
+          pivots.set(targetId, { ...pin.localOffset });
+        }
+      }
+    }
+
+    return { pinCountMap: counts, pinPivotMap: pivots };
+  }, [components]);
 
   // Constrained drag handler: propagates movement to all connected components
   // Build the correct store update for translating a component by (dx, dy)
@@ -1104,6 +1139,28 @@ export const Canvas = ({
     }
     return { position: { x: c.position.x + dx, y: c.position.y + dy } };
   }, []);
+
+  // Rotation handler: applies rotation update and resolves pinned measurements
+  const handleConstrainedTransformEnd = useCallback((componentId: string, update: Partial<Component>) => {
+    // Build temp state with the rotation applied
+    const tempComponents = components.map(c =>
+      c.id === componentId
+        ? { ...c, ...update, properties: update.properties ? { ...c.properties, ...update.properties } : c.properties }
+        : c
+    );
+    const measureUpdates = resolveAllMeasurementEndpoints(tempComponents);
+
+    if (measureUpdates.size === 0) {
+      updateComponent(componentId, update);
+    } else {
+      const batchUpdates = new Map<string, Partial<Component>>();
+      batchUpdates.set(componentId, update);
+      for (const [id, upd] of measureUpdates) {
+        batchUpdates.set(id, upd);
+      }
+      updateComponentsBatch(batchUpdates);
+    }
+  }, [components, updateComponent, updateComponentsBatch]);
 
   const handleConstrainedDragEnd = useCallback((componentId: string, newPosition: { x: number; y: number }) => {
     const comp = components.find(c => c.id === componentId);
@@ -1623,8 +1680,10 @@ export const Canvas = ({
                       onTileContextMenu={(comp, tileKey, screenPos) => setTileMenuState({ open: true, x: screenPos.x, y: screenPos.y, component: comp, tileKey })}
                       onSelect={() => selectComponent(component.id)}
                       onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
+                      onRotate={(upd) => handleConstrainedTransformEnd(component.id, upd)}
                       onContextMenu={handleComponentContextMenu}
                       pinCount={pinCountMap.get(component.id) || 0}
+                      pinPivot={pinPivotMap.get(component.id)}
                     />
                   );
                   
@@ -1738,7 +1797,9 @@ export const Canvas = ({
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
+                      onRotate={(upd) => handleConstrainedTransformEnd(component.id, upd)}
                       pinCount={pinCountMap.get(component.id) || 0}
+                      pinPivot={pinPivotMap.get(component.id)}
                       onExtend={(length) =>
                         updateComponent(component.id, {
                           properties: { ...component.properties, length },
@@ -1759,7 +1820,9 @@ export const Canvas = ({
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
+                      onRotate={(upd) => handleConstrainedTransformEnd(component.id, upd)}
                       pinCount={pinCountMap.get(component.id) || 0}
+                      pinPivot={pinPivotMap.get(component.id)}
                       onExtend={(length) =>
                         updateComponent(component.id, {
                           dimensions: { ...component.dimensions, width: length },
@@ -1790,7 +1853,9 @@ export const Canvas = ({
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
+                      onRotate={(upd) => handleConstrainedTransformEnd(component.id, upd)}
                       pinCount={pinCountMap.get(component.id) || 0}
+                      pinPivot={pinPivotMap.get(component.id)}
                       onExtend={(length) =>
                         updateComponent(component.id, {
                           dimensions: { ...component.dimensions, width: length },
@@ -1810,7 +1875,9 @@ export const Canvas = ({
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
+                      onRotate={(upd) => handleConstrainedTransformEnd(component.id, upd)}
                       pinCount={pinCountMap.get(component.id) || 0}
+                      pinPivot={pinPivotMap.get(component.id)}
                       onContextMenu={handleComponentContextMenu}
                       onStartExtension={(componentId, endpoint) => handleStartExtension(component, componentId, endpoint)}
                     />
@@ -1825,7 +1892,9 @@ export const Canvas = ({
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
+                      onRotate={(upd) => handleConstrainedTransformEnd(component.id, upd)}
                       pinCount={pinCountMap.get(component.id) || 0}
+                      pinPivot={pinPivotMap.get(component.id)}
                       onContextMenu={handleComponentContextMenu}
                     />
                   );
@@ -1851,9 +1920,11 @@ export const Canvas = ({
                       activeTool={activeTool}
                       onSelect={() => selectComponent(component.id)}
                       onDragEnd={(pos) => handleConstrainedDragEnd(component.id, pos)}
+                      onRotate={(upd) => handleConstrainedTransformEnd(component.id, upd)}
                       onDelete={() => deleteComponent(component.id)}
                       onContextMenu={handleComponentContextMenu}
                       pinCount={pinCountMap.get(component.id) || 0}
+                      pinPivot={pinPivotMap.get(component.id)}
                     />
                   );
 

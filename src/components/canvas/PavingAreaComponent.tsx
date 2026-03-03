@@ -15,7 +15,9 @@ interface PavingAreaComponentProps {
   onDragEnd?: (pos: { x: number; y: number }) => void;
   onContextMenu?: (component: Component, screenPos: { x: number; y: number }) => void;
   onDelete?: () => void;
+  onRotate?: (update: Partial<Component>) => void;
   pinCount?: number;
+  pinPivot?: { x: number; y: number };
 }
 
 type Pt = { x: number; y: number };
@@ -44,7 +46,9 @@ export const PavingAreaComponent = ({
   onDragEnd,
   onContextMenu,
   onDelete,
+  onRotate,
   pinCount = 0,
+  pinPivot,
 }: PavingAreaComponentProps) => {
   const updateComponent = useDesignStore((s) => s.updateComponent);
   const updateComponentSilent = useDesignStore((s) => s.updateComponentSilent);
@@ -405,7 +409,10 @@ export const PavingAreaComponent = ({
     const computedPivotX = (Math.min(...xs) + Math.max(...xs)) / 2;
     const computedPivotY = (Math.min(...ys) + Math.max(...ys)) / 2;
 
-    if (rotation !== 0 && component.properties.rotationPivot) {
+    if (pinPivot) {
+      pivotOffsetX = pinPivot.x;
+      pivotOffsetY = pinPivot.y;
+    } else if (rotation !== 0 && component.properties.rotationPivot) {
       pivotOffsetX = component.properties.rotationPivot.x;
       pivotOffsetY = component.properties.rotationPivot.y;
     } else {
@@ -444,14 +451,16 @@ export const PavingAreaComponent = ({
           x: p.x + dx,
           y: p.y + dy,
         }));
-        updateComponent(component.id, {
+        const update = {
           rotation: newRotation,
           properties: {
             ...component.properties,
             boundary: movedBoundary,
             rotationPivot: newRotation !== 0 ? { x: pivotOffsetX, y: pivotOffsetY } : undefined,
           },
-        });
+        };
+        if (onRotate) onRotate(update);
+        else updateComponent(component.id, update);
       }}
     >
       {/* Filled polygon - use Line with fill for reliable rendering */}
