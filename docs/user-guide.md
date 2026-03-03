@@ -20,16 +20,17 @@ A comprehensive guide to using the SnapSketch pool design and landscaping tool.
 12. [Drainage](#drainage-tool)
 13. [Wall](#wall-tool)
 14. [Measure](#measure-tool)
-15. [Height](#height-tool)
-16. [Decoration](#decoration-tool)
-17. [Pool Coping System](#pool-coping-system)
-18. [Rotation](#rotation)
-19. [Properties Panel](#properties-panel)
-20. [Saving & Auto-Save](#saving--auto-save)
-21. [Undo & Redo](#undo--redo)
-22. [Exporting](#exporting)
-23. [Keyboard Shortcuts Reference](#keyboard-shortcuts-reference)
-24. [Mobile & Touch](#mobile--touch)
+15. [Pinned Measurements](#pinned-measurements)
+16. [Height](#height-tool)
+17. [Decoration](#decoration-tool)
+18. [Pool Coping System](#pool-coping-system)
+19. [Rotation](#rotation)
+20. [Properties Panel](#properties-panel)
+21. [Saving & Auto-Save](#saving--auto-save)
+22. [Undo & Redo](#undo--redo)
+23. [Exporting](#exporting)
+24. [Keyboard Shortcuts Reference](#keyboard-shortcuts-reference)
+25. [Mobile & Touch](#mobile--touch)
 
 ---
 
@@ -315,6 +316,7 @@ Draws fence lines. Right-click the Fence button to choose: **Glass**, **Metal**,
 - Glass fences render individual panels with posts
 - Metal fences render as a solid band with posts at boundaries
 - **Shift + drag nodes** to edit the polyline
+- **Green circles at endpoints** — click one to extend from that end (polyline fences)
 - Drag the right handle on straight fences to extend/shorten
 
 ---
@@ -343,6 +345,7 @@ Draws drainage lines. Right-click to choose: **Rock** or **Ultradrain**.
 - Per-segment length measurements
 - Total length in linear meters
 - **Shift + drag nodes** to edit the path
+- **Green circles at endpoints** — click one to extend from that end (polyline drainage)
 - Drag right handle to extend straight drainage
 
 ---
@@ -373,6 +376,7 @@ Draws retaining walls. Right-click to choose material: **Timber**, **Concrete**,
 - Per-segment length measurements
 - Height annotations can be stored per node (displayed as A:, B:, C: labels)
 - **Shift + drag nodes** to edit the path
+- **Green circles at endpoints** — click one to extend from that end (polyline walls)
 - Drag right handle to extend straight walls
 
 ---
@@ -399,6 +403,65 @@ Creates measurement reference lines on the canvas.
 - **Annotation**: Optional text label (e.g., "Width: 1500mm")
 - Drag endpoints to reposition
 - **Shift + drag endpoint**: Rotate around the other endpoint (hinge mode) while maintaining length
+- Endpoints can **pin** to nearby components — see [Pinned Measurements](#pinned-measurements)
+
+---
+
+## Pinned Measurements
+
+Measurement lines can **lock** their endpoints to other canvas objects, creating distance constraints that bind objects together. This only applies to the **Measure tool** — not the Height tool.
+
+### How Pinning Works
+
+When placing or dragging a measurement endpoint near another component, it automatically snaps and locks to that component's surface:
+
+- **Polylines** (fence, wall, drainage, boundary): locks to any point along a line segment
+- **Closed shapes** (pool, house, paving area): locks anywhere within the shape boundary
+
+The snap tolerance is **15 pixels**. When an endpoint is close enough to a target surface, it snaps to the nearest point and creates a pin attachment.
+
+### Visual Indicators
+
+| State | Appearance |
+|-------|------------|
+| Free endpoint | White circle with blue stroke |
+| Pinned endpoint | Amber circle (#F59E0B) with amber stroke |
+| Dragging endpoint | Blue fill |
+| Near a lockable surface | Amber preview at snap point |
+
+### Creating Pins
+
+**During placement** (Measure tool active):
+1. Click to place the start point — if near a component, it pins automatically
+2. Move cursor — if near a component for the end point, it will snap
+3. Click to place the end point
+
+**After placement** (editing existing measurement):
+1. Select the measurement
+2. Drag an endpoint toward a component
+3. When close enough, the endpoint snaps and turns amber
+
+### Removing Pins
+
+- **Double-click** (or double-tap) a pinned endpoint to unpin it
+- The endpoint returns to white and can be freely repositioned
+
+### Group Movement
+
+When both endpoints of a measurement are pinned to **two different objects**, those objects become a **constraint group**:
+
+- **Dragging one object** translates all connected objects by the same amount (rigid group movement)
+- The measurement line updates automatically to follow its pinned targets
+- Undo/redo works as a single operation for the entire group move
+
+### Constraint Chains
+
+Constraints are transitive. If Object A is pinned to Object B via one measurement, and Object B is pinned to Object C via another, then dragging A moves B and C together as a rigid group.
+
+### Deleting Pinned Components
+
+- **Deleting a measurement** removes the constraint — objects return to free movement
+- **Deleting a pinned target** (e.g., a fence that measurements are pinned to) automatically clears orphaned pin references — measurements keep their last position but become free endpoints
 
 ---
 
@@ -493,6 +556,7 @@ All canvas components support interactive rotation via a green rotation handle.
 - All component types support rotation: pools, boundaries, houses, fences, drainage, walls, paving areas, decorations, reference lines, and gates
 - The rotation handle only appears when the component is selected
 - Rotation is preserved when dragging, editing nodes, or extending boundaries
+- **Pinned components**: If a component has 2 or more [pinned measurements](#pinned-measurements) attached, rotation is disabled (the rotation handle is hidden) to prevent violating constraints
 
 ---
 
@@ -546,9 +610,9 @@ If you try to leave the page with unsaved changes, the browser will show a confi
 - History is maintained per project and persists in localStorage
 - Undo/Redo buttons also available in the bottom panel
 
-Operations that create history entries: adding, updating, or deleting components.
+Operations that create history entries: adding, updating, or deleting components. Constraint group moves (dragging one object that moves connected objects) are recorded as a single history entry.
 
-Operations that don't: dragging (until release), selection changes, drawing previews.
+Operations that don't: dragging (until release), selection changes, drawing previews, derived statistics updates.
 
 ---
 
@@ -622,6 +686,7 @@ Import AutoCAD drawings via file upload.
 | **Arrow keys** | Move 2.5mm |
 | **Shift + Arrow keys** | Move 25mm |
 | **Shift + drag node** | Edit polygon vertices |
+| **Double-click pinned endpoint** | Unpin measurement endpoint |
 
 ---
 
