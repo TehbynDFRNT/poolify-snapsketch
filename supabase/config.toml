@@ -1,1 +1,26 @@
-project_id = "nosjgcmommgvbnijslbs"
+project_id = "vzcgychqqihqqbcfphya"
+
+[functions.search-projects]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/search-projects/index.ts"
+
+[functions.update-project-status]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/update-project-status/index.ts"
+
+[functions.update-project-owner]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/update-project-owner/index.ts"
+
+[functions.verify-sso]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/verify-sso/index.ts"
+
+[functions.poolify-proxy]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/poolify-proxy/index.ts"

@@ -12,17 +12,16 @@ Add "Sync to Poolify" functionality to SnapSketch's NewProjectModal, allowing us
 
 ```env
 # Poolify Integration
-VITE_POOLIFY_API_URL=https://mapshmozorhiewusdgor.supabase.co/functions/v1
-VITE_POOLIFY_API_KEY=684874ff9c4ea32648ed417bfa89a5b0a111eea0b6be8037854ac48897914060
+VITE_SUPABASE_URL=https://vzcgychqqihqqbcfphya.supabase.co
 ```
 
-> **Note**: Using the same shared key that Poolify uses to call SnapSketch (`VITE_SNAPSKETCH_API_KEY` = `CPQ_API_KEY`). This creates bidirectional trust.
+> **Note**: this older client-side setup exposed the shared key in the browser. New work should proxy Poolify calls through the SnapSketch `poolify-proxy` edge function and store the key as a server-side secret.
 
 ### Poolify Supabase Edge Function Secrets (already exists)
 
 The edge function will validate using `CPQ_API_KEY` which is already set:
 ```
-CPQ_API_KEY=684874ff9c4ea32648ed417bfa89a5b0a111eea0b6be8037854ac48897914060
+CPQ_API_KEY=<server-side-shared-key>
 ```
 
 ---
@@ -67,7 +66,7 @@ CPQ_API_KEY=684874ff9c4ea32648ed417bfa89a5b0a111eea0b6be8037854ac48897914060
 **Request**:
 ```typescript
 // Headers
-Authorization: Bearer 684874ff9c4ea32648ed417bfa89a5b0a111eea0b6be8037854ac48897914060
+Authorization: Bearer <server-side-shared-key>
 Content-Type: application/json
 
 // Body
@@ -105,7 +104,7 @@ Content-Type: application/json
 **Request**:
 ```typescript
 // Headers
-Authorization: Bearer 684874ff9c4ea32648ed417bfa89a5b0a111eea0b6be8037854ac48897914060
+Authorization: Bearer <server-side-shared-key>
 Content-Type: application/json
 
 // Body
@@ -148,7 +147,7 @@ Content-Type: application/json
 **Request**:
 ```typescript
 // Headers
-Authorization: Bearer 684874ff9c4ea32648ed417bfa89a5b0a111eea0b6be8037854ac48897914060
+Authorization: Bearer <server-side-shared-key>
 Content-Type: application/json
 
 // Body
@@ -159,7 +158,7 @@ Content-Type: application/json
     "customerName": "John Smith",
     "address": "123 Pool St, Brisbane QLD",
     "embedToken": "abc123token",
-    "embedUrl": "https://poolify-snapsketch.vercel.app/share/abc123token",
+    "embedUrl": "https://snapsketch.mfpeasy.com.au/share/abc123token",
     "embedCode": "<iframe src=\"...\" />",
     "allowExport": true,
     "expiresAt": null
@@ -223,8 +222,7 @@ export interface PoolifyLinkRequest {
 import { useState, useCallback } from 'react';
 import { PoolifyProject, PoolifySearchResponse, PoolifyLinkRequest } from '@/types/poolify';
 
-const POOLIFY_API_URL = import.meta.env.VITE_POOLIFY_API_URL;
-const POOLIFY_API_KEY = import.meta.env.VITE_POOLIFY_API_KEY;
+const POOLIFY_PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/poolify-proxy`;
 
 export const usePoolifyIntegration = () => {
   const [loading, setLoading] = useState(false);
@@ -232,8 +230,8 @@ export const usePoolifyIntegration = () => {
 
   const searchProjects = useCallback(async (searchTerm: string): Promise<PoolifyProject[]> => {
     if (!searchTerm || searchTerm.length < 2) return [];
-    if (!POOLIFY_API_URL || !POOLIFY_API_KEY) {
-      throw new Error('Poolify API configuration missing');
+    if (!POOLIFY_PROXY_URL) {
+      throw new Error('Poolify proxy configuration missing');
     }
 
     setLoading(true);
@@ -621,8 +619,8 @@ serve(async (req) => {
 
 | What | Where | Action |
 |------|-------|--------|
-| `VITE_POOLIFY_API_URL` | SnapSketch `.env` | Add |
-| `VITE_POOLIFY_API_KEY` | SnapSketch `.env` | Add |
+| `POOLIFY_API_URL` | SnapSketch edge-function secrets | Add |
+| `POOLIFY_API_KEY` | SnapSketch edge-function secrets | Add |
 | `src/types/poolify.ts` | SnapSketch | Create |
 | `src/hooks/usePoolifyIntegration.ts` | SnapSketch | Create |
 | `src/components/NewProjectModal.tsx` | SnapSketch | Modify |
@@ -630,9 +628,9 @@ serve(async (req) => {
 | `search-pool-projects` | Poolify Edge Functions | Create |
 | `link-snapsketch` | Poolify Edge Functions | Create |
 
-**Shared API Key**: `684874ff9c4ea32648ed417bfa89a5b0a111eea0b6be8037854ac48897914060`
+**Shared API Key**: stored server-side only.
 
-This key is already used for SnapSketch→Poolify communication (`CPQ_API_KEY`), so we reuse it for bidirectional trust.
+This key is already used for SnapSketch→Poolify communication (`CPQ_API_KEY`), so keep it in Supabase edge-function secrets and do not expose it through `VITE_` variables.
 
 ---
 
@@ -644,7 +642,7 @@ Allows Poolify users to click "Edit in SnapSketch" and be automatically logged i
 ```
 Poolify user clicks "Edit in SnapSketch"
   → Poolify generates signed JWT
-  → Redirect to: https://poolify-snapsketch.vercel.app/sso?token=<jwt>
+  → Redirect to: https://snapsketch.mfpeasy.com.au/sso?token=<jwt>
   → SnapSketch validates token, creates/finds user, sets session
   → Redirect to /project/:snapsketchProjectId
 ```
@@ -667,9 +665,9 @@ Poolify user clicks "Edit in SnapSketch"
 }
 ```
 
-**Secret:** Same as `CPQ_API_KEY` / `VITE_SNAPSKETCH_API_KEY`:
+**Secret:** Same as the server-side `CPQ_API_KEY`:
 ```
-684874ff9c4ea32648ed417bfa89a5b0a111eea0b6be8037854ac48897914060
+<server-side-shared-key>
 ```
 
 ### SnapSketch Implementation Required
@@ -679,18 +677,13 @@ Poolify user clicks "Edit in SnapSketch"
 **2. Implement SSO Handler**:
 
 ```typescript
-// /pages/SSO.tsx or edge function
+// /pages/SSO.tsx calling the verify-sso edge function
 
 // 1. Get token from URL
 const token = searchParams.get('token');
 
-// 2. Validate JWT signature (HMAC-SHA256 with CPQ_API_KEY)
-const isValid = await verifyJWT(token);
-if (!isValid) return error('Invalid token');
-
-// 3. Check expiry
-const payload = decodeJWT(token);
-if (payload.exp < Date.now() / 1000) return error('Token expired');
+// 2. Validate JWT signature server-side (HMAC-SHA256 with CPQ_API_KEY)
+const payload = await verifySSOToken(token);
 
 // 4. Find or create user by email
 let { data: profile } = await supabase
@@ -716,33 +709,16 @@ navigate(`/project/${payload.snapsketchProjectId}`);
 
 ```typescript
 // src/utils/ssoVerify.ts
-const SSO_SECRET = import.meta.env.VITE_CPQ_API_KEY;
+export async function verifySSOToken(token: string) {
+  const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-sso`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
 
-export async function verifyJWT(token: string): Promise<boolean> {
-  const [header, payload, signature] = token.split('.');
-  const message = `${header}.${payload}`;
-
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(SSO_SECRET),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['verify']
-  );
-
-  // Decode signature from base64url
-  const sigBytes = Uint8Array.from(
-    atob(signature.replace(/-/g, '+').replace(/_/g, '/')),
-    c => c.charCodeAt(0)
-  );
-
-  return crypto.subtle.verify('HMAC', key, sigBytes, encoder.encode(message));
-}
-
-export function decodeJWT(token: string) {
-  const [, payload] = token.split('.');
-  return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+  const data = await response.json();
+  if (!response.ok || !data.success) throw new Error(data.error || 'Invalid SSO token');
+  return data.payload;
 }
 ```
 

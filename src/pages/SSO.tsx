@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { verifyJWT, decodeJWT, isTokenExpired, SSOPayload } from '@/utils/ssoVerify';
+import { verifySSOToken, SSOPayload } from '@/utils/ssoVerify';
 
 const SSO_REDIRECT_KEY = 'sso_redirect_project';
 const SSO_EMAIL_KEY = 'sso_email';
@@ -38,35 +38,19 @@ export function SSO() {
         return;
       }
 
-      // Verify JWT signature
-      const isValid = await verifyJWT(token);
-      if (!isValid) {
+      try {
+        const verifiedPayload = await verifySSOToken(token);
+
+        setPayload(verifiedPayload);
+        setStatus('success');
+
+        // Store redirect target and email for after login
+        sessionStorage.setItem(SSO_REDIRECT_KEY, `/project/${verifiedPayload.snapsketchProjectId}`);
+        sessionStorage.setItem(SSO_EMAIL_KEY, verifiedPayload.email);
+      } catch (error) {
         setStatus('error');
-        setErrorMessage('Invalid SSO token');
-        return;
+        setErrorMessage(error instanceof Error ? error.message : 'Invalid SSO token');
       }
-
-      // Decode payload
-      const decoded = decodeJWT(token);
-      if (!decoded) {
-        setStatus('error');
-        setErrorMessage('Failed to decode token');
-        return;
-      }
-
-      // Check expiry
-      if (isTokenExpired(decoded)) {
-        setStatus('error');
-        setErrorMessage('SSO token has expired');
-        return;
-      }
-
-      setPayload(decoded);
-      setStatus('success');
-
-      // Store redirect target and email for after login
-      sessionStorage.setItem(SSO_REDIRECT_KEY, `/project/${decoded.snapsketchProjectId}`);
-      sessionStorage.setItem(SSO_EMAIL_KEY, decoded.email);
     };
 
     handleSSO();

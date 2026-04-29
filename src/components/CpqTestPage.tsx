@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,7 +26,10 @@ interface ApiResponse {
   error?: string;
 }
 
+const cpqSearchEndpoint = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-projects`;
+
 export function CpqTestPage() {
+  const [apiKey, setApiKey] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<ProjectResult[]>([]);
@@ -35,47 +38,25 @@ export function CpqTestPage() {
   const [linkedProject, setLinkedProject] = useState<ProjectResult | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Auto-search when typing (minimum 2 characters)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchTerm.length >= 2) {
-        handleSearch();
-      } else {
-        setResults([]);
-        setShowDropdown(false);
-      }
-    }, 300); // Debounce 300ms
+  const handleSearch = useCallback(async () => {
+    const bearerToken = apiKey.trim();
+    if (!bearerToken) {
+      setResults([]);
+      setShowDropdown(false);
+      return;
+    }
 
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowDropdown(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleSearch = async () => {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        'https://nosjgcmommgvbnijslbs.supabase.co/functions/v1/search-projects',
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': 'Bearer 684874ff9c4ea32648ed417bfa89a5b0a111eea0b6be8037854ac48897914060',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ search: searchTerm }),
-        }
-      );
+      const response = await fetch(cpqSearchEndpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${bearerToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ search: searchTerm }),
+      });
 
       const data: ApiResponse = await response.json();
 
@@ -89,10 +70,11 @@ export function CpqTestPage() {
       } else {
         throw new Error(data.error || 'Search failed');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown API error';
       toast({
         title: 'Search failed',
-        description: error.message,
+        description: message,
         variant: 'destructive',
       });
       setResults([]);
@@ -100,7 +82,33 @@ export function CpqTestPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiKey, searchTerm]);
+
+  // Auto-search when typing (minimum 2 characters)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (apiKey.trim() && searchTerm.length >= 2) {
+        handleSearch();
+      } else {
+        setResults([]);
+        setShowDropdown(false);
+      }
+    }, 300); // Debounce 300ms
+
+    return () => clearTimeout(timer);
+  }, [apiKey, handleSearch, searchTerm]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleSelectProject = (project: ProjectResult) => {
     setSelectedProject(project);
@@ -149,6 +157,18 @@ export function CpqTestPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
+              <div>
+                <Input
+                  type="password"
+                  placeholder="Enter CPQ API key for this test session"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  The key is only held in this browser session and is not bundled into the app.
+                </p>
+              </div>
+
               {/* Search Input with Dropdown */}
               <div className="relative" ref={dropdownRef}>
                 <div className="relative">
@@ -273,7 +293,7 @@ export function CpqTestPage() {
             <div className="grid grid-cols-2 gap-2">
               <div className="font-medium">Endpoint:</div>
               <div className="font-mono text-xs">
-                POST https://nosjgcmommgvbnijslbs.supabase.co/functions/v1/search-projects
+                POST {cpqSearchEndpoint}
               </div>
               <div className="font-medium">Authentication:</div>
               <div className="font-mono text-xs">Bearer {'{CPQ_API_KEY}'}</div>

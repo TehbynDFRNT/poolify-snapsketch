@@ -1,8 +1,28 @@
 import { useState, useCallback } from 'react';
 import { PoolifyProject, PoolifySearchResponse, PoolifyLinkRequest, PoolifyLinkStatus } from '@/types/poolify';
 
-const POOLIFY_API_URL = import.meta.env.VITE_POOLIFY_API_URL;
-const POOLIFY_API_KEY = import.meta.env.VITE_POOLIFY_API_KEY;
+const SNAPSKETCH_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const POOLIFY_PROXY_URL = SNAPSKETCH_SUPABASE_URL
+  ? `${SNAPSKETCH_SUPABASE_URL}/functions/v1/poolify-proxy`
+  : '';
+
+async function callPoolifyProxy<T>(action: string, payload: unknown): Promise<T> {
+  const response = await fetch(POOLIFY_PROXY_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ action, payload }),
+  });
+
+  const data = (await response.json()) as T & { success?: boolean; error?: string };
+
+  if (!response.ok || data.success === false) {
+    throw new Error(data.error || 'Poolify request failed');
+  }
+
+  return data;
+}
 
 export const usePoolifyIntegration = () => {
   const [loading, setLoading] = useState(false);
@@ -10,8 +30,8 @@ export const usePoolifyIntegration = () => {
 
   const searchProjects = useCallback(async (searchTerm: string): Promise<PoolifyProject[]> => {
     if (!searchTerm || searchTerm.length < 2) return [];
-    if (!POOLIFY_API_URL || !POOLIFY_API_KEY) {
-      console.warn('Poolify API configuration missing');
+    if (!POOLIFY_PROXY_URL) {
+      console.warn('Poolify proxy configuration missing');
       return [];
     }
 
@@ -19,24 +39,11 @@ export const usePoolifyIntegration = () => {
     setError(null);
 
     try {
-      const response = await fetch(`${POOLIFY_API_URL}/search-pool-projects`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${POOLIFY_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ search: searchTerm }),
-      });
-
-      const data: PoolifySearchResponse = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Search failed');
-      }
-
+      const data = await callPoolifyProxy<PoolifySearchResponse>('searchProjects', { search: searchTerm });
       return data.results;
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Search failed';
+      setError(message);
       console.error('Poolify search error:', err);
       return [];
     } finally {
@@ -45,8 +52,8 @@ export const usePoolifyIntegration = () => {
   }, []);
 
   const linkToPoolify = useCallback(async (request: PoolifyLinkRequest): Promise<boolean> => {
-    if (!POOLIFY_API_URL || !POOLIFY_API_KEY) {
-      console.warn('Poolify API configuration missing');
+    if (!POOLIFY_PROXY_URL) {
+      console.warn('Poolify proxy configuration missing');
       return false;
     }
 
@@ -54,24 +61,11 @@ export const usePoolifyIntegration = () => {
     setError(null);
 
     try {
-      const response = await fetch(`${POOLIFY_API_URL}/link-snapsketch`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${POOLIFY_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(request),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Link failed');
-      }
-
+      await callPoolifyProxy('linkProject', request);
       return true;
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Link failed';
+      setError(message);
       console.error('Poolify link error:', err);
       return false;
     } finally {
@@ -81,29 +75,14 @@ export const usePoolifyIntegration = () => {
 
   const checkLink = useCallback(async (snapsketchId: string): Promise<PoolifyLinkStatus | null> => {
     if (!snapsketchId) return null;
-    if (!POOLIFY_API_URL || !POOLIFY_API_KEY) {
-      console.warn('Poolify API configuration missing');
+    if (!POOLIFY_PROXY_URL) {
+      console.warn('Poolify proxy configuration missing');
       return null;
     }
 
     try {
-      const response = await fetch(`${POOLIFY_API_URL}/check-snapsketch-link`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${POOLIFY_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ snapsketchId }),
-      });
-
-      const data: PoolifyLinkStatus = await response.json();
-
-      if (!response.ok || !data.success) {
-        return null;
-      }
-
-      return data;
-    } catch (err: any) {
+      return await callPoolifyProxy<PoolifyLinkStatus>('checkLink', { snapsketchId });
+    } catch (err: unknown) {
       console.error('Poolify check link error:', err);
       return null;
     }

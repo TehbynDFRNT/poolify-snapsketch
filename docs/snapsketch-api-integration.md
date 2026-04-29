@@ -5,7 +5,7 @@ How to trigger SnapSketch events from integrated apps (Poolify, etc).
 ## Base Config
 
 ```
-SUPABASE_URL = https://yigzhgzrbrtguksrlnjb.supabase.co
+SUPABASE_URL = https://vzcgychqqihqqbcfphya.supabase.co
 ANON_KEY     = <your VITE_SUPABASE_PUBLISHABLE_KEY>
 ```
 
@@ -191,7 +191,7 @@ Returns project details (name, address, components, etc.) if the token is valid.
 ## Where to Get Tokens
 
 ### Share Token
-Found in the share URL: `https://poolify-snapsketch.vercel.app/share/<SHARE_TOKEN>`
+Found in the share URL: `https://snapsketch.mfpeasy.com.au/share/<SHARE_TOKEN>`
 
 Stored in `project_public_links.token`. Each project can have one active (non-revoked, non-expired) link.
 
